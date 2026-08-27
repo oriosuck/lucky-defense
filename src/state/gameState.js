@@ -23,10 +23,12 @@ export function nextInstanceId() {
   return `inst_${Date.now()}_${instanceSeq}`;
 }
 
+// 자동 배치 순서: 1열(0열) 1~4행을 채운 뒤 2열로 넘어가는 열 우선 순서.
+// (배열 순서 = findAutoPlaceSlot의 탐색 순서. 화면상 위치는 slot.row/col로 별도 지정)
 function createEmptyField() {
   const slots = [];
-  for (let row = 0; row < FIELD_ROWS; row += 1) {
-    for (let col = 0; col < FIELD_COLS; col += 1) {
+  for (let col = 0; col < FIELD_COLS; col += 1) {
+    for (let row = 0; row < FIELD_ROWS; row += 1) {
       slots.push({ row, col, occupants: [] });
     }
   }
@@ -43,6 +45,7 @@ export function createGameState(config) {
     waveTimeLeft: 5, // 진입 5초 후 1웨이브 시작
     monsterCount: 0,
     monsterMax: defaultMonsterMax(),
+    monsterSpawnTimer: 0,
     gold: startingGold(relics.wallet),
     luckstone: 0,
     normalSummonCost: 20,

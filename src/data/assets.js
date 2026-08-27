@@ -3,6 +3,16 @@ const BASE = import.meta.env.BASE_URL;
 export const BOSS_IMAGE = `${BASE}bg/boss.png`;
 export const BACKGROUND_IMAGE = `${BASE}bg/background.jpg`;
 
+// background.jpg 원본 크기(688x1508)에서 실측한 좌표를 %로 변환한 값.
+// 보스가 들어갈 돌판 프레임, 전장이 놓일 바닥, 몬스터가 드나드는 좌우 굴 위치.
+export const BACKGROUND_ASPECT_RATIO = '688 / 1508';
+export const STAGE_LAYOUT = {
+  boss: { left: 12.5, top: 43.63, width: 74.42, height: 18.44 },
+  field: { left: 12.5, top: 62.07, width: 74.42, height: 22.63 },
+  leftHole: { x: 14.97, y: 44.23 },
+  rightHole: { x: 85.03, y: 44.3 },
+};
+
 // 군체 타르(m_tar)는 1~3단계 그래픽이 별도로 존재한다(3단계 도달이 불멸 승급 조건).
 export const TAR_STAGE_IMAGES = {
   1: `${BASE}heroes/m_tar.webp`,

@@ -1,4 +1,4 @@
-import { waveDuration, TOTAL_WAVES, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
+import { waveDuration, TOTAL_WAVES, FIELD_ROWS, FIELD_COLS, fieldOccupantCount } from '../state/gameState.js';
 import { countHeroOnField } from './synthesis.js';
 
 const INCAPACITATE_ROUNDS = { 2: 15, 4: 20, 5: 1, 7: 1, 9: 10 };
@@ -6,6 +6,9 @@ const INCAPACITATE_FILL_SEC = 5;
 const DELETE_ROUNDS = [13, 20];
 const DELETE_START_AT_TIME_LEFT = 15;
 const DELETE_TRIGGER_AT_TIME_LEFT = 6;
+
+const MONSTER_SPAWN_INTERVAL_SEC = 0.8; // 8초에 10마리 등장하는 속도
+const MONSTER_KILL_RATE_PER_SEC = 2; // 필드에 영웅이 1마리라도 있으면 초당 2마리씩 처치
 
 function randomInt(maxExclusive) {
   return Math.floor(Math.random() * maxExclusive);
@@ -40,8 +43,15 @@ export function tickWave(state, deltaSec) {
   }
 
   if (newState.wave >= 1 && !newState.result) {
-    // 몬스터 누적치: 정식 밸런스 수치 확정 전까지의 임시 곡선
-    newState.monsterCount += deltaSec * (1 + newState.wave * 0.1);
+    // 8초당 10마리 속도로 등장(누적), 영웅이 1마리라도 배치되어 있으면 초당 2마리씩 처치
+    newState.monsterSpawnTimer += deltaSec;
+    while (newState.monsterSpawnTimer >= MONSTER_SPAWN_INTERVAL_SEC) {
+      newState.monsterSpawnTimer -= MONSTER_SPAWN_INTERVAL_SEC;
+      newState.monsterCount += 1;
+    }
+    if (fieldOccupantCount(newState) > 0) {
+      newState.monsterCount = Math.max(0, newState.monsterCount - MONSTER_KILL_RATE_PER_SEC * deltaSec);
+    }
     if (newState.monsterCount >= newState.monsterMax) {
       newState.result = 'lose';
     }
