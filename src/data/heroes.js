@@ -136,7 +136,8 @@ export const IMMORTAL_CONDITIONS = {
     eventType: 'normalSummonRoll', extra: { starPowerChance: 0.2, ultimateChance: 0.15, ultimateIntervalSec: [3, 8] },
   },
   m_frog_prince: {
-    id: 'i_death_frog', name: '사신 개구리', type: 'real-event', target: 1,
+    // target: null -> 누적 없이 언제든 "승천 시도" 가능(즉시 확률 판정)
+    id: 'i_death_frog', name: '사신 개구리', type: 'real-event', target: null,
     eventType: 'ascendAttempt', extra: { successRate: 0.35, failMeansDestroyed: true },
   },
   m_bamba: {

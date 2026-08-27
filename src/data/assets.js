@@ -13,3 +13,6 @@ export const TAR_STAGE_IMAGES = {
 // 드래곤은 드레인(마왕 드래곤 승급 재료)으로 일시 변신한다. 승급 준비(드레인 확보)가
 // 되면 이 이미지로 표시한다.
 export const DRAGON_DRAIN_IMAGE = `${BASE}heroes/m_dragon_drain.webp`;
+
+// 개구리왕자가 "승천 시도"를 할 때 보여줄 변신 모습.
+export const FROG_TRANSFORM_IMAGE = `${BASE}heroes/m_frog_prince_transform.webp`;

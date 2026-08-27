@@ -146,6 +146,7 @@ body {
 .selected-panel.empty { color: var(--muted); text-align: center; }
 .selected-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .selected-image { width: 40px; height: 40px; object-fit: contain; background: #0c0c14; border-radius: 6px; }
+.selected-image.transform { opacity: 0.7; border: 1px dashed var(--gem); margin-left: auto; }
 .selected-title { font-weight: 600; }
 .immortal-progress { font-size: 12px; color: var(--gem); margin-bottom: 6px; }
 .action-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
