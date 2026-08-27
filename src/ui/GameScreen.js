@@ -1,5 +1,5 @@
 import { HEROES_BY_ID, TIER_LABEL } from '../data/heroes.js';
-import { BOSS_IMAGE, BACKGROUND_IMAGE, TAR_STAGE_IMAGES } from '../data/assets.js';
+import { BOSS_IMAGE, BACKGROUND_IMAGE, TAR_STAGE_IMAGES, DRAGON_DRAIN_IMAGE } from '../data/assets.js';
 import { missionDefinitions } from '../logic/missions.js';
 import { summonNormal, summonRoulette } from '../logic/summon.js';
 import { synthesize, craftMythic, sellHero, feedMythicToChad, sellGigaChad, countHeroOnField } from '../logic/synthesis.js';
@@ -107,6 +107,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   function heroImage(instance, heroDef) {
     if (heroDef.id === 'm_tar') return TAR_STAGE_IMAGES[instance.tarStage ?? 1];
+    if (heroDef.id === 'm_dragon' && instance.immortalEligible) return DRAGON_DRAIN_IMAGE;
     return heroDef.image;
   }
 

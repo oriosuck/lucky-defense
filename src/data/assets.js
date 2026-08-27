@@ -9,3 +9,7 @@ export const TAR_STAGE_IMAGES = {
   2: `${BASE}heroes/m_tar_stage2.webp`,
   3: `${BASE}heroes/m_tar_stage3.webp`,
 };
+
+// 드래곤은 드레인(마왕 드래곤 승급 재료)으로 일시 변신한다. 승급 준비(드레인 확보)가
+// 되면 이 이미지로 표시한다.
+export const DRAGON_DRAIN_IMAGE = `${BASE}heroes/m_dragon_drain.webp`;
