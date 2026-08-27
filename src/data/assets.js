@@ -9,7 +9,7 @@ export const BACKGROUND_IMAGE = `${BASE}bg/background.jpg`;
 export const BACKGROUND_ASPECT_RATIO = '688 / 1508';
 export const STAGE_LAYOUT = {
   field: { left: 12.5, top: 43.63, width: 74.42, height: 18.44 },
-  boss: { left: 23, top: 6, width: 54, height: 34 },
+  boss: { left: 18, top: 9, width: 64, height: 36 },
   leftHole: { x: 14.97, y: 44.23 },
   rightHole: { x: 85.03, y: 44.3 },
 };
