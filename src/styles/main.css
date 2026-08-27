@@ -130,6 +130,7 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 .favorite-icon img { width: 100%; height: 100%; object-fit: contain; }
+.favorite-icon:disabled { cursor: default; opacity: 0.6; border-color: rgba(255, 255, 255, 0.35); }
 .favorite-icon-label {
   position: absolute; left: 50%; bottom: -34%; transform: translateX(-50%);
   font-size: 8px; font-weight: 700; color: var(--gold);
@@ -165,9 +166,10 @@ body {
 }
 .stage-monster {
   position: absolute;
-  width: 7%; height: auto; aspect-ratio: 1;
+  width: 7%; aspect-ratio: 1;
   transform: translate(-50%, -50%);
-  object-fit: contain;
+  display: flex; align-items: center; justify-content: center;
+  font-size: clamp(11px, 4.5vw, 22px); line-height: 1;
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.6));
   pointer-events: none;
 }
@@ -342,6 +344,12 @@ body {
 .roulette-popup-close {
   position: absolute; left: 90%; width: 9.5%; top: 0.5%; height: 13%;
   background: transparent; border: none; color: transparent; cursor: pointer;
+}
+.roulette-popup-status {
+  position: absolute; left: 4%; top: 14%; width: 92%;
+  display: flex; justify-content: space-between;
+  color: #f5e6c8; font-weight: 700; font-size: clamp(9px, 2.2vw, 12px);
+  text-shadow: 0 1px 2px #000;
 }
 .roulette-row {
   position: absolute; left: 8%; top: 30%; width: 84%; height: 62%;

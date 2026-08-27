@@ -59,7 +59,7 @@ export function summonNormal(state) {
   }
 
   newState.gold -= newState.normalSummonCost;
-  newState.normalSummonCost += 1; // 소환할수록 비용 +1코인
+  newState.normalSummonCost += 2; // 소환할수록 비용 +2코인(기획서 6장 확정 수치)
 
   const bonusPct = newState.summonRateBonusPct ?? 0; // 소환확률 강화 풀업 시 1%p씩 상승
   const entries = Object.entries(NORMAL_SUMMON_RATES).map(([tier, rate]) => ({

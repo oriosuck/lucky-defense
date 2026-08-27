@@ -1,8 +1,8 @@
 import { findInstance, canPlaceInSlot, findSlot } from '../state/gameState.js';
 import { recordImmortalEvent } from './immortal.js';
 
-const ENHANCE_GOLD_COST = 30;
-const ENHANCE_LUCKSTONE_COST = 1;
+export const ENHANCE_GOLD_COST = 30;
+export const ENHANCE_LUCKSTONE_COST = 1;
 
 /** 필드 영웅 강화. 데미지 계산은 시뮬레이션 범위 밖 - 강화 단계만 증가. */
 export function enhanceHero(state, instanceId) {

@@ -3,7 +3,7 @@ import { BOSS_IMAGE, BACKGROUND_IMAGE, TAR_STAGE_IMAGES, DRAGON_DRAIN_IMAGE, FRO
 import { missionDefinitions } from '../logic/missions.js';
 import { summonNormal, summonRoulette } from '../logic/summon.js';
 import { synthesize, craftMythic, sellHero, feedMythicToChad, sellGigaChad, countHeroOnField, instantSummonFavorite } from '../logic/synthesis.js';
-import { enhanceHero, moveHero, toggleBreakthrough } from '../logic/actions.js';
+import { enhanceHero, moveHero, toggleBreakthrough, ENHANCE_GOLD_COST, ENHANCE_LUCKSTONE_COST } from '../logic/actions.js';
 import { checkImmortalPromotion, cannibalizeTar } from '../logic/immortal.js';
 import { fieldOccupantCount } from '../state/gameState.js';
 import { el } from './components/dom.js';
@@ -99,11 +99,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const now = Date.now();
     for (const m of ui.monsters) {
       const elapsed = Math.max(0, now - m.bornAt);
+      // 해골 이미지는 룰렛 실패 표시 전용 자산이라 몬스터에는 쓰지 않는다(전용 이미지 미보유 -> 이모지로 대체).
       stage.appendChild(
-        el('img', {
+        el('div', {
           class: 'stage-monster',
-          src: UI_IMAGES.skullIcon,
-          alt: '몬스터',
+          text: '👹',
           style: `top:${STAGE_LAYOUT.leftHole.y}%; left:${STAGE_LAYOUT.leftHole.x}%; animation: monster-travel ${MONSTER_TRAVEL_MS}ms linear forwards; animation-delay: -${elapsed}ms;`,
         }),
       );
@@ -149,22 +149,48 @@ export function GameScreen({ getState, dispatch, onExit }) {
     ]);
   }
 
-  // 즐겨찾기 등록 + 조합 완료된 신화만 즉시소환 버튼으로 노출(기획서: "조합 완료 시 좌측 최상단에 소환 버튼 노출")
+  const FAVORITE_BAR_MAX = 5;
+
+  // 좌측 세로 아이콘 목록: 합성 완료된 신화·불멸 등급 영웅을 최대 5개까지, 즐겨찾기 우선 정렬로 표시.
+  // 즐겨찾기로 등록해 둔 것 중 실제로 조합까지 완료한 것만 "즉시 소환!" 버튼으로 클릭 가능하다.
+  function craftedShowcaseHeroIds(state) {
+    const seen = new Set();
+    const ids = [];
+    for (const slot of state.field) {
+      for (const occ of slot.occupants) {
+        const def = HEROES_BY_ID[occ.heroId];
+        if (def && (def.tier === 'mythic' || def.tier === 'immortal') && !seen.has(occ.heroId)) {
+          seen.add(occ.heroId);
+          ids.push(occ.heroId);
+        }
+      }
+    }
+    const favoriteIds = new Set(state.ownedHeroes.filter((h) => h.favorite).map((h) => h.heroId));
+    ids.sort((a, b) => Number(favoriteIds.has(b)) - Number(favoriteIds.has(a)));
+    return ids.slice(0, FAVORITE_BAR_MAX);
+  }
+
   function renderFavoriteBar(state) {
+    const heroIds = craftedShowcaseHeroIds(state);
     return el(
       'div',
       { class: 'favorite-bar' },
-      state.unlockedInstantSummons.map((heroId) =>
-        el(
+      heroIds.map((heroId) => {
+        const unlocked = state.unlockedInstantSummons.includes(heroId);
+        return el(
           'button',
           {
             class: 'favorite-icon',
             title: HEROES_BY_ID[heroId]?.name,
-            onclick: () => apply(instantSummonFavorite(state, heroId)),
+            disabled: !unlocked,
+            onclick: unlocked ? () => apply(instantSummonFavorite(state, heroId)) : undefined,
           },
-          [el('img', { src: HEROES_BY_ID[heroId]?.image, alt: HEROES_BY_ID[heroId]?.name }), el('span', { class: 'favorite-icon-label', text: '즉시 소환!' })],
-        ),
-      ),
+          [
+            el('img', { src: HEROES_BY_ID[heroId]?.image, alt: HEROES_BY_ID[heroId]?.name }),
+            unlocked ? el('span', { class: 'favorite-icon-label', text: '즉시 소환!' }) : null,
+          ],
+        );
+      }),
     );
   }
 
@@ -339,7 +365,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         el('button', {
           class: 'img-btn enhance-btn-img',
           style: `background-image: url(${UI_IMAGES.enhanceBtn})`,
-          disabled: !ui.selectedInstanceId,
+          disabled: !ui.selectedInstanceId || state.gold < ENHANCE_GOLD_COST || state.luckstone < ENHANCE_LUCKSTONE_COST,
           onclick: () => apply(enhanceHero(state, ui.selectedInstanceId)),
         }),
       ]),
@@ -364,6 +390,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return el('div', { class: 'popup-overlay', onclick: (e) => { if (e.target === e.currentTarget) { ui.roulettePopup = false; render(state); } } }, [
       el('div', { class: 'roulette-popup-frame', style: `background-image: url(${UI_IMAGES.roulettePopupBg})` }, [
         el('div', { class: 'roulette-popup-title', text: String(state.luckstone) }),
+        el('div', { class: 'roulette-popup-status' }, [
+          el('span', { text: `보유 행운석: ${state.luckstone}` }),
+          el('span', { text: `필드 영웅: ${fieldOccupantCount(state)} / ${state.fieldMaxCapacity}` }),
+        ]),
         el('button', { class: 'roulette-popup-close', text: '✕', onclick: () => { ui.roulettePopup = false; render(state); } }),
         el('div', { class: 'roulette-row' }, circles),
       ]),
