@@ -4,11 +4,12 @@ export const BOSS_IMAGE = `${BASE}bg/boss.png`;
 export const BACKGROUND_IMAGE = `${BASE}bg/background.jpg`;
 
 // background.jpg 원본 크기(688x1508)에서 실측한 좌표를 %로 변환한 값.
-// 보스가 들어갈 돌판 프레임, 전장이 놓일 바닥, 몬스터가 드나드는 좌우 굴 위치.
+// 검은 테두리로 표시돼 있던 돌판 프레임은 가로세로 비율이 6x4 칸과 정확히
+// 맞아떨어져서(512x278px) 전장 그리드 자리였다 - 보스는 그 위 빈 하늘 공간에 배치한다.
 export const BACKGROUND_ASPECT_RATIO = '688 / 1508';
 export const STAGE_LAYOUT = {
-  boss: { left: 12.5, top: 43.63, width: 74.42, height: 18.44 },
-  field: { left: 12.5, top: 62.07, width: 74.42, height: 22.63 },
+  field: { left: 12.5, top: 43.63, width: 74.42, height: 18.44 },
+  boss: { left: 23, top: 6, width: 54, height: 34 },
   leftHole: { x: 14.97, y: 44.23 },
   rightHole: { x: 85.03, y: 44.3 },
 };

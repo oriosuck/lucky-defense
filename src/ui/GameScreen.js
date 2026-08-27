@@ -33,7 +33,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     root.appendChild(renderTopBar(state));
     root.appendChild(renderMonsterRow(state));
     root.appendChild(renderFavoriteBar(state));
-    root.appendChild(renderStage(state));
+    root.appendChild(el('div', { class: 'game-stage-wrap' }, [renderStage(state)]));
     root.appendChild(renderResourceRow(state));
     root.appendChild(renderSelectedPanel(state));
     root.appendChild(renderBottomBar(state));

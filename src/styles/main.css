@@ -77,24 +77,42 @@ body {
 .preset-status { font-size: 12px; color: var(--muted); }
 
 /* ---- 게임 화면 ---- */
-.game-screen { display: flex; flex-direction: column; gap: 8px; }
-.game-screen .top-bar { justify-content: center; gap: 16px; background: var(--panel); padding: 8px; border-radius: 8px; }
+/* #app의 padding(12px*2)을 빼고 뷰포트 높이에 맞춘다 - 스크롤 없이 한 화면에 들어오도록 */
+.game-screen {
+  display: flex; flex-direction: column; gap: 6px;
+  height: calc(100dvh - 24px);
+  max-width: 480px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+.game-screen .top-bar { justify-content: center; gap: 16px; background: var(--panel); padding: 6px 8px; border-radius: 8px; flex-shrink: 0; }
 .wave-label { font-weight: 700; }
 .timer { color: var(--gem); }
 
-.monster-row { display: flex; gap: 6px; justify-content: center; color: var(--muted); }
+.monster-row { display: flex; gap: 6px; justify-content: center; color: var(--muted); flex-shrink: 0; }
 
-.favorite-bar { display: flex; gap: 6px; justify-content: center; }
+.favorite-bar { display: flex; gap: 6px; justify-content: center; flex-shrink: 0; }
 .favorite-icon {
   width: 32px; height: 32px; padding: 2px; border-radius: 50%;
   background: var(--panel-2); border: 1px solid var(--gold); cursor: pointer;
 }
 .favorite-icon img { width: 100%; height: 100%; object-fit: contain; }
 
-/* 배경 원본(688x1508) 비율을 그대로 유지해서 %기반 절대좌표가 항상 정확히 맞도록 함 */
+/* 배경 원본(688x1508) 비율을 유지한 채로, 뷰포트에 남는 세로 공간만큼만 차지하도록
+   높이 기준으로 크기를 정하고(너비는 비율에서 자동 계산) 넘치면 줄어들게 한다. */
+.game-stage-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
 .game-stage {
   position: relative;
-  width: 100%;
+  height: 100%;
+  width: auto;
+  max-width: 100%;
   aspect-ratio: 688 / 1508;
   background-size: 100% 100%;
   background-repeat: no-repeat;
@@ -114,12 +132,15 @@ body {
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.6));
   pointer-events: none;
 }
-/* 좌표는 src/data/assets.js의 STAGE_LAYOUT.leftHole/rightHole과 맞춰져 있음 */
+/* 좌우 굴은 전장 박스 바로 위 모서리에 있어서, 직선으로 이으면 전장을 가로질러 버린다.
+   전장 위쪽으로 살짝 호를 그리며 돌아나가도록 중간 지점에서 위로 띄운다.
+   좌표는 src/data/assets.js의 STAGE_LAYOUT과 맞춰져 있음 */
 @keyframes monster-travel {
-  from { left: 14.97%; opacity: 0; }
+  0% { left: 14.97%; top: 44.23%; opacity: 0; }
   10% { opacity: 1; }
+  50% { left: 50%; top: 37%; }
   90% { opacity: 1; }
-  to { left: 85.03%; opacity: 0; }
+  100% { left: 85.03%; top: 44.3%; opacity: 0; }
 }
 
 .field-grid.stage-field {
@@ -167,9 +188,9 @@ body {
 }
 .incapacitate-mark, .delete-mark { position: absolute; top: 1px; right: 1px; font-size: 10px; }
 
-.resource-row { display: flex; gap: 14px; justify-content: center; align-items: center; background: var(--panel); padding: 8px; border-radius: 8px; flex-wrap: wrap; }
+.resource-row { display: flex; gap: 14px; justify-content: center; align-items: center; background: var(--panel); padding: 8px; border-radius: 8px; flex-wrap: wrap; flex-shrink: 0; }
 
-.selected-panel { background: var(--panel); padding: 10px; border-radius: 8px; min-height: 56px; }
+.selected-panel { background: var(--panel); padding: 10px; border-radius: 8px; min-height: 56px; flex-shrink: 0; }
 .selected-panel.empty { color: var(--muted); text-align: center; }
 .selected-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .selected-image { width: 40px; height: 40px; object-fit: contain; background: #0c0c14; border-radius: 6px; }
@@ -178,7 +199,7 @@ body {
 .immortal-progress { font-size: 12px; color: var(--gem); margin-bottom: 6px; }
 .action-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
 
-.bottom-bar { display: flex; flex-direction: column; gap: 8px; }
+.bottom-bar { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
 .bottom-bar-row { display: flex; gap: 8px; align-items: stretch; }
 
 .hex-btn {
