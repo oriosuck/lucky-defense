@@ -3,7 +3,9 @@ import { RELIC_KEYS, RELIC_LABEL, RELIC_LEVEL_MIN, RELIC_LEVEL_MAX, isValidRelic
 import { savePreset, listPresets, loadPreset, deletePreset, PRESET_NAME_MAX_LENGTH } from '../state/presetStore.js';
 import { el } from './components/dom.js';
 
-const SELECTABLE_TIERS = ['normal', 'rare', 'hero', 'legendary', 'mythic'];
+// 일반~전설은 항상 소환 풀에 포함되므로 사전 선택이 필요 없다. 홈 화면에서는
+// 이번 판에 등장시킬 신화 등급만 고른다.
+const SELECTABLE_TIERS = ['mythic'];
 
 function createLocalState() {
   return {

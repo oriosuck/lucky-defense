@@ -1,5 +1,5 @@
 import { HEROES_BY_ID, TIER_LABEL } from '../data/heroes.js';
-import { BOSS_IMAGE, BACKGROUND_IMAGE, TAR_STAGE_IMAGES, DRAGON_DRAIN_IMAGE, FROG_TRANSFORM_IMAGES } from '../data/assets.js';
+import { BOSS_IMAGE, BACKGROUND_IMAGE, TAR_STAGE_IMAGES, DRAGON_DRAIN_IMAGE, FROG_TRANSFORM_IMAGES, STAGE_LAYOUT } from '../data/assets.js';
 import { missionDefinitions } from '../logic/missions.js';
 import { summonNormal, summonRoulette } from '../logic/summon.js';
 import { synthesize, craftMythic, sellHero, feedMythicToChad, sellGigaChad, countHeroOnField } from '../logic/synthesis.js';
@@ -13,12 +13,14 @@ import { el } from './components/dom.js';
  * @returns {{root:HTMLElement, update:(s:object)=>void}}
  */
 export function GameScreen({ getState, dispatch, onExit }) {
-  const root = el('div', { class: 'screen game-screen', style: `background-image: url(${BACKGROUND_IMAGE})` });
+  const root = el('div', { class: 'screen game-screen' });
   const ui = {
     selectedInstanceId: null,
     moveMode: false,
     mythicPopup: null, // null | 'owned' | 'immortal'
     missionPopup: false,
+    monsters: [], // 좌->우 굴을 지나가는 장식용 몬스터 애니메이션 상태
+    lastMonsterSpawnAt: null,
   };
 
   function apply(result) {
@@ -26,18 +28,60 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   function render(state) {
+    updateMonsterAnimation(state);
     root.innerHTML = '';
     root.appendChild(renderTopBar(state));
     root.appendChild(renderMonsterRow(state));
-    root.appendChild(el('div', { class: 'boss-graphic' }, [el('img', { src: BOSS_IMAGE, alt: '보스' })]));
     root.appendChild(renderFavoriteBar(state));
-    root.appendChild(renderField(state));
+    root.appendChild(renderStage(state));
     root.appendChild(renderResourceRow(state));
     root.appendChild(renderSelectedPanel(state));
     root.appendChild(renderBottomBar(state));
     if (ui.mythicPopup) root.appendChild(renderMythicPopup(state));
     if (ui.missionPopup) root.appendChild(renderMissionPopup(state));
     if (state.result) root.appendChild(renderResultOverlay(state));
+  }
+
+  const MONSTER_SPAWN_INTERVAL_MS = 800; // 8초에 10마리
+  const MONSTER_TRAVEL_MS = 2600;
+
+  function updateMonsterAnimation(state) {
+    const now = Date.now();
+    if (ui.lastMonsterSpawnAt == null) ui.lastMonsterSpawnAt = now;
+    const active = state.wave >= 1 && !state.result && !state.paused;
+    if (active) {
+      while (now - ui.lastMonsterSpawnAt >= MONSTER_SPAWN_INTERVAL_MS) {
+        ui.lastMonsterSpawnAt += MONSTER_SPAWN_INTERVAL_MS;
+        ui.monsters.push({ id: `mon_${now}_${Math.random()}`, bornAt: ui.lastMonsterSpawnAt });
+      }
+    } else {
+      ui.lastMonsterSpawnAt = now;
+    }
+    ui.monsters = ui.monsters.filter((m) => now - m.bornAt < MONSTER_TRAVEL_MS);
+  }
+
+  function renderStage(state) {
+    const stage = el('div', { class: 'game-stage', style: `background-image: url(${BACKGROUND_IMAGE})` });
+    stage.appendChild(
+      el('img', {
+        class: 'stage-boss',
+        src: BOSS_IMAGE,
+        alt: '보스',
+        style: `left:${STAGE_LAYOUT.boss.left}%; top:${STAGE_LAYOUT.boss.top}%; width:${STAGE_LAYOUT.boss.width}%; height:${STAGE_LAYOUT.boss.height}%;`,
+      }),
+    );
+    const now = Date.now();
+    for (const m of ui.monsters) {
+      const elapsed = Math.max(0, now - m.bornAt);
+      stage.appendChild(
+        el('div', {
+          class: 'stage-monster',
+          style: `top:${STAGE_LAYOUT.leftHole.y}%; left:${STAGE_LAYOUT.leftHole.x}%; animation: monster-travel ${MONSTER_TRAVEL_MS}ms linear forwards; animation-delay: -${elapsed}ms;`,
+        }, ['👾']),
+      );
+    }
+    stage.appendChild(renderField(state));
+    return stage;
   }
 
   function renderTopBar(state) {
@@ -82,11 +126,15 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   function renderField(state) {
-    const grid = el('div', { class: 'field-grid' });
+    const grid = el('div', {
+      class: 'field-grid stage-field',
+      style: `left:${STAGE_LAYOUT.field.left}%; top:${STAGE_LAYOUT.field.top}%; width:${STAGE_LAYOUT.field.width}%; height:${STAGE_LAYOUT.field.height}%;`,
+    });
     for (const slot of state.field) {
       const isTarget = ui.moveMode && ui.selectedInstanceId;
       const cell = el('div', {
-        class: `field-slot${slot.occupants.length ? '' : ' empty'}${isTarget ? ' move-target' : ''}`,
+        class: `field-slot count-${slot.occupants.length}${slot.occupants.length ? '' : ' empty'}${isTarget ? ' move-target' : ''}`,
+        style: `grid-column:${slot.col + 1}; grid-row:${slot.row + 1};`,
         onclick: () => onSlotClick(state, slot),
       });
       slot.occupants.forEach((occ) => {
@@ -185,7 +233,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (slot.occupants.length === 3 && heroDef.tier !== 'legendary') {
       buttons.push(el('button', { class: 'btn', text: '합성', onclick: () => apply(synthesize(state, slot.row, slot.col)) }));
     }
-    buttons.push(el('button', { class: 'btn', text: '강화', onclick: () => apply(enhanceHero(state, instance.instanceId)) }));
     if (instance.heroId === 'm_mama') {
       buttons.push(el('button', {
         class: `btn ${instance.breakthrough ? 'active' : ''}`, text: '돌파', onclick: () => apply(toggleBreakthrough(state, instance.instanceId)),
@@ -231,15 +278,34 @@ export function GameScreen({ getState, dispatch, onExit }) {
   function renderBottomBar(state) {
     const mythicOwnedCount = state.ownedHeroes.filter((h) => HEROES_BY_ID[h.heroId]?.tier === 'mythic').length;
     return el('div', { class: 'bottom-bar' }, [
-      el('button', { class: 'btn', text: `신화 (${mythicOwnedCount})`, onclick: () => { ui.mythicPopup = 'owned'; render(state); } }),
+      el('div', { class: 'bottom-bar-row' }, [
+        el('button', { class: 'hex-btn hex-mythic', onclick: () => { ui.mythicPopup = 'owned'; render(state); } }, [
+          el('span', { class: 'hex-icon', text: '🔮' }),
+          el('span', { class: 'hex-label', text: '신화' }),
+          el('span', { class: 'hex-badge', text: String(mythicOwnedCount) }),
+        ]),
+        el('button', {
+          class: 'summon-btn-main',
+          onclick: () => apply(summonNormal(state)),
+        }, [
+          el('span', { class: 'summon-label', text: '소환' }),
+          el('span', { class: 'summon-cost', text: `🪙 ${state.normalSummonCost}` }),
+        ]),
+        el('div', { class: 'roulette-mini-group' }, [
+          el('button', { class: 'hex-btn hex-mini hex-roulette', text: '희귀 💎1', onclick: () => apply(summonRoulette(state, 'rare', 'left')) }),
+          el('button', { class: 'hex-btn hex-mini hex-roulette', text: '영웅 💎1', onclick: () => apply(summonRoulette(state, 'hero', 'left')) }),
+          el('button', { class: 'hex-btn hex-mini hex-roulette', text: '전설 💎2', onclick: () => apply(summonRoulette(state, 'legendary', 'right')) }),
+        ]),
+        el('button', { class: 'hex-btn hex-mission', onclick: () => { ui.missionPopup = true; render(state); } }, [
+          el('span', { class: 'hex-icon', text: '☰' }),
+        ]),
+      ]),
       el('button', {
-        class: 'btn btn-primary', text: `소환 (${state.normalSummonCost}G)`,
-        onclick: () => apply(summonNormal(state)),
+        class: 'enhance-btn-full',
+        text: '⬆ 강화',
+        disabled: !ui.selectedInstanceId,
+        onclick: () => apply(enhanceHero(state, ui.selectedInstanceId)),
       }),
-      el('button', { class: 'btn', text: '룰렛(희귀 1💎)', onclick: () => apply(summonRoulette(state, 'rare', 'left')) }),
-      el('button', { class: 'btn', text: '룰렛(영웅 1💎)', onclick: () => apply(summonRoulette(state, 'hero', 'left')) }),
-      el('button', { class: 'btn', text: '룰렛(전설 2💎)', onclick: () => apply(summonRoulette(state, 'legendary', 'right')) }),
-      el('button', { class: 'btn', text: '미션', onclick: () => { ui.missionPopup = true; render(state); } }),
     ]);
   }
 
