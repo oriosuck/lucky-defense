@@ -33,7 +33,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
     root.innerHTML = '';
     root.appendChild(renderTopBar(state));
     root.appendChild(renderMonsterRow(state));
-    root.appendChild(renderFavoriteBar(state));
     root.appendChild(el('div', { class: 'game-stage-wrap' }, [renderStage(state)]));
     root.appendChild(renderResourceRow(state));
     root.appendChild(renderSelectedPanel(state));
@@ -85,6 +84,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
       );
     }
     stage.appendChild(renderField(state));
+    stage.appendChild(renderFavoriteBar(state));
     return stage;
   }
 
@@ -117,7 +117,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
             title: HEROES_BY_ID[h.heroId]?.name,
             onclick: () => moveFavoriteToTopLeft(state, h.heroId),
           },
-          [el('img', { src: HEROES_BY_ID[h.heroId]?.image, alt: HEROES_BY_ID[h.heroId]?.name })],
+          [el('img', { src: HEROES_BY_ID[h.heroId]?.image, alt: HEROES_BY_ID[h.heroId]?.name }), el('span', { class: 'favorite-icon-label', text: '즉시 소환!' })],
         ),
       ),
     );
@@ -334,7 +334,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     );
     return el('div', { class: 'popup-overlay', onclick: (e) => { if (e.target === e.currentTarget) { ui.roulettePopup = false; render(state); } } }, [
       el('div', { class: 'roulette-popup-frame', style: `background-image: url(${UI_IMAGES.roulettePopupBg})` }, [
-        el('div', { class: 'roulette-popup-title', text: `보유 💎 ${state.luckstone}` }),
+        el('div', { class: 'roulette-popup-title', text: String(state.luckstone) }),
         el('button', { class: 'roulette-popup-close', text: '✕', onclick: () => { ui.roulettePopup = false; render(state); } }),
         el('div', { class: 'roulette-row' }, circles),
       ]),

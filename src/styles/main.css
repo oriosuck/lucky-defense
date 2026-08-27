@@ -115,12 +115,24 @@ body {
   color: #f5e6c8; font-weight: 700; font-size: 12px;
 }
 
-.favorite-bar { display: flex; gap: 6px; justify-content: center; flex-shrink: 0; }
+/* 즐겨찾기 즉시소환 아이콘: 참고 화면처럼 전장 왼쪽 위에서부터 세로로 배경 위에 얹는다 */
+.favorite-bar {
+  position: absolute; left: 2%; top: 8%; width: 16%;
+  display: flex; flex-direction: column; gap: 6%;
+  z-index: 2;
+}
 .favorite-icon {
-  width: 32px; height: 32px; padding: 2px; border-radius: 50%;
-  background: var(--panel-2); border: 1px solid var(--gold); cursor: pointer;
+  position: relative;
+  width: 100%; aspect-ratio: 1; padding: 6%; border-radius: 50%;
+  background: rgba(20, 16, 30, 0.55); border: 2px solid var(--gold); cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 .favorite-icon img { width: 100%; height: 100%; object-fit: contain; }
+.favorite-icon-label {
+  position: absolute; left: 50%; bottom: -34%; transform: translateX(-50%);
+  font-size: 8px; font-weight: 700; color: var(--gold);
+  text-shadow: 0 1px 2px #000; white-space: nowrap;
+}
 
 /* 배경 원본(688x1508) 비율을 유지한 채로, 뷰포트에 남는 세로 공간만큼만 차지하도록
    높이 기준으로 크기를 정하고(너비는 비율에서 자동 계산) 넘치면 줄어들게 한다. */
@@ -288,12 +300,12 @@ body {
   background-size: 100% 100%; background-repeat: no-repeat;
 }
 .roulette-popup-title {
-  position: absolute; left: 28%; top: 16%; width: 40%; height: 8%;
-  display: flex; align-items: center; justify-content: center;
+  position: absolute; left: 34%; top: 1.5%; width: 16%; height: 11%;
+  display: flex; align-items: center;
   color: #cfeeee; font-weight: 700; font-size: clamp(11px, 2.6vw, 14px);
 }
 .roulette-popup-close {
-  position: absolute; right: 3%; top: 14%; width: 8%; aspect-ratio: 1;
+  position: absolute; left: 90%; width: 9.5%; top: 0.5%; height: 13%;
   background: transparent; border: none; color: transparent; cursor: pointer;
 }
 .roulette-row {
