@@ -85,11 +85,35 @@ body {
   margin: 0 auto;
   box-sizing: border-box;
 }
-.game-screen .top-bar { justify-content: center; gap: 16px; background: var(--panel); padding: 6px 8px; border-radius: 8px; flex-shrink: 0; }
-.wave-label { font-weight: 700; }
-.timer { color: var(--gem); }
+.game-screen .top-bar {
+  position: relative;
+  width: 78%; margin: 0 auto; flex-shrink: 0;
+  aspect-ratio: 960 / 386;
+  background-size: 100% 100%; background-repeat: no-repeat;
+}
+.top-bar-wave {
+  position: absolute; left: 23.5%; width: 53%; top: 0.5%; height: 30%;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.top-bar-level {
+  position: absolute; left: 0; width: 100%; top: 34%; height: 55%;
+  display: flex; align-items: center; justify-content: center;
+  color: #f5e6c8; font-weight: 700; font-size: 13px;
+}
+.wave-label { font-weight: 700; font-size: 13px; color: #fff; }
+.timer { color: var(--gem); font-size: 13px; }
 
-.monster-row { display: flex; gap: 6px; justify-content: center; color: var(--muted); flex-shrink: 0; }
+.monster-row {
+  position: relative;
+  width: 55%; margin: 0 auto; flex-shrink: 0;
+  aspect-ratio: 848 / 169;
+  background-size: 100% 100%; background-repeat: no-repeat;
+}
+.monster-count-text {
+  position: absolute; left: 24%; width: 72%; top: 0; height: 100%;
+  display: flex; align-items: center;
+  color: #f5e6c8; font-weight: 700; font-size: 12px;
+}
 
 .favorite-bar { display: flex; gap: 6px; justify-content: center; flex-shrink: 0; }
 .favorite-icon {
@@ -127,8 +151,9 @@ body {
 }
 .stage-monster {
   position: absolute;
+  width: 7%; height: auto; aspect-ratio: 1;
   transform: translate(-50%, -50%);
-  font-size: 20px;
+  object-fit: contain;
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.6));
   pointer-events: none;
 }
@@ -137,9 +162,10 @@ body {
    좌표는 src/data/assets.js의 STAGE_LAYOUT과 맞춰져 있음 */
 @keyframes monster-travel {
   0% { left: 14.97%; top: 44.23%; opacity: 0; }
-  10% { opacity: 1; }
-  50% { left: 50%; top: 37%; }
-  90% { opacity: 1; }
+  6% { opacity: 1; }
+  25% { left: 14.97%; top: 65%; }
+  75% { left: 85.03%; top: 65%; }
+  94% { opacity: 1; }
   100% { left: 85.03%; top: 44.3%; opacity: 0; }
 }
 
@@ -188,7 +214,28 @@ body {
 }
 .incapacitate-mark, .delete-mark { position: absolute; top: 1px; right: 1px; font-size: 10px; }
 
-.resource-row { display: flex; gap: 14px; justify-content: center; align-items: center; background: var(--panel); padding: 8px; border-radius: 8px; flex-wrap: wrap; flex-shrink: 0; }
+.resource-row { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.resource-bar-image {
+  position: relative;
+  flex: 1;
+  aspect-ratio: 963 / 136;
+  background-size: 100% 100%; background-repeat: no-repeat;
+}
+.resource-value {
+  position: absolute; top: 0; height: 100%;
+  display: flex; align-items: center;
+  color: #fff; font-weight: 700; font-size: 12px;
+}
+.resource-gold { left: 12%; width: 24%; }
+.resource-luckstone { left: 43%; width: 22%; }
+.resource-pop { left: 71%; width: 10%; justify-content: flex-end; }
+.resource-pop-max { left: 86%; width: 13%; }
+.resource-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.speed-toggle-btn {
+  width: 36px; height: 36px; border: none; background-color: transparent;
+  background-size: contain; background-repeat: no-repeat; background-position: center;
+  cursor: pointer; padding: 0;
+}
 
 .selected-panel { background: var(--panel); padding: 10px; border-radius: 8px; min-height: 56px; flex-shrink: 0; }
 .selected-panel.empty { color: var(--muted); text-align: center; }
@@ -202,57 +249,72 @@ body {
 .bottom-bar { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
 .bottom-bar-row { display: flex; gap: 8px; align-items: stretch; }
 
-.hex-btn {
-  position: relative;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 2px;
-  min-width: 56px;
-  background: linear-gradient(180deg, #3a3a56, #24243a);
-  border: 1px solid #4a4a6a;
-  border-radius: 14px;
-  color: var(--text);
-  cursor: pointer;
-  padding: 6px 8px;
+.img-btn {
+  border: none; background-color: transparent; cursor: pointer; padding: 0;
+  background-size: 100% 100%; background-repeat: no-repeat; background-position: center;
 }
-.hex-mythic { border-color: #8a5cf0; }
-.hex-icon { font-size: 18px; line-height: 1; }
-.hex-label { font-size: 11px; }
+.img-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.img-btn:active { filter: brightness(0.92); }
+
+.mythic-btn-img { position: relative; height: 64px; aspect-ratio: 807 / 639; flex-shrink: 0; }
+.roulette-btn-img { height: 64px; aspect-ratio: 799 / 573; flex-shrink: 0; }
+.summon-btn-img { position: relative; flex: 1; height: 68px; aspect-ratio: 870 / 434; }
 .hex-badge {
-  position: absolute; top: -6px; right: -6px;
+  position: absolute; top: -4px; right: -4px;
   background: var(--danger); color: #fff; font-size: 10px; font-weight: 700;
   border-radius: 999px; min-width: 16px; padding: 1px 4px; text-align: center;
 }
-.hex-mission { min-width: 40px; }
-
-.summon-btn-main {
-  flex: 1;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  background: linear-gradient(180deg, #ffd76a, #f0a520);
-  border: 1px solid #d98c10;
-  border-radius: 16px;
-  color: #4a2e00;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 3px 0 #b06f00;
+.summon-cost-overlay {
+  position: absolute; left: 40%; width: 30%; top: 58%; height: 28%;
+  display: flex; align-items: center;
+  color: #fff; font-weight: 800; font-size: 13px;
 }
-.summon-btn-main:active { transform: translateY(2px); box-shadow: none; }
-.summon-label { font-size: 15px; }
-.summon-cost { font-size: 12px; }
-
-.roulette-mini-group { display: flex; flex-direction: column; gap: 3px; justify-content: center; }
-.hex-mini { min-width: 74px; padding: 3px 8px; border-radius: 10px; font-size: 11px; border-color: var(--gem); }
-
-.enhance-btn-full {
-  width: 100%;
-  background: linear-gradient(180deg, #3a5a8a, #24344a);
-  border: 1px solid #4a6a9a;
-  border-radius: 12px;
-  color: var(--text);
-  font-weight: 700;
-  padding: 10px;
+.hex-mission {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 64px; flex-shrink: 0;
+  background: var(--panel-2); border: 1px solid #4a4a6a; border-radius: 10px;
   cursor: pointer;
 }
-.enhance-btn-full:disabled { opacity: 0.4; cursor: not-allowed; }
+.hex-icon { font-size: 18px; line-height: 1; }
+
+.enhance-btn-img { width: 100%; height: 40px; aspect-ratio: 852 / 235; }
+
+/* ---- 룰렛 팝업: 제공받은 커튼 배경 + 원형 배지 3종 ---- */
+.roulette-popup-frame {
+  position: relative;
+  width: 92vw; max-width: 440px;
+  aspect-ratio: 951 / 515;
+  background-size: 100% 100%; background-repeat: no-repeat;
+}
+.roulette-popup-title {
+  position: absolute; left: 28%; top: 16%; width: 40%; height: 8%;
+  display: flex; align-items: center; justify-content: center;
+  color: #cfeeee; font-weight: 700; font-size: clamp(11px, 2.6vw, 14px);
+}
+.roulette-popup-close {
+  position: absolute; right: 3%; top: 14%; width: 8%; aspect-ratio: 1;
+  background: transparent; border: none; color: transparent; cursor: pointer;
+}
+.roulette-row {
+  position: absolute; left: 8%; top: 30%; width: 84%; height: 62%;
+  display: flex; gap: 4%; justify-content: center; align-items: flex-end;
+}
+.roulette-item-btn {
+  position: relative;
+  height: 100%;
+  background-size: contain; background-repeat: no-repeat; background-position: bottom center;
+  border: none; background-color: transparent; cursor: pointer;
+}
+.roulette-item-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.roulette-item-btn.rr-rare { aspect-ratio: 638 / 906; }
+.roulette-item-btn.rr-hero { aspect-ratio: 591 / 930; }
+.roulette-item-btn.rr-legendary { aspect-ratio: 771 / 938; }
+.roulette-item-cost {
+  position: absolute; left: 38%; width: 50%; top: 72%; height: 13%;
+  display: flex; align-items: center;
+  color: #4a2e00; font-weight: 800; font-size: clamp(11px, 3vw, 15px);
+}
 
 .popup-overlay {
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
