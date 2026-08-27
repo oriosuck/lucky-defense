@@ -137,9 +137,10 @@ body {
    좌표는 src/data/assets.js의 STAGE_LAYOUT과 맞춰져 있음 */
 @keyframes monster-travel {
   0% { left: 14.97%; top: 44.23%; opacity: 0; }
-  10% { opacity: 1; }
-  50% { left: 50%; top: 37%; }
-  90% { opacity: 1; }
+  6% { opacity: 1; }
+  25% { left: 14.97%; top: 65%; }
+  75% { left: 85.03%; top: 65%; }
+  94% { opacity: 1; }
   100% { left: 85.03%; top: 44.3%; opacity: 0; }
 }
 
@@ -206,23 +207,25 @@ body {
   position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 2px;
-  min-width: 56px;
+  width: 68px; height: 68px;
+  flex-shrink: 0;
   background: linear-gradient(180deg, #3a3a56, #24243a);
   border: 1px solid #4a4a6a;
-  border-radius: 14px;
+  border-radius: 18px;
   color: var(--text);
   cursor: pointer;
-  padding: 6px 8px;
+  padding: 4px;
 }
 .hex-mythic { border-color: #8a5cf0; }
-.hex-icon { font-size: 18px; line-height: 1; }
+.hex-roulette-main { border-color: var(--gem); }
+.hex-icon { font-size: 22px; line-height: 1; }
 .hex-label { font-size: 11px; }
 .hex-badge {
   position: absolute; top: -6px; right: -6px;
   background: var(--danger); color: #fff; font-size: 10px; font-weight: 700;
   border-radius: 999px; min-width: 16px; padding: 1px 4px; text-align: center;
 }
-.hex-mission { min-width: 40px; }
+.hex-mission { width: 36px; height: 36px; align-self: center; border-radius: 10px; }
 
 .summon-btn-main {
   flex: 1;
@@ -239,8 +242,24 @@ body {
 .summon-label { font-size: 15px; }
 .summon-cost { font-size: 12px; }
 
-.roulette-mini-group { display: flex; flex-direction: column; gap: 3px; justify-content: center; }
-.hex-mini { min-width: 74px; padding: 3px 8px; border-radius: 10px; font-size: 11px; border-color: var(--gem); }
+/* ---- 룰렛 팝업: 원형 배지 3종 ---- */
+.roulette-popup-box { text-align: center; }
+.roulette-row { display: flex; gap: 18px; justify-content: center; margin: 14px 0; }
+.roulette-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.roulette-circle {
+  width: 84px; height: 84px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 4px solid rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35), inset 0 2px 6px rgba(255, 255, 255, 0.3);
+}
+.roulette-circle:disabled { opacity: 0.4; cursor: not-allowed; }
+.roulette-circle-label { font-size: 13px; font-weight: 800; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); }
+.roulette-blue { background: radial-gradient(circle at 35% 30%, #6fb8ff, #2f6fd6); }
+.roulette-purple { background: radial-gradient(circle at 35% 30%, #b98cff, #7a3fd6); }
+.roulette-gold { background: radial-gradient(circle at 35% 30%, #ffe38a, #e0a010); }
+.roulette-price { font-size: 13px; font-weight: 700; color: var(--gem); }
 
 .enhance-btn-full {
   width: 100%;

@@ -19,6 +19,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     moveMode: false,
     mythicPopup: null, // null | 'owned' | 'immortal'
     missionPopup: false,
+    roulettePopup: false,
     monsters: [], // 좌->우 굴을 지나가는 장식용 몬스터 애니메이션 상태
     lastMonsterSpawnAt: null,
   };
@@ -39,6 +40,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     root.appendChild(renderBottomBar(state));
     if (ui.mythicPopup) root.appendChild(renderMythicPopup(state));
     if (ui.missionPopup) root.appendChild(renderMissionPopup(state));
+    if (ui.roulettePopup) root.appendChild(renderRoulettePopup(state));
     if (state.result) root.appendChild(renderResultOverlay(state));
   }
 
@@ -291,10 +293,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
           el('span', { class: 'summon-label', text: '소환' }),
           el('span', { class: 'summon-cost', text: `🪙 ${state.normalSummonCost}` }),
         ]),
-        el('div', { class: 'roulette-mini-group' }, [
-          el('button', { class: 'hex-btn hex-mini hex-roulette', text: '희귀 💎1', onclick: () => apply(summonRoulette(state, 'rare', 'left')) }),
-          el('button', { class: 'hex-btn hex-mini hex-roulette', text: '영웅 💎1', onclick: () => apply(summonRoulette(state, 'hero', 'left')) }),
-          el('button', { class: 'hex-btn hex-mini hex-roulette', text: '전설 💎2', onclick: () => apply(summonRoulette(state, 'legendary', 'right')) }),
+        el('button', { class: 'hex-btn hex-roulette-main', onclick: () => { ui.roulettePopup = true; render(state); } }, [
+          el('span', { class: 'hex-icon', text: '✨' }),
+          el('span', { class: 'hex-label', text: '룰렛' }),
         ]),
         el('button', { class: 'hex-btn hex-mission', onclick: () => { ui.missionPopup = true; render(state); } }, [
           el('span', { class: 'hex-icon', text: '☰' }),
@@ -306,6 +307,32 @@ export function GameScreen({ getState, dispatch, onExit }) {
         disabled: !ui.selectedInstanceId,
         onclick: () => apply(enhanceHero(state, ui.selectedInstanceId)),
       }),
+    ]);
+  }
+
+  const ROULETTE_TIERS = [
+    { tier: 'rare', slot: 'left', label: '희귀', cost: 1, colorClass: 'roulette-blue' },
+    { tier: 'hero', slot: 'left', label: '영웅', cost: 1, colorClass: 'roulette-purple' },
+    { tier: 'legendary', slot: 'right', label: '전설', cost: 2, colorClass: 'roulette-gold' },
+  ];
+
+  function renderRoulettePopup(state) {
+    const circles = ROULETTE_TIERS.map((r) =>
+      el('div', { class: 'roulette-item' }, [
+        el('button', {
+          class: `roulette-circle ${r.colorClass}`,
+          disabled: state.luckstone < r.cost,
+          onclick: () => apply(summonRoulette(state, r.tier, r.slot)),
+        }, [el('span', { class: 'roulette-circle-label', text: r.label })]),
+        el('div', { class: 'roulette-price', text: `💎 ${r.cost}` }),
+      ]),
+    );
+    return el('div', { class: 'popup-overlay', onclick: (e) => { if (e.target === e.currentTarget) { ui.roulettePopup = false; render(state); } } }, [
+      el('div', { class: 'popup-box roulette-popup-box' }, [
+        el('h3', { text: `룰렛 (보유 💎 ${state.luckstone})` }),
+        el('div', { class: 'roulette-row' }, circles),
+        el('button', { class: 'btn', text: '닫기', onclick: () => { ui.roulettePopup = false; render(state); } }),
+      ]),
     ]);
   }
 
