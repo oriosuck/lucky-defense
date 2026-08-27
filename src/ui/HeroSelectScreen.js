@@ -135,6 +135,7 @@ export function HeroSelectScreen({ onStart }) {
       !state.owned ? el('span', { class: 'lock-icon', text: '🔒' }) : null,
       el('button', { class: 'favorite-toggle', text: state.favorite ? '★' : '☆', onclick: (e) => { e.stopPropagation(); toggleFavorite(heroDef.id); } }),
       el('div', { class: 'hero-card-body', onclick: () => toggleOwned(heroDef.id) }, [
+        el('img', { class: 'hero-card-image', src: heroDef.image, alt: heroDef.name }),
         el('div', { class: 'hero-name', text: heroDef.name }),
         el('div', { class: 'hero-tier', text: TIER_LABEL[heroDef.tier] }),
       ]),

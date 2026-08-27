@@ -284,6 +284,12 @@ const promotionHandlers = {
     }
     return { ok: true };
   },
+  m_tar(state, slot, instance, cond) {
+    if (cond.extra.requireStage3AtPromotion && (instance.tarStage ?? 1) < 3) {
+      return { ok: false, reason: 'stage3-required' };
+    }
+    return { ok: true };
+  },
   m_lancelot(state, slot, instance, cond) {
     const { instances } = countHeroOnField(state, 'm_lancelot');
     const maxEnhanced = instances.filter((ref) => (ref.instance.enhanceLevel ?? 0) >= (cond.extra.maxEnhance ?? 10));
@@ -321,6 +327,30 @@ export function checkImmortalPromotion(state, instanceId) {
 
   promoteInstance(newState, slot, instanceId, cond.id);
   return { eligible: true, promoted: true, newState };
+}
+
+/**
+ * 군체 타르 전용 "동족포식": 필드의 다른 타르 중 가장 낮은 단계를 흡수해
+ * 포식 횟수(progress)를 늘리고 자신의 단계(tarStage, 최대 3)를 올린다.
+ */
+export function cannibalizeTar(state, eaterInstanceId) {
+  const newState = structuredClone(state);
+  const found = findInstance(newState, eaterInstanceId);
+  if (!found || found.instance.heroId !== 'm_tar') {
+    return { success: false, reason: 'not-tar', newState: state };
+  }
+  const { instances } = countHeroOnField(newState, 'm_tar');
+  const preyCandidates = instances.filter((ref) => ref.instance.instanceId !== eaterInstanceId);
+  if (!preyCandidates.length) return { success: false, reason: 'no-prey', newState: state };
+
+  preyCandidates.sort((a, b) => (a.instance.tarStage ?? 1) - (b.instance.tarStage ?? 1));
+  const prey = preyCandidates[0];
+  prey.slot.occupants = prey.slot.occupants.filter((o) => o.instanceId !== prey.instance.instanceId);
+
+  found.instance.progress = (found.instance.progress ?? 0) + 1;
+  found.instance.tarStage = Math.min(3, (found.instance.tarStage ?? 1) + 1);
+
+  return { success: true, newState };
 }
 
 // ---- 마마 전용: 임프 생성/소모, 돌파 토글 ----

@@ -1,6 +1,13 @@
 // HeroDefinition 마스터 데이터 (기술설계서 2장 / 기획서 5장 기준)
 // tier: 'normal' | 'rare' | 'hero' | 'legendary' | 'mythic' | 'immortal'
 
+// public/heroes/<id>.<ext> 로 이미지를 배치했다. 대부분 webp, 일부만 png.
+// import.meta.env.BASE_URL을 붙여서 서브 경로 배포(GitHub Pages 등)에서도 경로가 깨지지 않게 한다.
+const IMAGE_EXT_OVERRIDE = { i_devil_monopoly: 'png', i_knight_lancelot: 'png' };
+function imagePath(id) {
+  return `${import.meta.env.BASE_URL}heroes/${id}.${IMAGE_EXT_OVERRIDE[id] ?? 'webp'}`;
+}
+
 export const TIERS = ['normal', 'rare', 'hero', 'legendary', 'mythic', 'immortal'];
 
 export const TIER_LABEL = {
@@ -68,6 +75,7 @@ const BASE_HEROES = [
   synthMaterials: null,
   immortalCondition: null,
   baseHeroId: null,
+  image: imagePath(h.id),
 }));
 
 // ---- 신화 (5-2) 조합 재료 ----
@@ -242,6 +250,7 @@ const MYTHIC_HEROES = MYTHIC_RAW.map(([id, name, mats]) => ({
   synthMaterials: mats.map(([heroId, count]) => ({ heroId, count })),
   immortalCondition: IMMORTAL_CONDITIONS[id] || null,
   baseHeroId: null,
+  image: imagePath(id),
 }));
 
 const IMMORTAL_HEROES = Object.entries(IMMORTAL_CONDITIONS).map(([mythicId, cond]) => {
@@ -255,6 +264,7 @@ const IMMORTAL_HEROES = Object.entries(IMMORTAL_CONDITIONS).map(([mythicId, cond
     immortalCondition: null,
     baseHeroId: mythicId,
     baseHeroName: base?.name ?? null,
+    image: imagePath(cond.id),
   };
 });
 

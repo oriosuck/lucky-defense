@@ -1,9 +1,10 @@
 import { HEROES_BY_ID, TIER_LABEL } from '../data/heroes.js';
+import { BOSS_IMAGE, BACKGROUND_IMAGE, TAR_STAGE_IMAGES } from '../data/assets.js';
 import { missionDefinitions } from '../logic/missions.js';
 import { summonNormal, summonRoulette } from '../logic/summon.js';
 import { synthesize, craftMythic, sellHero, feedMythicToChad, sellGigaChad, countHeroOnField } from '../logic/synthesis.js';
 import { enhanceHero, moveHero, toggleBreakthrough } from '../logic/actions.js';
-import { checkImmortalPromotion } from '../logic/immortal.js';
+import { checkImmortalPromotion, cannibalizeTar } from '../logic/immortal.js';
 import { fieldOccupantCount } from '../state/gameState.js';
 import { el } from './components/dom.js';
 
@@ -12,7 +13,7 @@ import { el } from './components/dom.js';
  * @returns {{root:HTMLElement, update:(s:object)=>void}}
  */
 export function GameScreen({ getState, dispatch, onExit }) {
-  const root = el('div', { class: 'screen game-screen' });
+  const root = el('div', { class: 'screen game-screen', style: `background-image: url(${BACKGROUND_IMAGE})` });
   const ui = {
     selectedInstanceId: null,
     moveMode: false,
@@ -28,7 +29,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     root.innerHTML = '';
     root.appendChild(renderTopBar(state));
     root.appendChild(renderMonsterRow(state));
-    root.appendChild(el('div', { class: 'boss-graphic' }, [el('span', { text: '👹' })]));
+    root.appendChild(el('div', { class: 'boss-graphic' }, [el('img', { src: BOSS_IMAGE, alt: '보스' })]));
     root.appendChild(renderFavoriteBar(state));
     root.appendChild(renderField(state));
     root.appendChild(renderResourceRow(state));
@@ -60,12 +61,15 @@ export function GameScreen({ getState, dispatch, onExit }) {
       'div',
       { class: 'favorite-bar' },
       favorites.map((h) =>
-        el('button', {
-          class: 'favorite-icon',
-          text: HEROES_BY_ID[h.heroId]?.name?.[0] ?? '?',
-          title: HEROES_BY_ID[h.heroId]?.name,
-          onclick: () => moveFavoriteToTopLeft(state, h.heroId),
-        }),
+        el(
+          'button',
+          {
+            class: 'favorite-icon',
+            title: HEROES_BY_ID[h.heroId]?.name,
+            onclick: () => moveFavoriteToTopLeft(state, h.heroId),
+          },
+          [el('img', { src: HEROES_BY_ID[h.heroId]?.image, alt: HEROES_BY_ID[h.heroId]?.name })],
+        ),
       ),
     );
   }
@@ -89,7 +93,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         const heroDef = HEROES_BY_ID[occ.heroId];
         cell.appendChild(
           el('div', { class: `hero-token tier-${heroDef.tier}${occ.instanceId === ui.selectedInstanceId ? ' selected' : ''}` }, [
-            el('span', { class: 'hero-token-name', text: heroDef.name }),
+            el('img', { class: 'hero-token-image', src: heroImage(occ, heroDef), alt: heroDef.name }),
             occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
           ]),
         );
@@ -99,6 +103,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
       grid.appendChild(cell);
     }
     return grid;
+  }
+
+  function heroImage(instance, heroDef) {
+    if (heroDef.id === 'm_tar') return TAR_STAGE_IMAGES[instance.tarStage ?? 1];
+    return heroDef.image;
   }
 
   function isIncapacitated(state, slot) {
@@ -190,6 +199,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (instance.heroId === 'i_giga_chad') {
       buttons.push(el('button', { class: 'btn', text: '판매(+6 행운석)', onclick: () => apply(sellGigaChad(state, instance.instanceId)) }));
     }
+    if (instance.heroId === 'm_tar' && countHeroOnField(state, 'm_tar').count > 1) {
+      buttons.push(el('button', { class: 'btn', text: '동족포식', onclick: () => apply(cannibalizeTar(state, instance.instanceId)) }));
+    }
     if (heroDef.tier === 'mythic' && instance.heroId !== 'm_chad') {
       const chad = state.field.flatMap((s) => s.occupants).find((o) => o.heroId === 'm_chad');
       if (chad) {
@@ -201,7 +213,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
     }
 
     return el('div', { class: 'selected-panel' }, [
-      el('div', { class: 'selected-title', text: `${heroDef.name} (${TIER_LABEL[heroDef.tier]}) +${instance.enhanceLevel}` }),
+      el('div', { class: 'selected-header' }, [
+        el('img', { class: 'selected-image', src: heroImage(instance, heroDef), alt: heroDef.name }),
+        el('div', { class: 'selected-title', text: `${heroDef.name} (${TIER_LABEL[heroDef.tier]}) +${instance.enhanceLevel}` }),
+      ]),
       heroDef.immortalCondition
         ? el('div', { class: 'immortal-progress', text: `불멸 진행도: ${Math.floor(instance.progress ?? 0)}${heroDef.immortalCondition.target != null ? ' / ' + heroDef.immortalCondition.target : ''}` })
         : null,
@@ -240,6 +255,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         const heroDef = HEROES_BY_ID[id];
         const missing = (heroDef.synthMaterials ?? []).filter((m) => countHeroOnField(state, m.heroId).count < m.count);
         return el('li', {}, [
+          el('img', { class: 'mythic-list-image', src: heroDef.image, alt: heroDef.name }),
           el('span', { text: `${heroDef.name} ` }),
           el('button', {
             class: 'btn', text: '조합', disabled: missing.length > 0,
@@ -251,8 +267,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
     } else {
       const activeMythics = state.field.flatMap((s) => s.occupants.filter((o) => HEROES_BY_ID[o.heroId]?.tier === 'mythic'));
       body = el('ul', { class: 'mythic-list' }, activeMythics.map((instance) => {
-        const cond = HEROES_BY_ID[instance.heroId].immortalCondition;
-        return el('li', {}, `${cond.name}: ${Math.floor(instance.progress ?? 0)}${cond.target != null ? ' / ' + cond.target : ''}`);
+        const heroDef = HEROES_BY_ID[instance.heroId];
+        const cond = heroDef.immortalCondition;
+        return el('li', {}, [
+          el('img', { class: 'mythic-list-image', src: heroImage(instance, heroDef), alt: heroDef.name }),
+          el('span', { text: `${cond.name}: ${Math.floor(instance.progress ?? 0)}${cond.target != null ? ' / ' + cond.target : ''}` }),
+        ]);
       }));
       if (!activeMythics.length) body = el('div', { text: '필드에 배치된 신화 등급 영웅이 없습니다.' });
     }
