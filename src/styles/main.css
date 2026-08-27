@@ -226,40 +226,73 @@ body {
 }
 .incapacitate-mark, .delete-mark { position: absolute; top: 1px; right: 1px; font-size: 10px; }
 
-.resource-row { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+/* ---- 상단 우측 컨트롤(일시정지/나가기): 배경 위 작은 아이콘으로 ---- */
+.stage-controls {
+  position: absolute; right: 2%; top: 1.5%; z-index: 3;
+  display: flex; gap: 4%;
+}
+.stage-control-btn {
+  width: 7%; aspect-ratio: 1; border-radius: 50%;
+  background: rgba(20, 16, 26, 0.65); border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff; font-size: clamp(10px, 2.4vw, 14px);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.stage-control-btn.active { border-color: var(--gold); color: var(--gold); }
+
+/* ---- 재화 바 + 배속: 배경 하단 통로 위에 얹는다 ---- */
+.stage-resource-row {
+  position: absolute; left: 8%; top: 64.5%; width: 84%; height: 5%;
+  display: flex; align-items: center; gap: 2%; z-index: 2;
+}
 .resource-bar-image {
   position: relative;
-  flex: 1;
-  aspect-ratio: 963 / 136;
+  flex: 1; height: 100%;
   background-size: 100% 100%; background-repeat: no-repeat;
 }
 .resource-value {
   position: absolute; top: 0; height: 100%;
   display: flex; align-items: center;
-  color: #fff; font-weight: 700; font-size: 12px;
+  color: #fff; font-weight: 700; font-size: clamp(9px, 2.4vw, 12px);
 }
 .resource-gold { left: 12%; width: 24%; }
 .resource-luckstone { left: 43%; width: 22%; }
 .resource-pop { left: 71%; width: 10%; justify-content: flex-end; }
 .resource-pop-max { left: 86%; width: 13%; }
-.resource-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .speed-toggle-btn {
-  width: 36px; height: 36px; border: none; background-color: transparent;
+  height: 140%; width: auto; aspect-ratio: 1; flex-shrink: 0;
+  border: none; background-color: transparent;
   background-size: contain; background-repeat: no-repeat; background-position: center;
   cursor: pointer; padding: 0;
 }
 
-.selected-panel { background: var(--panel); padding: 10px; border-radius: 8px; min-height: 56px; flex-shrink: 0; }
-.selected-panel.empty { color: var(--muted); text-align: center; }
-.selected-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.selected-image { width: 40px; height: 40px; object-fit: contain; background: #0c0c14; border-radius: 6px; }
+/* ---- 선택된 영웅 패널: 선택했을 때만 보스 위에 겹쳐서 뜬다 ---- */
+.selected-panel {
+  position: absolute; left: 8%; top: 8%; width: 84%; height: 36%; z-index: 5;
+  background: rgba(18, 14, 24, 0.94); border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 3%; border-radius: 12px; box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 3%;
+  overflow-y: auto;
+}
+.selected-close {
+  position: absolute; right: 2%; top: 2%;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1); border: none; color: var(--text); cursor: pointer;
+}
+.selected-header { display: flex; align-items: center; gap: 8px; }
+.selected-image { width: 40px; height: 40px; object-fit: contain; background: #0c0c14; border-radius: 6px; flex-shrink: 0; }
 .selected-image.transform { opacity: 0.7; border: 1px dashed var(--gem); margin-left: auto; }
-.selected-title { font-weight: 600; }
-.immortal-progress { font-size: 12px; color: var(--gem); margin-bottom: 6px; }
+.selected-title { font-weight: 600; font-size: 13px; }
+.immortal-progress { font-size: 12px; color: var(--gem); }
 .action-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
 
-.bottom-bar { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
-.bottom-bar-row { display: flex; gap: 8px; align-items: stretch; }
+/* ---- 하단 버튼(신화/소환/룰렛/강화): 배경 하단 기둥 위에 얹는다 ---- */
+.stage-bottom-overlay {
+  position: absolute; left: 4%; top: 71%; width: 92%; height: 22%; z-index: 2;
+  display: flex; flex-direction: column; gap: 3%;
+}
+.stage-bottom-row { display: flex; gap: 3%; align-items: center; height: 68%; }
+.stage-enhance-row { height: 26%; }
 
 .img-btn {
   border: none; background-color: transparent; cursor: pointer; padding: 0;
@@ -268,9 +301,9 @@ body {
 .img-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .img-btn:active { filter: brightness(0.92); }
 
-.mythic-btn-img { position: relative; height: 64px; aspect-ratio: 807 / 639; flex-shrink: 0; }
-.roulette-btn-img { height: 64px; aspect-ratio: 799 / 573; flex-shrink: 0; }
-.summon-btn-img { position: relative; flex: 1; height: 68px; aspect-ratio: 870 / 434; }
+.mythic-btn-img { position: relative; width: 20%; aspect-ratio: 807 / 639; flex-shrink: 0; }
+.roulette-btn-img { width: 20%; aspect-ratio: 799 / 573; flex-shrink: 0; }
+.summon-btn-img { position: relative; flex: 1; height: 100%; align-self: stretch; }
 .hex-badge {
   position: absolute; top: -4px; right: -4px;
   background: var(--danger); color: #fff; font-size: 10px; font-weight: 700;
@@ -284,13 +317,13 @@ body {
 .hex-mission {
   position: relative;
   display: flex; align-items: center; justify-content: center;
-  width: 36px; height: 64px; flex-shrink: 0;
+  width: 9%; aspect-ratio: 0.6; flex-shrink: 0;
   background: var(--panel-2); border: 1px solid #4a4a6a; border-radius: 10px;
   cursor: pointer;
 }
 .hex-icon { font-size: 18px; line-height: 1; }
 
-.enhance-btn-img { width: 100%; height: 40px; aspect-ratio: 852 / 235; }
+.enhance-btn-img { width: 100%; height: 100%; }
 
 /* ---- 룰렛 팝업: 제공받은 커튼 배경 + 원형 배지 3종 ---- */
 .roulette-popup-frame {

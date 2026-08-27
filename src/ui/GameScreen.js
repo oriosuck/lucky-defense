@@ -34,9 +34,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
     root.appendChild(renderTopBar(state));
     root.appendChild(renderMonsterRow(state));
     root.appendChild(el('div', { class: 'game-stage-wrap' }, [renderStage(state)]));
-    root.appendChild(renderResourceRow(state));
-    root.appendChild(renderSelectedPanel(state));
-    root.appendChild(renderBottomBar(state));
     if (ui.mythicPopup) root.appendChild(renderMythicPopup(state));
     if (ui.missionPopup) root.appendChild(renderMissionPopup(state));
     if (ui.roulettePopup) root.appendChild(renderRoulettePopup(state));
@@ -85,7 +82,27 @@ export function GameScreen({ getState, dispatch, onExit }) {
     }
     stage.appendChild(renderField(state));
     stage.appendChild(renderFavoriteBar(state));
+    stage.appendChild(renderStageControls(state));
+    stage.appendChild(renderResourceOverlay(state));
+    const selPanel = renderSelectedPanel(state);
+    if (selPanel) stage.appendChild(selPanel);
+    stage.appendChild(renderBottomOverlay(state));
     return stage;
+  }
+
+  function renderStageControls(state) {
+    return el('div', { class: 'stage-controls' }, [
+      el('button', {
+        class: `stage-control-btn ${state.paused ? 'active' : ''}`,
+        text: state.paused ? '▶' : '⏸',
+        onclick: () => {
+          const next = structuredClone(state);
+          next.paused = !state.paused;
+          dispatch(next);
+        },
+      }),
+      el('button', { class: 'stage-control-btn', text: '🚪', onclick: onExit }),
+    ]);
   }
 
   function renderTopBar(state) {
@@ -184,35 +201,23 @@ export function GameScreen({ getState, dispatch, onExit }) {
     render(getState());
   }
 
-  function renderResourceRow(state) {
-    return el('div', { class: 'resource-row' }, [
+  function renderResourceOverlay(state) {
+    return el('div', { class: 'stage-resource-row' }, [
       el('div', { class: 'resource-bar-image', style: `background-image: url(${UI_IMAGES.resourceBar})` }, [
         el('span', { class: 'resource-value resource-gold', text: `${Math.floor(state.gold)}` }),
         el('span', { class: 'resource-value resource-luckstone', text: `${state.luckstone}` }),
         el('span', { class: 'resource-value resource-pop', text: `${fieldOccupantCount(state)}` }),
         el('span', { class: 'resource-value resource-pop-max', text: `${state.fieldMaxCapacity}` }),
       ]),
-      el('div', { class: 'resource-controls' }, [
-        el('button', {
-          class: 'speed-toggle-btn',
-          style: `background-image: url(${state.speed === 2 ? UI_IMAGES.speed2xOn : UI_IMAGES.speed2xOff})`,
-          onclick: () => {
-            const next = structuredClone(state);
-            next.speed = state.speed === 2 ? 1 : 2;
-            dispatch(next);
-          },
-        }),
-        el('button', {
-          class: `btn ${state.paused ? 'active' : ''}`,
-          text: state.paused ? '재개' : '일시정지',
-          onclick: () => {
-            const next = structuredClone(state);
-            next.paused = !state.paused;
-            dispatch(next);
-          },
-        }),
-        el('button', { class: 'btn btn-ghost', text: '나가기', onclick: onExit }),
-      ]),
+      el('button', {
+        class: 'speed-toggle-btn',
+        style: `background-image: url(${state.speed === 2 ? UI_IMAGES.speed2xOn : UI_IMAGES.speed2xOff})`,
+        onclick: () => {
+          const next = structuredClone(state);
+          next.speed = state.speed === 2 ? 1 : 2;
+          dispatch(next);
+        },
+      }),
     ]);
   }
 
@@ -228,7 +233,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   function renderSelectedPanel(state) {
     const found = selectedInstance(state);
-    if (!found) return el('div', { class: 'selected-panel empty', text: '전장의 영웅을 선택하세요' });
+    if (!found) return null;
     const { slot, instance } = found;
     const heroDef = HEROES_BY_ID[instance.heroId];
     const buttons = [];
@@ -271,6 +276,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     }
 
     return el('div', { class: 'selected-panel' }, [
+      el('button', { class: 'selected-close', text: '✕', onclick: () => { ui.selectedInstanceId = null; render(state); } }),
       el('div', { class: 'selected-header' }, [
         el('img', { class: 'selected-image', src: heroImage(instance, heroDef), alt: heroDef.name }),
         el('div', { class: 'selected-title', text: `${heroDef.name} (${TIER_LABEL[heroDef.tier]}) +${instance.enhanceLevel}` }),
@@ -285,10 +291,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
     ]);
   }
 
-  function renderBottomBar(state) {
+  function renderBottomOverlay(state) {
     const mythicOwnedCount = state.ownedHeroes.filter((h) => HEROES_BY_ID[h.heroId]?.tier === 'mythic').length;
-    return el('div', { class: 'bottom-bar' }, [
-      el('div', { class: 'bottom-bar-row' }, [
+    return el('div', { class: 'stage-bottom-overlay' }, [
+      el('div', { class: 'stage-bottom-row' }, [
         el('button', {
           class: 'img-btn mythic-btn-img',
           style: `background-image: url(${UI_IMAGES.mythicBtn})`,
@@ -308,12 +314,14 @@ export function GameScreen({ getState, dispatch, onExit }) {
           el('span', { class: 'hex-icon', text: '☰' }),
         ]),
       ]),
-      el('button', {
-        class: 'img-btn enhance-btn-img',
-        style: `background-image: url(${UI_IMAGES.enhanceBtn})`,
-        disabled: !ui.selectedInstanceId,
-        onclick: () => apply(enhanceHero(state, ui.selectedInstanceId)),
-      }),
+      el('div', { class: 'stage-enhance-row' }, [
+        el('button', {
+          class: 'img-btn enhance-btn-img',
+          style: `background-image: url(${UI_IMAGES.enhanceBtn})`,
+          disabled: !ui.selectedInstanceId,
+          onclick: () => apply(enhanceHero(state, ui.selectedInstanceId)),
+        }),
+      ]),
     ]);
   }
 
