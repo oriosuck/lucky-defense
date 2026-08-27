@@ -89,7 +89,35 @@ export function craftMythic(state, mythicHeroId) {
   }
 
   placeInstanceAtSlot(targetSlot, createHeroInstance(mythicHeroId, { isImmortalPath: true }));
+
+  // 즐겨찾기로 등록해둔 영웅이면, 조합 완료 시 좌측 즉시소환 버튼이 열린다(기획서 확정 사항)
+  const isFavorite = newState.ownedHeroes.some((h) => h.heroId === mythicHeroId && h.favorite);
+  if (isFavorite && !newState.unlockedInstantSummons.includes(mythicHeroId)) {
+    newState.unlockedInstantSummons.push(mythicHeroId);
+  }
+
   return { success: true, resultHero: heroDef, newState };
+}
+
+/**
+ * 즐겨찾기 즉시소환: 최소 한 번 조합에 성공한 뒤에만 사용 가능. 왼쪽 최상단(0,0)에
+ * 우선 배치를 시도하고, 안 되면 자동배치 규칙을 따른다. 비용 없음(이미 재료를 써서
+ * 한 번 조합했으므로).
+ */
+export function instantSummonFavorite(state, heroId) {
+  const newState = structuredClone(state);
+  if (!newState.unlockedInstantSummons.includes(heroId)) {
+    return { success: false, reason: 'not-unlocked', newState: state };
+  }
+
+  const topLeft = findSlot(newState, 0, 0);
+  const targetSlot = topLeft && topLeft.occupants.length === 0 ? topLeft : findAutoPlaceSlot(newState, heroId);
+  if (!targetSlot) {
+    return { success: false, reason: 'field-full', newState: state };
+  }
+
+  placeInstanceAtSlot(targetSlot, createHeroInstance(heroId, { isImmortalPath: true }));
+  return { success: true, newState };
 }
 
 /**
