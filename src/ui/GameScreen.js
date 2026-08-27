@@ -1,5 +1,5 @@
 import { HEROES_BY_ID, TIER_LABEL } from '../data/heroes.js';
-import { BOSS_IMAGE, BACKGROUND_IMAGE, TAR_STAGE_IMAGES, DRAGON_DRAIN_IMAGE, FROG_TRANSFORM_IMAGES, STAGE_LAYOUT } from '../data/assets.js';
+import { BOSS_IMAGE, BACKGROUND_IMAGE, TAR_STAGE_IMAGES, DRAGON_DRAIN_IMAGE, FROG_TRANSFORM_IMAGES, STAGE_LAYOUT, UI_IMAGES } from '../data/assets.js';
 import { missionDefinitions } from '../logic/missions.js';
 import { summonNormal, summonRoulette } from '../logic/summon.js';
 import { synthesize, craftMythic, sellHero, feedMythicToChad, sellGigaChad, countHeroOnField } from '../logic/synthesis.js';
@@ -76,10 +76,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
     for (const m of ui.monsters) {
       const elapsed = Math.max(0, now - m.bornAt);
       stage.appendChild(
-        el('div', {
+        el('img', {
           class: 'stage-monster',
+          src: UI_IMAGES.skullIcon,
+          alt: '몬스터',
           style: `top:${STAGE_LAYOUT.leftHole.y}%; left:${STAGE_LAYOUT.leftHole.x}%; animation: monster-travel ${MONSTER_TRAVEL_MS}ms linear forwards; animation-delay: -${elapsed}ms;`,
-        }, ['👾']),
+        }),
       );
     }
     stage.appendChild(renderField(state));
@@ -87,17 +89,18 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   function renderTopBar(state) {
-    return el('div', { class: 'top-bar' }, [
-      el('span', { class: 'wave-label', text: `WAVE ${state.wave}` }),
-      el('span', { class: 'timer', text: `${Math.max(0, Math.ceil(state.waveTimeLeft))}s` }),
-      el('span', { class: 'level-label', text: `Lv.${state.wave}` }),
+    return el('div', { class: 'top-bar', style: `background-image: url(${UI_IMAGES.waveBar})` }, [
+      el('div', { class: 'top-bar-wave' }, [
+        el('span', { class: 'wave-label', text: `WAVE ${state.wave}` }),
+        el('span', { class: 'timer', text: `${Math.max(0, Math.ceil(state.waveTimeLeft))}s` }),
+      ]),
+      el('div', { class: 'top-bar-level', text: `Lv.${state.wave}` }),
     ]);
   }
 
   function renderMonsterRow(state) {
-    return el('div', { class: 'monster-row' }, [
-      el('span', { text: '💀' }),
-      el('span', { text: `${Math.floor(state.monsterCount)} / ${state.monsterMax}` }),
+    return el('div', { class: 'monster-row', style: `background-image: url(${UI_IMAGES.monsterBar})` }, [
+      el('span', { class: 'monster-count-text', text: `${Math.floor(state.monsterCount)} / ${state.monsterMax}` }),
     ]);
   }
 
@@ -183,28 +186,33 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   function renderResourceRow(state) {
     return el('div', { class: 'resource-row' }, [
-      el('span', { text: `골드 ${Math.floor(state.gold)}` }),
-      el('span', { text: `행운석 ${state.luckstone}` }),
-      el('span', { text: `인원 ${fieldOccupantCount(state)}/${state.fieldMaxCapacity}` }),
-      el('button', {
-        class: `btn ${state.speed === 2 ? 'active' : ''}`,
-        text: 'x2',
-        onclick: () => {
-          const next = structuredClone(state);
-          next.speed = state.speed === 2 ? 1 : 2;
-          dispatch(next);
-        },
-      }),
-      el('button', {
-        class: `btn ${state.paused ? 'active' : ''}`,
-        text: state.paused ? '재개' : '일시정지',
-        onclick: () => {
-          const next = structuredClone(state);
-          next.paused = !state.paused;
-          dispatch(next);
-        },
-      }),
-      el('button', { class: 'btn btn-ghost', text: '나가기', onclick: onExit }),
+      el('div', { class: 'resource-bar-image', style: `background-image: url(${UI_IMAGES.resourceBar})` }, [
+        el('span', { class: 'resource-value resource-gold', text: `${Math.floor(state.gold)}` }),
+        el('span', { class: 'resource-value resource-luckstone', text: `${state.luckstone}` }),
+        el('span', { class: 'resource-value resource-pop', text: `${fieldOccupantCount(state)}` }),
+        el('span', { class: 'resource-value resource-pop-max', text: `${state.fieldMaxCapacity}` }),
+      ]),
+      el('div', { class: 'resource-controls' }, [
+        el('button', {
+          class: 'speed-toggle-btn',
+          style: `background-image: url(${state.speed === 2 ? UI_IMAGES.speed2xOn : UI_IMAGES.speed2xOff})`,
+          onclick: () => {
+            const next = structuredClone(state);
+            next.speed = state.speed === 2 ? 1 : 2;
+            dispatch(next);
+          },
+        }),
+        el('button', {
+          class: `btn ${state.paused ? 'active' : ''}`,
+          text: state.paused ? '재개' : '일시정지',
+          onclick: () => {
+            const next = structuredClone(state);
+            next.paused = !state.paused;
+            dispatch(next);
+          },
+        }),
+        el('button', { class: 'btn btn-ghost', text: '나가기', onclick: onExit }),
+      ]),
     ]);
   }
 
@@ -281,29 +289,28 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const mythicOwnedCount = state.ownedHeroes.filter((h) => HEROES_BY_ID[h.heroId]?.tier === 'mythic').length;
     return el('div', { class: 'bottom-bar' }, [
       el('div', { class: 'bottom-bar-row' }, [
-        el('button', { class: 'hex-btn hex-mythic', onclick: () => { ui.mythicPopup = 'owned'; render(state); } }, [
-          el('span', { class: 'hex-icon', text: '🔮' }),
-          el('span', { class: 'hex-label', text: '신화' }),
-          el('span', { class: 'hex-badge', text: String(mythicOwnedCount) }),
-        ]),
         el('button', {
-          class: 'summon-btn-main',
+          class: 'img-btn mythic-btn-img',
+          style: `background-image: url(${UI_IMAGES.mythicBtn})`,
+          onclick: () => { ui.mythicPopup = 'owned'; render(state); },
+        }, [el('span', { class: 'hex-badge', text: String(mythicOwnedCount) })]),
+        el('button', {
+          class: 'img-btn summon-btn-img',
+          style: `background-image: url(${UI_IMAGES.summonBtn})`,
           onclick: () => apply(summonNormal(state)),
-        }, [
-          el('span', { class: 'summon-label', text: '소환' }),
-          el('span', { class: 'summon-cost', text: `🪙 ${state.normalSummonCost}` }),
-        ]),
-        el('button', { class: 'hex-btn hex-roulette-main', onclick: () => { ui.roulettePopup = true; render(state); } }, [
-          el('span', { class: 'hex-icon', text: '✨' }),
-          el('span', { class: 'hex-label', text: '룰렛' }),
-        ]),
+        }, [el('span', { class: 'summon-cost-overlay', text: String(state.normalSummonCost) })]),
+        el('button', {
+          class: 'img-btn roulette-btn-img',
+          style: `background-image: url(${UI_IMAGES.rouletteBtn})`,
+          onclick: () => { ui.roulettePopup = true; render(state); },
+        }),
         el('button', { class: 'hex-btn hex-mission', onclick: () => { ui.missionPopup = true; render(state); } }, [
           el('span', { class: 'hex-icon', text: '☰' }),
         ]),
       ]),
       el('button', {
-        class: 'enhance-btn-full',
-        text: '⬆ 강화',
+        class: 'img-btn enhance-btn-img',
+        style: `background-image: url(${UI_IMAGES.enhanceBtn})`,
         disabled: !ui.selectedInstanceId,
         onclick: () => apply(enhanceHero(state, ui.selectedInstanceId)),
       }),
@@ -311,27 +318,25 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   const ROULETTE_TIERS = [
-    { tier: 'rare', slot: 'left', label: '희귀', cost: 1, colorClass: 'roulette-blue' },
-    { tier: 'hero', slot: 'left', label: '영웅', cost: 1, colorClass: 'roulette-purple' },
-    { tier: 'legendary', slot: 'right', label: '전설', cost: 2, colorClass: 'roulette-gold' },
+    { tier: 'rare', slot: 'left', cost: 1, img: UI_IMAGES.rouletteRare, cls: 'rr-rare' },
+    { tier: 'hero', slot: 'left', cost: 1, img: UI_IMAGES.rouletteHero, cls: 'rr-hero' },
+    { tier: 'legendary', slot: 'right', cost: 2, img: UI_IMAGES.rouletteLegendary, cls: 'rr-legendary' },
   ];
 
   function renderRoulettePopup(state) {
     const circles = ROULETTE_TIERS.map((r) =>
-      el('div', { class: 'roulette-item' }, [
-        el('button', {
-          class: `roulette-circle ${r.colorClass}`,
-          disabled: state.luckstone < r.cost,
-          onclick: () => apply(summonRoulette(state, r.tier, r.slot)),
-        }, [el('span', { class: 'roulette-circle-label', text: r.label })]),
-        el('div', { class: 'roulette-price', text: `💎 ${r.cost}` }),
-      ]),
+      el('button', {
+        class: `roulette-item-btn ${r.cls}`,
+        style: `background-image: url(${r.img})`,
+        disabled: state.luckstone < r.cost,
+        onclick: () => apply(summonRoulette(state, r.tier, r.slot)),
+      }, [el('span', { class: 'roulette-item-cost', text: String(r.cost) })]),
     );
     return el('div', { class: 'popup-overlay', onclick: (e) => { if (e.target === e.currentTarget) { ui.roulettePopup = false; render(state); } } }, [
-      el('div', { class: 'popup-box roulette-popup-box' }, [
-        el('h3', { text: `룰렛 (보유 💎 ${state.luckstone})` }),
+      el('div', { class: 'roulette-popup-frame', style: `background-image: url(${UI_IMAGES.roulettePopupBg})` }, [
+        el('div', { class: 'roulette-popup-title', text: `보유 💎 ${state.luckstone}` }),
+        el('button', { class: 'roulette-popup-close', text: '✕', onclick: () => { ui.roulettePopup = false; render(state); } }),
         el('div', { class: 'roulette-row' }, circles),
-        el('button', { class: 'btn', text: '닫기', onclick: () => { ui.roulettePopup = false; render(state); } }),
       ]),
     ]);
   }

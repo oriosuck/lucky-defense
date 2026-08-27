@@ -30,3 +30,21 @@ export const FROG_TRANSFORM_IMAGES = {
   m_frog_prince: `${BASE}heroes/m_frog_prince_transform.webp`,
   i_death_frog: `${BASE}heroes/i_death_frog_transform.webp`,
 };
+
+// 사용자가 제공한 UI 버튼/배지 아트 (public/ui/)
+export const UI_IMAGES = {
+  summonBtn: `${BASE}ui/summon_btn.webp`,
+  mythicBtn: `${BASE}ui/mythic_btn.webp`,
+  rouletteBtn: `${BASE}ui/roulette_btn.webp`,
+  enhanceBtn: `${BASE}ui/enhance_btn.webp`,
+  roulettePopupBg: `${BASE}ui/roulette_popup_bg.webp`,
+  rouletteRare: `${BASE}ui/roulette_rare.webp`,
+  rouletteHero: `${BASE}ui/roulette_hero.webp`,
+  rouletteLegendary: `${BASE}ui/roulette_legendary.webp`,
+  monsterBar: `${BASE}ui/monster_bar.webp`,
+  resourceBar: `${BASE}ui/resource_bar.webp`,
+  waveBar: `${BASE}ui/wave_bar.webp`,
+  skullIcon: `${BASE}ui/skull_icon.webp`,
+  speed2xOn: `${BASE}ui/speed2x_on.webp`,
+  speed2xOff: `${BASE}ui/speed2x_off.webp`,
+};
