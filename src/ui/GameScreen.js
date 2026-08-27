@@ -1,5 +1,5 @@
 import { HEROES_BY_ID, TIER_LABEL } from '../data/heroes.js';
-import { BOSS_IMAGE, BACKGROUND_IMAGE, TAR_STAGE_IMAGES, DRAGON_DRAIN_IMAGE, FROG_TRANSFORM_IMAGE } from '../data/assets.js';
+import { BOSS_IMAGE, BACKGROUND_IMAGE, TAR_STAGE_IMAGES, DRAGON_DRAIN_IMAGE, FROG_TRANSFORM_IMAGES } from '../data/assets.js';
 import { missionDefinitions } from '../logic/missions.js';
 import { summonNormal, summonRoulette } from '../logic/summon.js';
 import { synthesize, craftMythic, sellHero, feedMythicToChad, sellGigaChad, countHeroOnField } from '../logic/synthesis.js';
@@ -217,8 +217,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
       el('div', { class: 'selected-header' }, [
         el('img', { class: 'selected-image', src: heroImage(instance, heroDef), alt: heroDef.name }),
         el('div', { class: 'selected-title', text: `${heroDef.name} (${TIER_LABEL[heroDef.tier]}) +${instance.enhanceLevel}` }),
-        instance.heroId === 'm_frog_prince'
-          ? el('img', { class: 'selected-image transform', src: FROG_TRANSFORM_IMAGE, alt: '승천 시 모습', title: '승천 시 모습' })
+        FROG_TRANSFORM_IMAGES[instance.heroId]
+          ? el('img', { class: 'selected-image transform', src: FROG_TRANSFORM_IMAGES[instance.heroId], alt: '변신 모습', title: '변신 모습' })
           : null,
       ]),
       heroDef.immortalCondition

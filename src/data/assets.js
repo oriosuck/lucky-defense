@@ -14,5 +14,8 @@ export const TAR_STAGE_IMAGES = {
 // 되면 이 이미지로 표시한다.
 export const DRAGON_DRAIN_IMAGE = `${BASE}heroes/m_dragon_drain.webp`;
 
-// 개구리왕자가 "승천 시도"를 할 때 보여줄 변신 모습.
-export const FROG_TRANSFORM_IMAGE = `${BASE}heroes/m_frog_prince_transform.webp`;
+// 개구리왕자/사신개구리(승급 전후 모두) 변신 모습.
+export const FROG_TRANSFORM_IMAGES = {
+  m_frog_prince: `${BASE}heroes/m_frog_prince_transform.webp`,
+  i_death_frog: `${BASE}heroes/i_death_frog_transform.webp`,
+};
