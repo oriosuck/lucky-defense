@@ -57,6 +57,7 @@ export function createGameState(config) {
     relics,
     immortalPet: config.immortalPet,
     ownedHeroes: config.ownedHeroes ?? [],
+    unlockedInstantSummons: [], // 즐겨찾기 등록 + 조합 완료된 신화 heroId 목록 (좌측 즉시소환 버튼)
     missions: createMissionProgress(),
     eventLog: { deleteEvent: null, incapacitateEvent: null, triggeredRounds: [] },
     counters: {

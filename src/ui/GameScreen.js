@@ -2,7 +2,7 @@ import { HEROES_BY_ID, TIER_LABEL } from '../data/heroes.js';
 import { BOSS_IMAGE, BACKGROUND_IMAGE, TAR_STAGE_IMAGES, DRAGON_DRAIN_IMAGE, FROG_TRANSFORM_IMAGES, STAGE_LAYOUT, UI_IMAGES } from '../data/assets.js';
 import { missionDefinitions } from '../logic/missions.js';
 import { summonNormal, summonRoulette } from '../logic/summon.js';
-import { synthesize, craftMythic, sellHero, feedMythicToChad, sellGigaChad, countHeroOnField } from '../logic/synthesis.js';
+import { synthesize, craftMythic, sellHero, feedMythicToChad, sellGigaChad, countHeroOnField, instantSummonFavorite } from '../logic/synthesis.js';
 import { enhanceHero, moveHero, toggleBreakthrough } from '../logic/actions.js';
 import { checkImmortalPromotion, cannibalizeTar } from '../logic/immortal.js';
 import { fieldOccupantCount } from '../state/gameState.js';
@@ -28,17 +28,45 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (result?.newState) dispatch(result.newState);
   }
 
+  const STAGE_RATIO = 688 / 1508;
+
+  // CSS만으로는 "가로/세로 중 더 좁게 막히는 쪽 기준으로 비율 유지"가 안정적으로
+  // 안 돼서(정사각형에 가까운 화면 등에서 배경이 눌려 보임) 실측해서 픽셀로 못박는다.
+  function sizeStageToFit(wrap, stage) {
+    const availW = wrap.clientWidth;
+    const availH = wrap.clientHeight;
+    if (!availW || !availH) return;
+    let w;
+    let h;
+    if (availW / availH > STAGE_RATIO) {
+      h = availH;
+      w = h * STAGE_RATIO;
+    } else {
+      w = availW;
+      h = w / STAGE_RATIO;
+    }
+    stage.style.width = `${w}px`;
+    stage.style.height = `${h}px`;
+  }
+
   function render(state) {
     updateMonsterAnimation(state);
     root.innerHTML = '';
     root.appendChild(renderTopBar(state));
     root.appendChild(renderMonsterRow(state));
-    root.appendChild(el('div', { class: 'game-stage-wrap' }, [renderStage(state)]));
+    const stage = renderStage(state);
+    const stageWrap = el('div', { class: 'game-stage-wrap' }, [stage]);
+    root.appendChild(stageWrap);
+    sizeStageToFit(stageWrap, stage);
     if (ui.mythicPopup) root.appendChild(renderMythicPopup(state));
     if (ui.missionPopup) root.appendChild(renderMissionPopup(state));
     if (ui.roulettePopup) root.appendChild(renderRoulettePopup(state));
     if (state.result) root.appendChild(renderResultOverlay(state));
   }
+
+  window.addEventListener('resize', () => {
+    if (root.isConnected) render(getState());
+  });
 
   const MONSTER_SPAWN_INTERVAL_MS = 800; // 8초에 10마리
   const MONSTER_TRAVEL_MS = 2600;
@@ -121,30 +149,23 @@ export function GameScreen({ getState, dispatch, onExit }) {
     ]);
   }
 
+  // 즐겨찾기 등록 + 조합 완료된 신화만 즉시소환 버튼으로 노출(기획서: "조합 완료 시 좌측 최상단에 소환 버튼 노출")
   function renderFavoriteBar(state) {
-    const favorites = state.ownedHeroes.filter((h) => h.favorite);
     return el(
       'div',
       { class: 'favorite-bar' },
-      favorites.map((h) =>
+      state.unlockedInstantSummons.map((heroId) =>
         el(
           'button',
           {
             class: 'favorite-icon',
-            title: HEROES_BY_ID[h.heroId]?.name,
-            onclick: () => moveFavoriteToTopLeft(state, h.heroId),
+            title: HEROES_BY_ID[heroId]?.name,
+            onclick: () => apply(instantSummonFavorite(state, heroId)),
           },
-          [el('img', { src: HEROES_BY_ID[h.heroId]?.image, alt: HEROES_BY_ID[h.heroId]?.name }), el('span', { class: 'favorite-icon-label', text: '즉시 소환!' })],
+          [el('img', { src: HEROES_BY_ID[heroId]?.image, alt: HEROES_BY_ID[heroId]?.name }), el('span', { class: 'favorite-icon-label', text: '즉시 소환!' })],
         ),
       ),
     );
-  }
-
-  function moveFavoriteToTopLeft(state, heroId) {
-    const found = state.field.find((s) => s.occupants.some((o) => o.heroId === heroId));
-    if (!found) return;
-    const instance = found.occupants.find((o) => o.heroId === heroId);
-    apply(moveHero(state, instance.instanceId, 0, 0));
   }
 
   function renderField(state) {
