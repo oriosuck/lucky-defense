@@ -152,9 +152,10 @@ body {
   color: #f5e6c8; font-weight: 700; font-size: clamp(13px, 3.8vw, 17px);
 }
 
-/* 즐겨찾기 즉시소환 아이콘: 전장 왼쪽 위에서부터 세로로 배경 위에 얹는다 */
+/* 즐겨찾기 즉시소환 아이콘: 전장 왼쪽 위에서부터 세로로 배경 위에 얹는다.
+   너비를 16%에서 10%로 줄임(사용자 지적 - 원이 너무 컸음) */
 .favorite-bar {
-  position: absolute; left: 2%; top: 8%; width: 16%; max-height: 55%;
+  position: absolute; left: 2%; top: 8%; width: 10%; max-height: 55%;
   display: flex; flex-direction: column; gap: 6%;
   overflow-y: auto; overflow-x: hidden;
   z-index: 4;
@@ -168,6 +169,9 @@ body {
 }
 .favorite-icon-image { width: 100%; height: 100%; border-radius: 50%; }
 .favorite-icon:disabled { cursor: default; opacity: 0.6; border-color: rgba(255, 255, 255, 0.35); }
+/* 승급 가능한 불멸 후보 - 신화 조합 가능 아이콘과 구분되도록 보라색 테두리+글로우 */
+.favorite-icon-promote { border-color: #a855f7; box-shadow: 0 0 8px rgba(168, 85, 247, 0.8); }
+.favorite-icon-promote .favorite-icon-label { color: #d8b4fe; }
 .favorite-icon-label {
   position: absolute; left: 50%; bottom: -34%; transform: translateX(-50%);
   font-size: 8px; font-weight: 700; color: var(--gold);
