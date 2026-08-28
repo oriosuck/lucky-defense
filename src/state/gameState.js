@@ -1,6 +1,6 @@
-import { defaultRelics, fieldMaxCapacity, startingGold } from '../data/relics.js';
 import { createMissionProgress } from '../data/missions.js';
 import { HEROES_BY_ID } from '../data/heroes.js';
+import { STARTING_GOLD, FIELD_MAX_CAPACITY, MONSTER_MAX, NORMAL_SUMMON_INITIAL_COST } from '../data/constants.js';
 
 export const FIELD_ROWS = 4;
 export const FIELD_COLS = 6;
@@ -10,11 +10,6 @@ export const TOTAL_WAVES = 20;
 export function waveDuration(wave) {
   if (wave === 10 || wave === 20) return 150;
   return 30;
-}
-
-// 라운드가 오를수록 늘어나는 몬스터 누적치 - 실제 밸런스 수치 확인 전까지의 임시 곡선
-function defaultMonsterMax() {
-  return 200;
 }
 
 let instanceSeq = 0;
@@ -35,31 +30,41 @@ function createEmptyField() {
   return slots;
 }
 
+// 이동불능 이벤트가 발생할 라운드 2개를 게임 시작 시 한 번만 뽑는다.
+// (기획서: 게임당 정확히 2회 - 1~9라운드 중 랜덤 1회 + 11~19라운드 중 랜덤 1회)
+function rollImmobilizeRounds() {
+  const first = 1 + Math.floor(Math.random() * 9); // 1~9
+  const second = 11 + Math.floor(Math.random() * 9); // 11~19
+  return [first, second];
+}
+
 /**
- * @param {{gameType:'no-delete'|'delete', immortalPet:boolean, relics:object, ownedHeroes:{heroId:string,immortal:boolean,favorite:boolean}[]}} config
+ * @param {{gameType:'no-delete'|'delete', immortalPet:boolean, heroSettings:{heroId:string,immortal:boolean,favorite:boolean}[]}} config
  */
 export function createGameState(config) {
-  const relics = { ...defaultRelics(), ...config.relics };
   return {
     wave: 0,
     waveTimeLeft: 5, // 진입 5초 후 1웨이브 시작
     monsterCount: 0,
-    monsterMax: defaultMonsterMax(),
-    monsterSpawnTimer: 0,
-    gold: startingGold(relics.wallet),
+    monsterMax: MONSTER_MAX,
+    gold: STARTING_GOLD,
     luckstone: 0,
-    normalSummonCost: 20,
-    fieldMaxCapacity: fieldMaxCapacity(relics.meat),
+    normalSummonCost: NORMAL_SUMMON_INITIAL_COST,
+    fieldMaxCapacity: FIELD_MAX_CAPACITY,
     field: createEmptyField(),
     speed: 1,
     paused: false,
     gameType: config.gameType,
-    relics,
     immortalPet: config.immortalPet,
-    ownedHeroes: config.ownedHeroes ?? [],
+    heroSettings: config.heroSettings ?? [],
     unlockedInstantSummons: [], // 즐겨찾기 등록 + 조합 완료된 신화 heroId 목록 (좌측 즉시소환 버튼)
     missions: createMissionProgress(),
-    eventLog: { deleteEvent: null, incapacitateEvent: null, triggeredRounds: [] },
+    eventLog: {
+      deleteEvent: null,
+      immobilizeEvent: null,
+      immobilizeRounds: rollImmobilizeRounds(),
+      raidWindow: null,
+    },
     counters: {
       enhanceCount: 0,
       sellCount: 0,

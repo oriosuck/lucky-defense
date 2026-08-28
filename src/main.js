@@ -27,6 +27,7 @@ function mountGame(config) {
     onExit: mountSelect,
   });
   swapRoot(screen.root);
+  screen.update(gameState); // root가 문서에 붙은 뒤에 첫 렌더링 - 스테이지 크기 실측이 정확히 되도록
 
   let lastTime = performance.now();
   let renderAccumulator = 0;

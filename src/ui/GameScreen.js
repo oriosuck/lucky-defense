@@ -1,12 +1,22 @@
 import { HEROES_BY_ID, TIER_LABEL } from '../data/heroes.js';
-import { BOSS_IMAGE, BACKGROUND_IMAGE, TAR_STAGE_IMAGES, DRAGON_DRAIN_IMAGE, FROG_TRANSFORM_IMAGES, STAGE_LAYOUT, UI_IMAGES } from '../data/assets.js';
+import { STAGE_LAYOUT } from '../data/assets.js';
 import { missionDefinitions } from '../logic/missions.js';
 import { summonNormal, summonRoulette } from '../logic/summon.js';
-import { synthesize, craftMythic, sellHero, feedMythicToChad, sellGigaChad, countHeroOnField, instantSummonFavorite } from '../logic/synthesis.js';
+import {
+  synthesize,
+  craftMythic,
+  sellHero,
+  feedMythicToChad,
+  sellGigaChad,
+  countHeroOnField,
+  craftableMythicCount,
+  instantSummonFavorite,
+} from '../logic/synthesis.js';
 import { enhanceHero, moveHero, toggleBreakthrough, ENHANCE_GOLD_COST, ENHANCE_LUCKSTONE_COST } from '../logic/actions.js';
 import { checkImmortalPromotion, cannibalizeTar } from '../logic/immortal.js';
 import { fieldOccupantCount } from '../state/gameState.js';
 import { el } from './components/dom.js';
+import { heroPlaceholder, placeholderBlock } from './components/heroPlaceholder.js';
 
 /**
  * @param {{ getState:()=>object, dispatch:(s:object)=>void, onExit:()=>void }} props
@@ -28,10 +38,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (result?.newState) dispatch(result.newState);
   }
 
+  // 배경 이미지는 이번 리팩토링에서 제외됐지만, 재적용 시 다시 어긋나지 않도록
+  // 실제 원본 비율(688:1508)로 스테이지 컨테이너 크기를 유지한다(CLAUDE.md 참고).
   const STAGE_RATIO = 688 / 1508;
 
-  // CSS만으로는 "가로/세로 중 더 좁게 막히는 쪽 기준으로 비율 유지"가 안정적으로
-  // 안 돼서(정사각형에 가까운 화면 등에서 배경이 눌려 보임) 실측해서 픽셀로 못박는다.
   function sizeStageToFit(wrap, stage) {
     const availW = wrap.clientWidth;
     const availH = wrap.clientHeight;
@@ -68,7 +78,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (root.isConnected) render(getState());
   });
 
-  const MONSTER_SPAWN_INTERVAL_MS = 800; // 8초에 10마리
+  const MONSTER_SPAWN_INTERVAL_MS = 800; // 장식용 애니메이션 등장 간격(연출용, 실제 몬스터 수와는 별개)
   const MONSTER_TRAVEL_MS = 2600;
 
   function updateMonsterAnimation(state) {
@@ -87,19 +97,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   function renderStage(state) {
-    const stage = el('div', { class: 'game-stage', style: `background-image: url(${BACKGROUND_IMAGE})` });
-    stage.appendChild(
-      el('img', {
-        class: 'stage-boss',
-        src: BOSS_IMAGE,
-        alt: '보스',
-        style: `left:${STAGE_LAYOUT.boss.left}%; top:${STAGE_LAYOUT.boss.top}%; width:${STAGE_LAYOUT.boss.width}%; height:${STAGE_LAYOUT.boss.height}%;`,
-      }),
-    );
+    const stage = el('div', { class: 'game-stage stage-placeholder-bg' });
+    stage.appendChild(renderBoss(state));
     const now = Date.now();
     for (const m of ui.monsters) {
       const elapsed = Math.max(0, now - m.bornAt);
-      // 해골 이미지는 룰렛 실패 표시 전용 자산이라 몬스터에는 쓰지 않는다(전용 이미지 미보유 -> 이모지로 대체).
       stage.appendChild(
         el('div', {
           class: 'stage-monster',
@@ -118,6 +120,15 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return stage;
   }
 
+  function renderBoss(state) {
+    const raid = state.eventLog.raidWindow;
+    const raidLabel = raid ? (raid.open ? '레이드 창 열림!' : '몬스터 소탕 대기 중') : null;
+    const boss = placeholderBlock('보스', { className: 'stage-boss' });
+    boss.style.cssText = `left:${STAGE_LAYOUT.boss.left}%; top:${STAGE_LAYOUT.boss.top}%; width:${STAGE_LAYOUT.boss.width}%; height:${STAGE_LAYOUT.boss.height}%;`;
+    if (raidLabel) boss.appendChild(el('span', { class: `raid-window-badge ${raid.open ? 'open' : ''}`, text: raidLabel }));
+    return boss;
+  }
+
   function renderStageControls(state) {
     return el('div', { class: 'stage-controls' }, [
       el('button', {
@@ -134,7 +145,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   function renderTopBar(state) {
-    return el('div', { class: 'top-bar', style: `background-image: url(${UI_IMAGES.waveBar})` }, [
+    return el('div', { class: 'top-bar' }, [
       el('div', { class: 'top-bar-wave' }, [
         el('span', { class: 'wave-label', text: `WAVE ${state.wave}` }),
         el('span', { class: 'timer', text: `${Math.max(0, Math.ceil(state.waveTimeLeft))}s` }),
@@ -144,7 +155,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   function renderMonsterRow(state) {
-    return el('div', { class: 'monster-row', style: `background-image: url(${UI_IMAGES.monsterBar})` }, [
+    return el('div', { class: 'monster-row' }, [
+      el('span', { class: 'monster-count-icon', text: '💀' }),
       el('span', { class: 'monster-count-text', text: `${Math.floor(state.monsterCount)} / ${state.monsterMax}` }),
     ]);
   }
@@ -165,7 +177,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         }
       }
     }
-    const favoriteIds = new Set(state.ownedHeroes.filter((h) => h.favorite).map((h) => h.heroId));
+    const favoriteIds = new Set(state.heroSettings.filter((h) => h.favorite).map((h) => h.heroId));
     ids.sort((a, b) => Number(favoriteIds.has(b)) - Number(favoriteIds.has(a)));
     return ids.slice(0, FAVORITE_BAR_MAX);
   }
@@ -177,16 +189,17 @@ export function GameScreen({ getState, dispatch, onExit }) {
       { class: 'favorite-bar' },
       heroIds.map((heroId) => {
         const unlocked = state.unlockedInstantSummons.includes(heroId);
+        const heroDef = HEROES_BY_ID[heroId];
         return el(
           'button',
           {
             class: 'favorite-icon',
-            title: HEROES_BY_ID[heroId]?.name,
+            title: heroDef?.name,
             disabled: !unlocked,
             onclick: unlocked ? () => apply(instantSummonFavorite(state, heroId)) : undefined,
           },
           [
-            el('img', { src: HEROES_BY_ID[heroId]?.image, alt: HEROES_BY_ID[heroId]?.name }),
+            heroPlaceholder(heroDef, { className: 'favorite-icon-image' }),
             unlocked ? el('span', { class: 'favorite-icon-label', text: '즉시 소환!' }) : null,
           ],
         );
@@ -210,27 +223,34 @@ export function GameScreen({ getState, dispatch, onExit }) {
         const heroDef = HEROES_BY_ID[occ.heroId];
         cell.appendChild(
           el('div', { class: `hero-token tier-${heroDef.tier}${occ.instanceId === ui.selectedInstanceId ? ' selected' : ''}` }, [
-            el('img', { class: 'hero-token-image', src: heroImage(occ, heroDef), alt: heroDef.name }),
+            heroPlaceholder(heroDef, { className: 'hero-token-image', showName: false }),
             occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
           ]),
         );
       });
-      if (isIncapacitated(state, slot)) cell.appendChild(el('div', { class: 'incapacitate-mark', text: '😵' }));
+      if (isImmobilizeFilling(state, slot)) cell.appendChild(el('div', { class: 'immobilize-fill-mark', text: '⏳' }));
+      if (isImmobilized(state, slot)) cell.appendChild(el('div', { class: 'immobilize-mark', text: '😵' }));
       if (isDeleteTarget(state, slot)) cell.appendChild(el('div', { class: 'delete-mark', text: '❌' }));
       grid.appendChild(cell);
     }
     return grid;
   }
 
-  function heroImage(instance, heroDef) {
-    if (heroDef.id === 'm_tar') return TAR_STAGE_IMAGES[instance.tarStage ?? 1];
-    if (heroDef.id === 'm_dragon' && instance.immortalEligible) return DRAGON_DRAIN_IMAGE;
-    return heroDef.image;
+  // m_tar(단계별)/m_dragon(드레인 준비) 등, 필드에서 상태에 따라 표시가 달라지던 영웅들을
+  // 위한 이름 라벨 - 이미지가 없는 지금은 상태를 텍스트로만 구분해 보여준다.
+  function heroDisplayLabel(instance, heroDef) {
+    if (heroDef.id === 'm_tar') return `${heroDef.name} ${instance.tarStage ?? 1}단계`;
+    if (heroDef.id === 'm_dragon' && instance.immortalEligible) return `${heroDef.name}(드레인)`;
+    return heroDef.name;
   }
 
-  function isIncapacitated(state, slot) {
-    const ev = state.eventLog.incapacitateEvent;
+  function isImmobilized(state, slot) {
+    const ev = state.eventLog.immobilizeEvent;
     return ev && ev.phase === 'active' && ev.targetSlots.some((t) => t.row === slot.row && t.col === slot.col);
+  }
+  function isImmobilizeFilling(state, slot) {
+    const ev = state.eventLog.immobilizeEvent;
+    return ev && ev.phase === 'filling' && ev.targetSlots.some((t) => t.row === slot.row && t.col === slot.col);
   }
   function isDeleteTarget(state, slot) {
     const ev = state.eventLog.deleteEvent;
@@ -250,15 +270,14 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   function renderResourceOverlay(state) {
     return el('div', { class: 'stage-resource-row' }, [
-      el('div', { class: 'resource-bar-image', style: `background-image: url(${UI_IMAGES.resourceBar})` }, [
-        el('span', { class: 'resource-value resource-gold', text: `${Math.floor(state.gold)}` }),
-        el('span', { class: 'resource-value resource-luckstone', text: `${state.luckstone}` }),
-        el('span', { class: 'resource-value resource-pop', text: `${fieldOccupantCount(state)}` }),
-        el('span', { class: 'resource-value resource-pop-max', text: `${state.fieldMaxCapacity}` }),
+      el('div', { class: 'resource-bar' }, [
+        el('span', { class: 'resource-value resource-gold', text: `💰 ${Math.floor(state.gold)}` }),
+        el('span', { class: 'resource-value resource-luckstone', text: `💎 ${state.luckstone}` }),
+        el('span', { class: 'resource-value resource-pop', text: `👥 ${fieldOccupantCount(state)}/${state.fieldMaxCapacity}` }),
       ]),
       el('button', {
-        class: 'speed-toggle-btn',
-        style: `background-image: url(${state.speed === 2 ? UI_IMAGES.speed2xOn : UI_IMAGES.speed2xOff})`,
+        class: `speed-toggle-btn ${state.speed === 2 ? 'active' : ''}`,
+        text: state.speed === 2 ? 'x2' : 'x1',
         onclick: () => {
           const next = structuredClone(state);
           next.speed = state.speed === 2 ? 1 : 2;
@@ -325,11 +344,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return el('div', { class: 'selected-panel' }, [
       el('button', { class: 'selected-close', text: '✕', onclick: () => { ui.selectedInstanceId = null; render(state); } }),
       el('div', { class: 'selected-header' }, [
-        el('img', { class: 'selected-image', src: heroImage(instance, heroDef), alt: heroDef.name }),
+        heroPlaceholder(heroDef, { className: 'selected-image', label: heroDisplayLabel(instance, heroDef) }),
         el('div', { class: 'selected-title', text: `${heroDef.name} (${TIER_LABEL[heroDef.tier]}) +${instance.enhanceLevel}` }),
-        FROG_TRANSFORM_IMAGES[instance.heroId]
-          ? el('img', { class: 'selected-image transform', src: FROG_TRANSFORM_IMAGES[instance.heroId], alt: '변신 모습', title: '변신 모습' })
-          : null,
       ]),
       heroDef.immortalCondition
         ? el('div', { class: 'immortal-progress', text: `불멸 진행도: ${Math.floor(instance.progress ?? 0)}${heroDef.immortalCondition.target != null ? ' / ' + heroDef.immortalCondition.target : ''}` })
@@ -339,69 +355,67 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   function renderBottomOverlay(state) {
-    const mythicOwnedCount = state.ownedHeroes.filter((h) => HEROES_BY_ID[h.heroId]?.tier === 'mythic').length;
+    const mythicBadgeCount = craftableMythicCount(state);
     return el('div', { class: 'stage-bottom-overlay' }, [
       el('div', { class: 'stage-bottom-row' }, [
         el('button', {
-          class: 'img-btn mythic-btn-img',
-          style: `background-image: url(${UI_IMAGES.mythicBtn})`,
+          class: 'stage-btn mythic-btn',
           onclick: () => { ui.mythicPopup = 'owned'; render(state); },
-        }, [el('span', { class: 'hex-badge', text: String(mythicOwnedCount) })]),
+        }, [el('span', { class: 'stage-btn-label', text: '신화' }), el('span', { class: 'hex-badge', text: String(mythicBadgeCount) })]),
         el('button', {
-          class: 'img-btn summon-btn-img',
-          style: `background-image: url(${UI_IMAGES.summonBtn})`,
+          class: 'stage-btn summon-btn',
           onclick: () => apply(summonNormal(state)),
-        }, [el('span', { class: 'summon-cost-overlay', text: String(state.normalSummonCost) })]),
+        }, [el('span', { class: 'stage-btn-label', text: '소환' }), el('span', { class: 'summon-cost-overlay', text: `${state.normalSummonCost}G` })]),
         el('button', {
-          class: 'img-btn roulette-btn-img',
-          style: `background-image: url(${UI_IMAGES.rouletteBtn})`,
+          class: 'stage-btn roulette-btn',
           onclick: () => { ui.roulettePopup = true; render(state); },
-        }),
-        el('button', { class: 'hex-btn hex-mission', onclick: () => { ui.missionPopup = true; render(state); } }, [
-          el('span', { class: 'hex-icon', text: '☰' }),
+        }, [el('span', { class: 'stage-btn-label', text: '룰렛' })]),
+        el('button', { class: 'stage-btn mission-btn', onclick: () => { ui.missionPopup = true; render(state); } }, [
+          el('span', { class: 'stage-btn-label', text: '☰' }),
         ]),
       ]),
       el('div', { class: 'stage-enhance-row' }, [
         el('button', {
-          class: 'img-btn enhance-btn-img',
-          style: `background-image: url(${UI_IMAGES.enhanceBtn})`,
+          class: 'stage-btn enhance-btn',
           disabled: !ui.selectedInstanceId || state.gold < ENHANCE_GOLD_COST || state.luckstone < ENHANCE_LUCKSTONE_COST,
           onclick: () => apply(enhanceHero(state, ui.selectedInstanceId)),
-        }),
+        }, [el('span', { class: 'stage-btn-label', text: `강화 (${ENHANCE_GOLD_COST}G ${ENHANCE_LUCKSTONE_COST}💎)` })]),
       ]),
     ]);
   }
 
   const ROULETTE_TIERS = [
-    { tier: 'rare', slot: 'left', cost: 1, img: UI_IMAGES.rouletteRare, cls: 'rr-rare' },
-    { tier: 'hero', slot: 'left', cost: 1, img: UI_IMAGES.rouletteHero, cls: 'rr-hero' },
-    { tier: 'legendary', slot: 'right', cost: 2, img: UI_IMAGES.rouletteLegendary, cls: 'rr-legendary' },
+    { tier: 'rare', slot: 'left', cost: 1, cls: 'rr-rare', label: '희귀 룰렛' },
+    { tier: 'hero', slot: 'left', cost: 1, cls: 'rr-hero', label: '영웅 룰렛' },
+    { tier: 'legendary', slot: 'right', cost: 2, cls: 'rr-legendary', label: '전설 룰렛' },
   ];
 
   function renderRoulettePopup(state) {
-    const circles = ROULETTE_TIERS.map((r) =>
+    const items = ROULETTE_TIERS.map((r) =>
       el('button', {
         class: `roulette-item-btn ${r.cls}`,
-        style: `background-image: url(${r.img})`,
         disabled: state.luckstone < r.cost,
         onclick: () => apply(summonRoulette(state, r.tier, r.slot)),
-      }, [el('span', { class: 'roulette-item-cost', text: String(r.cost) })]),
+      }, [
+        el('span', { class: 'roulette-item-label', text: r.label }),
+        el('span', { class: 'roulette-item-cost', text: `💎${r.cost}` }),
+      ]),
     );
     return el('div', { class: 'popup-overlay', onclick: (e) => { if (e.target === e.currentTarget) { ui.roulettePopup = false; render(state); } } }, [
-      el('div', { class: 'roulette-popup-frame', style: `background-image: url(${UI_IMAGES.roulettePopupBg})` }, [
-        el('div', { class: 'roulette-popup-title', text: String(state.luckstone) }),
+      el('div', { class: 'popup-box roulette-popup-box' }, [
+        el('button', { class: 'popup-close', text: '✕', onclick: () => { ui.roulettePopup = false; render(state); } }),
+        el('h3', { text: '룰렛' }),
         el('div', { class: 'roulette-popup-status' }, [
           el('span', { text: `보유 행운석: ${state.luckstone}` }),
           el('span', { text: `필드 영웅: ${fieldOccupantCount(state)} / ${state.fieldMaxCapacity}` }),
         ]),
-        el('button', { class: 'roulette-popup-close', text: '✕', onclick: () => { ui.roulettePopup = false; render(state); } }),
-        el('div', { class: 'roulette-row' }, circles),
+        el('div', { class: 'roulette-row' }, items),
       ]),
     ]);
   }
 
   function renderMythicPopup(state) {
-    const ownedMythicIds = state.ownedHeroes
+    const ownedMythicIds = state.heroSettings
       .map((h) => h.heroId)
       .filter((id) => HEROES_BY_ID[id]?.tier === 'mythic');
 
@@ -416,8 +430,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         const heroDef = HEROES_BY_ID[id];
         const missing = (heroDef.synthMaterials ?? []).filter((m) => countHeroOnField(state, m.heroId).count < m.count);
         return el('li', {}, [
-          el('img', { class: 'mythic-list-image', src: heroDef.image, alt: heroDef.name }),
-          el('span', { text: `${heroDef.name} ` }),
+          heroPlaceholder(heroDef, { className: 'mythic-list-image' }),
           el('button', {
             class: 'btn', text: '조합', disabled: missing.length > 0,
             onclick: () => apply(craftMythic(state, id)),
@@ -431,7 +444,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         const heroDef = HEROES_BY_ID[instance.heroId];
         const cond = heroDef.immortalCondition;
         return el('li', {}, [
-          el('img', { class: 'mythic-list-image', src: heroImage(instance, heroDef), alt: heroDef.name }),
+          heroPlaceholder(heroDef, { className: 'mythic-list-image', label: heroDisplayLabel(instance, heroDef) }),
           el('span', { text: `${cond.name}: ${Math.floor(instance.progress ?? 0)}${cond.target != null ? ' / ' + cond.target : ''}` }),
         ]);
       }));
@@ -462,7 +475,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
     ]);
   }
 
-  render(getState());
+  // 최초 렌더링은 main.js가 root를 문서에 붙인 직후 update()로 호출한다.
+  // (stageWrap이 아직 DOM에 붙기 전에 sizeStageToFit을 돌리면 clientWidth/Height가
+  // 0으로 읽혀서 스테이지가 다음 tick 재렌더링 전까지 잠깐 빈 화면으로 보이는 문제가 있었다.)
   return {
     root,
     update(state) {

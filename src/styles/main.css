@@ -11,6 +11,15 @@
   color-scheme: dark;
 }
 
+/* 등급별 색상 - 이미지 대신 단색 블록/텍스트로 영웅을 표시하는 동안 쓰는 임시 팔레트.
+   .tier-* 클래스를 붙인 요소는 --tier-color를 통해 배경/테두리 색을 물려받는다. */
+.tier-normal { --tier-color: #8b93a8; }
+.tier-rare { --tier-color: #4fc3f7; }
+.tier-hero { --tier-color: #9b6df0; }
+.tier-legendary { --tier-color: #f5a623; }
+.tier-mythic { --tier-color: #ef5da8; }
+.tier-immortal { --tier-color: #f5c542; }
+
 * { box-sizing: border-box; }
 
 body {
@@ -38,6 +47,33 @@ body {
 .btn-danger { border-color: var(--danger); color: var(--danger); }
 .btn-ghost { background: transparent; }
 
+/* ---- 영웅/보스 등 이미지 자리를 대신하는 단색 블록 (이번 리팩토링에서 이미지 제외) ---- */
+.hero-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tier-color, #444);
+  border-radius: 6px;
+  color: rgba(0, 0, 0, 0.75);
+  font-weight: 700;
+  text-align: center;
+  overflow: hidden;
+  line-height: 1.15;
+}
+.hero-placeholder-name { padding: 2px; word-break: keep-all; }
+
+.placeholder-block {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-2);
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
 /* ---- 영웅 선택 화면 ---- */
 .hero-select-inner { display: flex; flex-direction: column; gap: 16px; }
 .top-bar { display: flex; justify-content: flex-end; }
@@ -46,8 +82,7 @@ body {
 .options { display: flex; flex-wrap: wrap; gap: 20px; background: var(--panel); padding: 12px; border-radius: 10px; }
 .radio-group { display: flex; gap: 12px; align-items: center; }
 .radio { display: flex; gap: 4px; align-items: center; cursor: pointer; }
-.relic-selects { display: flex; gap: 10px; flex-wrap: wrap; }
-.relic-select { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.options-note { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--muted); }
 
 .hero-grid {
   display: grid;
@@ -60,15 +95,11 @@ body {
   border: 2px solid #333;
   border-radius: 10px;
   padding: 6px;
-  filter: grayscale(1);
-  opacity: 0.6;
 }
-.hero-card.owned { filter: none; opacity: 1; border-color: var(--accent); }
-.hero-card-body { cursor: pointer; text-align: center; padding-top: 8px; }
-.hero-card-image { width: 100%; aspect-ratio: 1; object-fit: contain; background: #0c0c14; border-radius: 6px; }
-.hero-name { font-size: 13px; font-weight: 600; }
+.hero-card-body { text-align: center; padding-top: 8px; }
+.hero-card-image { width: 100%; aspect-ratio: 1; font-size: 13px; }
+.hero-name { font-size: 13px; font-weight: 600; margin-top: 4px; }
 .hero-tier { font-size: 11px; color: var(--muted); }
-.lock-icon { position: absolute; top: 4px; left: 4px; }
 .favorite-toggle { position: absolute; top: 2px; right: 2px; background: none; border: none; color: var(--gold); font-size: 16px; cursor: pointer; }
 .immortal-check { display: block; font-size: 11px; text-align: center; margin-top: 4px; }
 
@@ -88,32 +119,23 @@ body {
 .game-screen .top-bar {
   position: relative;
   width: 78%; margin: 0 auto; flex-shrink: 0;
-  aspect-ratio: 960 / 386;
-  background-size: 100% 100%; background-repeat: no-repeat;
+  background: var(--panel); border-radius: 10px;
+  padding: 6px 10px;
+  display: flex; align-items: center; justify-content: space-between;
 }
-.top-bar-wave {
-  position: absolute; left: 23.5%; width: 53%; top: 0.5%; height: 30%;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-}
-.top-bar-level {
-  position: absolute; left: 0; width: 100%; top: 34%; height: 55%;
-  display: flex; align-items: center; justify-content: center;
-  color: #f5e6c8; font-weight: 700; font-size: 13px;
-}
+.top-bar-wave { display: flex; align-items: center; gap: 8px; }
+.top-bar-level { color: #f5e6c8; font-weight: 700; font-size: 13px; }
 .wave-label { font-weight: 700; font-size: 13px; color: #fff; }
 .timer { color: var(--gem); font-size: 13px; }
 
 .monster-row {
-  position: relative;
   width: 55%; margin: 0 auto; flex-shrink: 0;
-  aspect-ratio: 848 / 169;
-  background-size: 100% 100%; background-repeat: no-repeat;
+  background: var(--panel); border-radius: 10px;
+  padding: 4px 10px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
 }
-.monster-count-text {
-  position: absolute; left: 24%; width: 72%; top: 0; height: 100%;
-  display: flex; align-items: center;
-  color: #f5e6c8; font-weight: 700; font-size: 12px;
-}
+.monster-count-icon { font-size: 12px; }
+.monster-count-text { color: #f5e6c8; font-weight: 700; font-size: 12px; }
 
 /* 즐겨찾기 즉시소환 아이콘: 참고 화면처럼 전장 왼쪽 위에서부터 세로로 배경 위에 얹는다 */
 .favorite-bar {
@@ -129,7 +151,7 @@ body {
   background: rgba(20, 16, 30, 0.55); border: 2px solid var(--gold); cursor: pointer;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
-.favorite-icon img { width: 100%; height: 100%; object-fit: contain; }
+.favorite-icon-image { width: 100%; height: 100%; border-radius: 50%; font-size: 8px; }
 .favorite-icon:disabled { cursor: default; opacity: 0.6; border-color: rgba(255, 255, 255, 0.35); }
 .favorite-icon-label {
   position: absolute; left: 50%; bottom: -34%; transform: translateX(-50%);
@@ -137,10 +159,11 @@ body {
   text-shadow: 0 1px 2px #000; white-space: nowrap;
 }
 
-/* 배경 원본(688x1508) 비율을 유지해야 하는데, 순수 CSS(aspect-ratio + max-width/
+/* 원본 배경(688x1508) 비율을 유지해야 하는데, 순수 CSS(aspect-ratio + max-width/
    max-height)만으로는 "가로/세로 중 더 좁게 막히는 쪽 기준"이 안정적으로 안 돼서
-   (뷰포트 비율에 따라 배경이 눌려 보이는 경우가 있었음) GameScreen.js의
-   sizeStageToFit()에서 실측해 width/height를 픽셀로 직접 못박는다. */
+   (뷰포트 비율에 따라 눌려 보이는 경우가 있었음) GameScreen.js의 sizeStageToFit()에서
+   실측해 width/height를 픽셀로 직접 못박는다. 배경 이미지는 이번 리팩토링에서 빠졌지만,
+   나중에 다시 붙일 때를 대비해 비율 유지 구조는 그대로 남겨둔다. */
 .game-stage-wrap {
   flex: 1 1 auto;
   min-height: 0;
@@ -152,18 +175,26 @@ body {
 }
 .game-stage {
   position: relative;
-  background-size: 100% 100%;
-  background-repeat: no-repeat;
   border-radius: 14px;
   overflow: hidden;
   flex-shrink: 0;
 }
+.game-stage.stage-placeholder-bg {
+  background: linear-gradient(180deg, #1c2436 0%, #141a28 55%, #10131c 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
 .stage-boss {
   position: absolute;
-  object-fit: contain;
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+  flex-direction: column;
+  gap: 4px;
   pointer-events: none;
 }
+.raid-window-badge {
+  position: absolute; bottom: -14%; left: 50%; transform: translateX(-50%);
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6); color: var(--muted); white-space: nowrap;
+}
+.raid-window-badge.open { color: #000; background: var(--gold); }
 .stage-monster {
   position: absolute;
   width: 7%; aspect-ratio: 1;
@@ -221,14 +252,14 @@ body {
   from { transform: scale(0.4); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
-.hero-token-image { width: 24px; height: 24px; object-fit: contain; display: block; }
+.hero-token-image { width: 24px; height: 24px; border-radius: 3px; }
 .field-slot.count-2 .hero-token-image, .field-slot.count-3 .hero-token-image { width: 17px; height: 17px; }
 .hero-token.selected { outline: 2px solid var(--gold); }
 .enhance-badge {
   position: absolute; bottom: -2px; right: -2px;
   color: var(--gold); font-size: 8px; background: #000; border-radius: 4px; padding: 0 2px;
 }
-.incapacitate-mark, .delete-mark { position: absolute; top: 1px; right: 1px; font-size: 10px; }
+.immobilize-mark, .immobilize-fill-mark, .delete-mark { position: absolute; top: 1px; right: 1px; font-size: 10px; }
 
 /* ---- 상단 우측 컨트롤(일시정지/나가기): 배경 위 작은 아이콘으로 ---- */
 .stage-controls {
@@ -244,31 +275,28 @@ body {
 }
 .stage-control-btn.active { border-color: var(--gold); color: var(--gold); }
 
-/* ---- 재화 바 + 배속: 배경 하단 통로 위에 얹는다 ---- */
+/* ---- 재화 바 + 배속 ---- */
 .stage-resource-row {
   position: absolute; left: 8%; top: 64.5%; width: 84%; height: 5%;
   display: flex; align-items: center; gap: 2%; z-index: 2;
 }
-.resource-bar-image {
-  position: relative;
+.resource-bar {
   flex: 1; height: 100%;
-  background-size: 100% 100%; background-repeat: no-repeat;
+  display: flex; align-items: center; justify-content: space-between; gap: 4px;
+  background: rgba(20, 16, 26, 0.65); border-radius: 999px;
+  padding: 0 4%;
 }
 .resource-value {
-  position: absolute; top: 0; height: 100%;
-  display: flex; align-items: center;
   color: #fff; font-weight: 700; font-size: clamp(9px, 2.4vw, 12px);
+  white-space: nowrap;
 }
-.resource-gold { left: 12%; width: 24%; }
-.resource-luckstone { left: 43%; width: 22%; }
-.resource-pop { left: 71%; width: 10%; justify-content: flex-end; }
-.resource-pop-max { left: 86%; width: 13%; }
 .speed-toggle-btn {
-  height: 140%; width: auto; aspect-ratio: 1; flex-shrink: 0;
-  border: none; background-color: transparent;
-  background-size: contain; background-repeat: no-repeat; background-position: center;
+  height: 140%; aspect-ratio: 1; flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 50%;
+  background: rgba(20, 16, 26, 0.65); color: #fff; font-weight: 700; font-size: 11px;
   cursor: pointer; padding: 0;
 }
+.speed-toggle-btn.active { border-color: var(--gold); color: var(--gold); }
 
 /* ---- 선택된 영웅 패널: 선택했을 때만 보스 위에 겹쳐서 뜬다 ---- */
 .selected-panel {
@@ -284,13 +312,12 @@ body {
   background: rgba(255, 255, 255, 0.1); border: none; color: var(--text); cursor: pointer;
 }
 .selected-header { display: flex; align-items: center; gap: 8px; }
-.selected-image { width: 40px; height: 40px; object-fit: contain; background: #0c0c14; border-radius: 6px; flex-shrink: 0; }
-.selected-image.transform { opacity: 0.7; border: 1px dashed var(--gem); margin-left: auto; }
+.selected-image { width: 48px; height: 48px; flex-shrink: 0; font-size: 10px; }
 .selected-title { font-weight: 600; font-size: 13px; }
 .immortal-progress { font-size: 12px; color: var(--gem); }
 .action-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
 
-/* ---- 하단 버튼(신화/소환/룰렛/강화): 배경 하단 기둥 위에 얹는다 ---- */
+/* ---- 하단 버튼(신화/소환/룰렛/미션/강화) ---- */
 .stage-bottom-overlay {
   position: absolute; left: 4%; top: 71%; width: 92%; height: 22%; z-index: 2;
   display: flex; flex-direction: column; gap: 3%;
@@ -298,78 +325,61 @@ body {
 .stage-bottom-row { display: flex; gap: 3%; align-items: center; height: 68%; }
 .stage-enhance-row { height: 26%; }
 
-.img-btn {
-  border: none; background-color: transparent; cursor: pointer; padding: 0;
-  background-size: 100% 100%; background-repeat: no-repeat; background-position: center;
+.stage-btn {
+  position: relative;
+  height: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
 }
-.img-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.img-btn:active { filter: brightness(0.92); }
+.stage-btn:hover { background: #32324a; }
+.stage-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.stage-btn:active { filter: brightness(0.92); }
+.stage-btn-label { font-weight: 700; font-size: clamp(10px, 2.6vw, 13px); }
 
-.mythic-btn-img { position: relative; width: 20%; aspect-ratio: 807 / 639; flex-shrink: 0; }
-.roulette-btn-img { width: 20%; aspect-ratio: 799 / 573; flex-shrink: 0; }
-.summon-btn-img { position: relative; flex: 1; height: 100%; align-self: stretch; }
+.mythic-btn { width: 20%; flex-shrink: 0; }
+.roulette-btn { width: 20%; flex-shrink: 0; }
+.summon-btn { flex: 1; align-self: stretch; }
+.mission-btn { width: 9%; flex-shrink: 0; }
 .hex-badge {
-  position: absolute; top: -4px; right: -4px;
+  position: absolute; top: -6px; right: -6px;
   background: var(--danger); color: #fff; font-size: 10px; font-weight: 700;
   border-radius: 999px; min-width: 16px; padding: 1px 4px; text-align: center;
 }
-.summon-cost-overlay {
-  position: absolute; left: 40%; width: 30%; top: 58%; height: 28%;
-  display: flex; align-items: center;
-  color: #fff; font-weight: 800; font-size: 13px;
-}
-.hex-mission {
-  position: relative;
-  display: flex; align-items: center; justify-content: center;
-  width: 9%; aspect-ratio: 0.6; flex-shrink: 0;
-  background: var(--panel-2); border: 1px solid #4a4a6a; border-radius: 10px;
-  cursor: pointer;
-}
-.hex-icon { font-size: 18px; line-height: 1; }
+.summon-cost-overlay { color: var(--gold); font-weight: 800; font-size: 11px; }
 
-.enhance-btn-img { width: 100%; height: 100%; }
+.enhance-btn { width: 100%; height: 100%; }
 
-/* ---- 룰렛 팝업: 제공받은 커튼 배경 + 원형 배지 3종 ---- */
-.roulette-popup-frame {
-  position: relative;
-  width: 92vw; max-width: 440px;
-  aspect-ratio: 951 / 515;
-  background-size: 100% 100%; background-repeat: no-repeat;
-}
-.roulette-popup-title {
-  position: absolute; left: 34%; top: 1.5%; width: 16%; height: 11%;
-  display: flex; align-items: center;
-  color: #cfeeee; font-weight: 700; font-size: clamp(11px, 2.6vw, 14px);
-}
-.roulette-popup-close {
-  position: absolute; left: 90%; width: 9.5%; top: 0.5%; height: 13%;
-  background: transparent; border: none; color: transparent; cursor: pointer;
+/* ---- 룰렛 팝업 ---- */
+.roulette-popup-box { display: flex; flex-direction: column; gap: 12px; position: relative; }
+.popup-close {
+  position: absolute; right: 8px; top: 8px;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--panel-2); border: none; color: var(--text); cursor: pointer;
 }
 .roulette-popup-status {
-  position: absolute; left: 4%; top: 14%; width: 92%;
   display: flex; justify-content: space-between;
-  color: #f5e6c8; font-weight: 700; font-size: clamp(9px, 2.2vw, 12px);
-  text-shadow: 0 1px 2px #000;
+  color: var(--muted); font-size: 12px;
 }
-.roulette-row {
-  position: absolute; left: 8%; top: 30%; width: 84%; height: 62%;
-  display: flex; gap: 4%; justify-content: center; align-items: flex-end;
-}
+.roulette-row { display: flex; gap: 10px; justify-content: center; }
 .roulette-item-btn {
-  position: relative;
-  height: 100%;
-  background-size: contain; background-repeat: no-repeat; background-position: bottom center;
-  border: none; background-color: transparent; cursor: pointer;
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 16px 8px;
+  border: 2px solid var(--tier-color, #3a3a52);
+  border-radius: 10px;
+  background: var(--panel-2);
+  cursor: pointer;
 }
 .roulette-item-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.roulette-item-btn.rr-rare { aspect-ratio: 638 / 906; }
-.roulette-item-btn.rr-hero { aspect-ratio: 591 / 930; }
-.roulette-item-btn.rr-legendary { aspect-ratio: 771 / 938; }
-.roulette-item-cost {
-  position: absolute; left: 38%; width: 50%; top: 72%; height: 13%;
-  display: flex; align-items: center;
-  color: #4a2e00; font-weight: 800; font-size: clamp(11px, 3vw, 15px);
-}
+.roulette-item-btn.rr-rare { --tier-color: #4fc3f7; }
+.roulette-item-btn.rr-hero { --tier-color: #9b6df0; }
+.roulette-item-btn.rr-legendary { --tier-color: #f5a623; }
+.roulette-item-label { font-weight: 700; font-size: 13px; color: var(--text); }
+.roulette-item-cost { font-weight: 800; font-size: 12px; color: var(--gem); }
 
 .popup-overlay {
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
@@ -380,7 +390,7 @@ body {
 .mythic-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .mythic-list li { display: flex; align-items: center; gap: 6px; }
 .mythic-list li.completed { color: var(--gem); }
-.mythic-list-image { width: 24px; height: 24px; object-fit: contain; background: #0c0c14; border-radius: 4px; }
+.mythic-list-image { width: 28px; height: 28px; flex-shrink: 0; font-size: 8px; border-radius: 4px; }
 .missing-note { color: var(--danger); font-size: 12px; }
 
 .result-overlay {

@@ -91,7 +91,7 @@ export function craftMythic(state, mythicHeroId) {
   placeInstanceAtSlot(targetSlot, createHeroInstance(mythicHeroId, { isImmortalPath: true }));
 
   // 즐겨찾기로 등록해둔 영웅이면, 조합 완료 시 좌측 즉시소환 버튼이 열린다(기획서 확정 사항)
-  const isFavorite = newState.ownedHeroes.some((h) => h.heroId === mythicHeroId && h.favorite);
+  const isFavorite = newState.heroSettings.some((h) => h.heroId === mythicHeroId && h.favorite);
   if (isFavorite && !newState.unlockedInstantSummons.includes(mythicHeroId)) {
     newState.unlockedInstantSummons.push(mythicHeroId);
   }
@@ -196,6 +196,16 @@ function findInstanceRef(state, instanceId) {
     if (instance) return { slot, instance };
   }
   return null;
+}
+
+/**
+ * 신화 버튼 배지 표시용: 현재 필드 재료만으로 바로 조합 가능한 신화 등급 영웅 수
+ * (기획서: "배지에 현재 소환 가능한 영웅 개수 표시").
+ */
+export function craftableMythicCount(state) {
+  return heroesByTier('mythic').filter((heroDef) =>
+    (heroDef.synthMaterials ?? []).every((mat) => countHeroOnField(state, mat.heroId).count >= mat.count),
+  ).length;
 }
 
 export { countHeroOnField };

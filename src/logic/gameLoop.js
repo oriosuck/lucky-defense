@@ -1,4 +1,10 @@
-import { tickWave, handleIncapacitateEvent, tickIncapacitateTimer, handleDeleteEvent } from './waveEvents.js';
+import {
+  tickWave,
+  handleImmobilizeEvent,
+  tickImmobilizeTimer,
+  handleDeleteEvent,
+  tickBossRaidWindow,
+} from './waveEvents.js';
 import { tickImmortalProgress, tickMamaImps } from './immortal.js';
 import { checkMissions } from './missions.js';
 
@@ -11,9 +17,10 @@ export function tick(state, deltaSec) {
   if (state.paused || state.result) return state;
 
   let next = tickWave(state, deltaSec);
-  next = handleIncapacitateEvent(next);
-  next = tickIncapacitateTimer(next, deltaSec);
+  next = handleImmobilizeEvent(next);
+  next = tickImmobilizeTimer(next, deltaSec);
   next = handleDeleteEvent(next);
+  next = tickBossRaidWindow(next, deltaSec);
   next = tickImmortalProgress(next, deltaSec);
   next = tickMamaImps(next, deltaSec);
   next = checkMissions(next);
