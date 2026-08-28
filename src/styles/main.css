@@ -138,14 +138,14 @@ body {
    바가 이어지는 모양(목업의 .skull+.text 구조와 대응). 메달 폭만큼 padding-left를 줘서
    텍스트가 메달과 안 겹치게 한다. */
 .monster-row {
-  position: absolute; left: 22%; top: 13.79%; width: 56%; z-index: 3;
+  position: absolute; left: 29%; top: 13.79%; width: 42%; z-index: 3;
   background-image: url('/ui/monster_count_bg.png');
   background-size: 100% 100%; background-repeat: no-repeat;
   aspect-ratio: 862 / 184;
   display: flex; align-items: center; justify-content: center;
   padding-left: 20%;
 }
-.monster-count-text { color: #f5e6c8; font-weight: 700; font-size: clamp(9px, 2.6vw, 12px); }
+.monster-count-text { color: #f5e6c8; font-weight: 700; font-size: clamp(13px, 3.8vw, 17px); }
 
 /* 즐겨찾기 즉시소환 아이콘: 전장 왼쪽 위에서부터 세로로 배경 위에 얹는다 */
 .favorite-bar {
@@ -183,7 +183,7 @@ body {
 
 .stage-monster {
   position: absolute;
-  width: 7%; aspect-ratio: 1;
+  width: 3.5%; aspect-ratio: 1;
   transform: translate(-50%, -50%);
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.6));
   pointer-events: none;
@@ -309,7 +309,7 @@ body {
 .resource-value {
   position: absolute; top: 0; height: 100%;
   display: flex; align-items: center;
-  color: #fff; font-weight: 700; font-size: clamp(7px, 2.1vw, 11px);
+  color: #fff; font-weight: 700; font-size: clamp(11px, 3.4vw, 16px);
   white-space: nowrap;
 }
 /* resource_bar.png에 그려진 아이콘 실측 위치(코인 2.87~11.59%, 행운석 34.26~41.64%,
@@ -430,21 +430,34 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
   color: #fff; cursor: pointer;
 }
 
-/* ---- 룰렛 팝업 ---- */
+/* ---- 룰렛 팝업 ----
+   룰렛 휠은 이미지 대신 목업(게임화면_목업.html)의 .roulette-wheel처럼 CSS로 직접 그린
+   원(배경색+테두리색)에 등급 라벨 텍스트를 넣는다 - 이미지 비율이 등급마다 달라 실제
+   크기가 들쭉날쭉해 보이던 문제라 아예 이미지를 걷어냈다. */
 .roulette-row { display: flex; justify-content: space-between; gap: 8px; }
 .roulette-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .roulette-pct { color: #fff; font-size: clamp(10px, 3vw, 13px); font-weight: 800; }
-/* 룰렛 휠 이미지는 원형 배지 아래에 가격 칸까지 이어붙은 세로로 긴 형태라(등급별로 비율이
-   조금씩 다름) 정사각형 aspect-ratio를 강제하지 않는다 - GameScreen.js가 이미지별 실제
-   비율을 인라인 style로 넣어준다(letterbox 방지). */
 .roulette-wheel-btn {
-  width: 100%; border: none; background: transparent; padding: 0; cursor: pointer;
+  width: 100%; aspect-ratio: 1; border: none; background: transparent; padding: 0; cursor: pointer;
   position: relative;
 }
-.roulette-wheel-btn img { width: 100%; height: 100%; object-fit: contain; }
 .roulette-wheel-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.roulette-wheel-circle {
+  width: 100%; height: 100%; border-radius: 50%;
+  border: 5px solid;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 8%;
+  box-shadow: inset 0 -4px 8px rgba(0, 0, 0, 0.25);
+}
+.roulette-wheel-circle.blue { background: #2f6fb0; border-color: #58a6e0; }
+.roulette-wheel-circle.purple { background: #5b3f8f; border-color: #8e6fd6; }
+.roulette-wheel-circle.gold { background: #c98a1f; border-color: #f5c542; }
+.roulette-wheel-label {
+  color: #fff; font-weight: 800; font-size: clamp(11px, 3.2vw, 15px);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
 /* 룰렛 스핀 연출(기획서: "1초보다 조금 짧게 룰렛이 도는 연출") */
-.roulette-wheel-btn.spinning img { animation: roulette-spin 0.9s cubic-bezier(0.2, 0.8, 0.3, 1); }
+.roulette-wheel-btn.spinning .roulette-wheel-circle { animation: roulette-spin 0.9s cubic-bezier(0.2, 0.8, 0.3, 1); }
 @keyframes roulette-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(1080deg); }
@@ -461,9 +474,9 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
   to { transform: scale(1); opacity: 1; }
 }
 .roulette-item-cost {
-  position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 3px;
-  color: #3a2205; font-weight: 800; font-size: clamp(10px, 2.8vw, 13px);
+  background: var(--gold); color: #3a2205; font-weight: 800; font-size: clamp(10px, 2.8vw, 13px);
+  padding: 2% 8%; border-radius: 8px;
 }
 .roulette-item-cost img { width: 12px; height: 12px; }
 

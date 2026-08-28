@@ -34,3 +34,5 @@ export const GLOBAL_ENHANCE_COST = {
   legendary: { luckstone: 2 },
   rate: { gold: 100 },
 };
+// 소환 확률 트랙만 11레벨이 맥스(기획서 확정) - 나머지 3트랙은 레벨 제한 없음.
+export const GLOBAL_ENHANCE_MAX_LEVEL = { rate: 11 };
