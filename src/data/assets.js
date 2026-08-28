@@ -44,37 +44,41 @@ export const ACE_BATMAN_TRANSFORM_IMAGES = {
   batter: `${BASE}heroes/i_ace_batman_batter.webp`,
 };
 
-// 사용자가 제공한 UI 버튼/배지/아이콘 아트 (public/ui/).
-// monsterBar/resourceBar/topBadgeBg는 JS에서 안 쓰고 main.css에서 background-image로 직접
-// 참조한다(alt 텍스트가 필요 없는 순수 배경이라 굳이 <img>로 만들 필요가 없었음) - 그래도
-// 파일 목록 전체를 한 곳에서 확인할 수 있도록 이 객체에도 같이 남겨둔다.
-// popupTopBarBg(구 룰렛 팝업 커튼 프레임)는 새 목업이 하단 시트를 플랫 배경으로 바꾸면서
-// 안 쓰게 됐다 - 나중에 다시 필요해지면 여기서 바로 꺼내 쓸 수 있게 매핑만 남겨둠.
+// 사용자가 제공한 UI 버튼/배지/아이콘 아트 (public/ui/). 전부 사용자가 준 "이미지 매핑표
+// (UI/배경)"의 파일 번호를 그대로 따른 것 - 번호 자체를 추측하지 말고 이 매핑표가 바뀌면
+// 여기만 고치면 된다.
+// resourceBar/topBadgeBg는 JS에서 안 쓰고 main.css에서 background-image로 직접 참조한다
+// (alt 텍스트가 필요 없는 순수 배경이라 굳이 <img>로 만들 필요가 없었음) - 그래도 파일 목록
+// 전체를 한 곳에서 확인할 수 있도록 이 객체에도 같이 남겨둔다.
+// popupTopBarBg(12번, 구 룰렛 팝업 커튼 프레임)는 새 목업이 하단 시트를 플랫 배경으로
+// 바꾸면서 안 쓰게 됐다 - 나중에 다시 필요해지면 여기서 바로 꺼내 쓸 수 있게 매핑만 남겨둠.
 export const UI_IMAGES = {
-  summonBtn: `${BASE}ui/summon_btn.png`,
-  mythicBtn: `${BASE}ui/mythic_btn.png`,
-  rouletteBtn: `${BASE}ui/roulette_btn.png`,
-  enhanceBtn: `${BASE}ui/enhance_btn.png`,
-  rouletteRare: `${BASE}ui/roulette_rare.png`,
-  rouletteHero: `${BASE}ui/roulette_hero.png`,
-  rouletteLegendary: `${BASE}ui/roulette_legendary.png`,
-  monsterBar: `${BASE}ui/monster_bar.png`,
-  resourceBar: `${BASE}ui/resource_bar.png`,
-  topBadgeBg: `${BASE}ui/top_badge_bg.png`,
-  popupTopBarBg: `${BASE}ui/popup_topbar_bg.png`,
-  skullIcon: `${BASE}ui/skull_icon.png`,
-  speedOn: `${BASE}ui/speed_on.png`,
-  speedOff: `${BASE}ui/speed_off.png`,
-  monsterIcon: `${BASE}ui/monster.png`,
-  immobilizeIcon: `${BASE}ui/immobilize_icon.png`, // 이동불능(즉시형) 표시 - 사슬
-  impIcon: `${BASE}ui/imp.png`, // 마마의 임프
-  goldIcon: `${BASE}ui/gold_icon.png`,
-  luckstoneIcon: `${BASE}ui/luckstone_icon.png`,
-  // 강화 팝업 아이콘 4종. 현재 시뮬레이터는 "일반 강화"(공용 강화 메커니즘) 하나만
-  // 실제로 구현되어 있고, 확률 강화는 기획서 확정대로 항상 맥스라 표시만 한다.
-  // epic/legend는 대응하는 실제 게임 상태가 없어 잠금(준비 중)으로만 노출한다.
-  enhanceCommon: `${BASE}ui/enhance_common.png`,
-  enhanceRate: `${BASE}ui/enhance_rate.png`,
-  enhanceEpic: `${BASE}ui/enhance_epic.png`,
-  enhanceLegend: `${BASE}ui/enhance_legend.png`,
+  summonBtn: `${BASE}ui/summon_btn.png`, // 19
+  mythicBtn: `${BASE}ui/mythic_btn.png`, // 21
+  rouletteBtn: `${BASE}ui/roulette_btn.png`, // 20
+  enhanceBtn: `${BASE}ui/enhance_btn.png`, // 18
+  rouletteRare: `${BASE}ui/roulette_rare.png`, // 23
+  rouletteHero: `${BASE}ui/roulette_hero.png`, // 24
+  rouletteLegendary: `${BASE}ui/roulette_legendary.png`, // 22
+  resourceBar: `${BASE}ui/resource_bar.png`, // 17
+  topBadgeBg: `${BASE}ui/top_badge_bg.png`, // 14
+  popupTopBarBg: `${BASE}ui/popup_topbar_bg.png`, // 12, 미사용
+  // 해골(13)은 룰렛 실패 표시 전용 - 몬스터 표시에는 절대 쓰지 않는다.
+  skullIcon: `${BASE}ui/skull_icon.png`, // 13
+  speedOn: `${BASE}ui/speed_on.png`, // 16
+  speedOff: `${BASE}ui/speed_off.png`, // 15
+  // 몬스터(4)와 임프(2)는 서로 다른 이미지다 - 헷갈려서 한 번 바꿔 넣었다가 정정함.
+  monsterIcon: `${BASE}ui/monster.png`, // 4
+  impIcon: `${BASE}ui/imp.png`, // 2, 마마 전용 소환체
+  immobilizeIcon: `${BASE}ui/immobilize_icon.png`, // 3, 이동불능(즉시형) 표시
+  goldIcon: `${BASE}ui/gold_icon.png`, // 6
+  luckstoneIcon: `${BASE}ui/luckstone_icon.png`, // 5
+  // 강화 팝업 4열(일반~희귀/영웅/전설~불멸/소환 확률) 아이콘. 전부 GameState.globalEnhance의
+  // 실제 전역 트랙과 연결된 진짜 버튼이다(actions.js의 upgradeGlobalEnhance) - 데미지 계산이
+  // 범위 밖이라 레벨을 올려도 실질 효과는 없지만(소환 확률도 항상 고정), 골드/보석을 실제로
+  // 쓰고 레벨이 실제로 오르는 진행형 시스템으로 구현했다. 특정 선택 영웅과는 무관.
+  enhanceCommon: `${BASE}ui/enhance_common.png`, // 10 (일반~희귀)
+  enhanceHero: `${BASE}ui/enhance_epic.png`, // 9 (영웅)
+  enhanceLegendary: `${BASE}ui/enhance_legend.png`, // 8 (전설~불멸)
+  enhanceRate: `${BASE}ui/enhance_rate.png`, // 7 (소환 확률)
 };

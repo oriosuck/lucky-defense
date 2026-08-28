@@ -15,3 +15,22 @@ export const MONSTER_KILL_GOLD = 30; // 몬스터 처치 1마리당 골드
 
 export const NORMAL_SUMMON_INITIAL_COST = 20; // 일반 소환 최초 비용
 export const NORMAL_SUMMON_COST_INCREMENT = 2; // 소환할 때마다 증가하는 비용
+
+// 하단 "강화" 팝업의 4개 전역 트랙(일반~희귀/영웅/전설~불멸/소환 확률). 특정 필드 개체가
+// 아니라 계정 전체에 적용되는 별도 강화 시스템이다(선택된 영웅 강화는 actions.js의
+// enhanceHero/instance.enhanceLevel로 별개 관리됨). 데미지 계산이 범위 밖이라 레벨을
+// 올려도 실질 효과는 없다 - 소환 확률 트랙도 기획서 확정대로 항상 고정 확률을 쓴다.
+// 레벨당 비용은 정식 밸런스 수치가 없어 참고 화면에 나온 1레벨 비용을 고정값으로 사용한다.
+export const GLOBAL_ENHANCE_TRACKS = ['common', 'hero', 'legendary', 'rate'];
+export const GLOBAL_ENHANCE_LABEL = {
+  common: '일반~희귀',
+  hero: '영웅',
+  legendary: '전설~불멸',
+  rate: '소환 확률',
+};
+export const GLOBAL_ENHANCE_COST = {
+  common: { gold: 30 },
+  hero: { gold: 50 },
+  legendary: { luckstone: 2 },
+  rate: { gold: 100 },
+};

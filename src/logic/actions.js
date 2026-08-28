@@ -2,6 +2,7 @@ import { findInstance, canPlaceInSlot, findSlot } from '../state/gameState.js';
 import { recordImmortalEvent } from './immortal.js';
 import { rollNormalTier } from './summon.js';
 import { TIERS } from '../data/heroes.js';
+import { GLOBAL_ENHANCE_COST } from '../data/constants.js';
 
 export const ENHANCE_GOLD_COST = 30;
 export const ENHANCE_LUCKSTONE_COST = 1;
@@ -78,4 +79,23 @@ export function digTreasure(state, instanceId) {
   if (upgraded) found.instance.indyTreasureTier = rolledTier;
 
   return { success: true, tier: rolledTier, upgraded, newState };
+}
+
+/**
+ * 하단 "강화" 팝업의 전역 4트랙(일반~희귀/영웅/전설~불멸/소환 확률) 레벨업.
+ * 특정 필드 개체가 아니라 계정 전체에 적용되는 별도 시스템 - 선택된 영웅의 강화는
+ * enhanceHero()가 따로 담당한다.
+ */
+export function upgradeGlobalEnhance(state, track) {
+  const cost = GLOBAL_ENHANCE_COST[track];
+  if (!cost) return { success: false, reason: 'invalid-track', newState: state };
+  const newState = structuredClone(state);
+  if (cost.gold && newState.gold < cost.gold) return { success: false, reason: 'not-enough-gold', newState: state };
+  if (cost.luckstone && newState.luckstone < cost.luckstone) return { success: false, reason: 'not-enough-luckstone', newState: state };
+
+  if (cost.gold) newState.gold -= cost.gold;
+  if (cost.luckstone) newState.luckstone -= cost.luckstone;
+  newState.globalEnhance[track] += 1;
+
+  return { success: true, newState };
 }

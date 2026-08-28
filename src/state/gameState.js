@@ -72,6 +72,7 @@ export function createGameState(config) {
     },
     bossRaidWindow: null, // 10/20라운드 진입 시에만 세팅
     indyTreasure: { slot: null, timer: 30 }, // 인디 "보물 발굴"(5-4) - 30초마다 새 칸에 등장
+    globalEnhance: { common: 0, hero: 0, legendary: 0, rate: 0 }, // 하단 강화 팝업의 전역 4트랙
     eventLog: {
       deleteEvent: null,
       immobilizeEvent: null,
