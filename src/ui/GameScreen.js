@@ -7,7 +7,6 @@ import {
   synthesize,
   craftMythic,
   sellHero,
-  sellPreview,
   feedMythicToChad,
   sellGigaChad,
   countHeroOnField,
@@ -38,7 +37,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
   const root = el('div', { class: 'screen game-screen' });
   const ui = {
     selectedInstanceId: null,
-    moveMode: false,
     popup: null, // null | 'mythic' | 'roulette' | 'enhance' | 'mission'
     mythicTab: 'mythic', // 'mythic' | 'immortal'
     mythicSelectedId: null,
@@ -99,11 +97,86 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 게임 루프가 0.2초마다 전체 DOM을 다시 그리는데, 그 사이에 클릭(mousedown~mouseup)이
   // 걸리면 누르고 있던 버튼이 통째로 교체돼서 클릭이 씹히는 문제가 있었다(매번 두 번씩
   // 눌러야 겨우 눌리던 버그의 원인). 포인터가 눌려있는 동안에는 주기적 재렌더링을 건너뛰고,
-  // 클릭 핸들러 안에서 직접 호출하는 render()는 그대로 즉시 반영되게 둔다.
+  // 클릭 핸들러 안에서 직접 호출하는 render()는 그대로 즉시 반영되게 둔다. 이 가드
+  // 덕분에 드래그하는 동안(pointerdown~pointerup) DOM 노드가 안 바뀌므로, 포인터
+  // 캡처로 잡은 시작 칸 엘리먼트가 드롭 시점까지 그대로 유지된다.
   let pointerDown = false;
-  root.addEventListener('pointerdown', () => { pointerDown = true; });
-  window.addEventListener('pointerup', () => { pointerDown = false; });
-  window.addEventListener('pointercancel', () => { pointerDown = false; });
+
+  // 칸 드래그 이동: 버튼 클릭 대신 영웅이 있는 칸을 다른 칸으로 직접 드래그해서
+  // 옮긴다(사용자 요청 - "이동은 버튼이 아니라 드래그 방식으로"). 이동량이 거의
+  // 없으면(제자리에서 뗌) 기존처럼 탭으로 취급해 선택만 토글한다.
+  const DRAG_MOVE_THRESHOLD_PX = 8;
+  let dragState = null; // { instanceId, fromRow, fromCol, startX, startY, moved }
+  let dragHoverEl = null;
+
+  function setDragHover(el) {
+    if (dragHoverEl === el) return;
+    if (dragHoverEl) dragHoverEl.classList.remove('drag-hover');
+    dragHoverEl = el;
+    if (dragHoverEl) dragHoverEl.classList.add('drag-hover');
+  }
+
+  root.addEventListener('pointerdown', (e) => {
+    pointerDown = true;
+    const cellEl = e.target.closest('.field-slot');
+    if (!cellEl || ui.popup) return;
+    const row = Number(cellEl.dataset.row);
+    const col = Number(cellEl.dataset.col);
+    const slot = getState().field.find((s) => s.row === row && s.col === col);
+    if (!slot || slot.occupants.length === 0) return;
+    dragState = {
+      instanceId: slot.occupants[0].instanceId,
+      fromRow: row, fromCol: col,
+      startX: e.clientX, startY: e.clientY, moved: false,
+    };
+    cellEl.classList.add('dragging-source');
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    if (!dragState) return;
+    if (!dragState.moved) {
+      const dx = e.clientX - dragState.startX;
+      const dy = e.clientY - dragState.startY;
+      if (Math.hypot(dx, dy) < DRAG_MOVE_THRESHOLD_PX) return;
+      dragState.moved = true;
+    }
+    const target = document.elementFromPoint(e.clientX, e.clientY);
+    const cellEl = target?.closest('.field-slot');
+    setDragHover(cellEl ?? null);
+  });
+
+  function endDrag(e) {
+    pointerDown = false;
+    if (!dragState) return;
+    const sourceEl = root.querySelector('.dragging-source');
+    if (sourceEl) sourceEl.classList.remove('dragging-source');
+    setDragHover(null);
+    const { instanceId, fromRow, fromCol, moved } = dragState;
+    dragState = null;
+    if (!moved) {
+      // 이동량이 거의 없으면 드래그가 아니라 탭 - 기존 선택 토글 동작을 그대로 수행.
+      const state = getState();
+      const slot = state.field.find((s) => s.row === fromRow && s.col === fromCol);
+      if (slot) onSlotClick(state, slot);
+      return;
+    }
+    const target = document.elementFromPoint(e.clientX, e.clientY);
+    const cellEl = target?.closest('.field-slot');
+    if (!cellEl) return;
+    const toRow = Number(cellEl.dataset.row);
+    const toCol = Number(cellEl.dataset.col);
+    if (toRow === fromRow && toCol === fromCol) return;
+    apply(moveHero(getState(), instanceId, toRow, toCol));
+  }
+
+  window.addEventListener('pointerup', (e) => { endDrag(e); });
+  window.addEventListener('pointercancel', () => {
+    pointerDown = false;
+    const sourceEl = root.querySelector('.dragging-source');
+    if (sourceEl) sourceEl.classList.remove('dragging-source');
+    setDragHover(null);
+    dragState = null;
+  });
 
   const MONSTER_TRAVEL_MS = 10400; // 기존 2600ms의 4배로 느리게(사용자 요청)
 
@@ -229,21 +302,17 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   const FAVORITE_BAR_MAX = 5;
 
-  // 좌측 세로 아이콘 목록: 합성 완료된 신화·불멸 등급 영웅을 최대 5개까지, 즐겨찾기 우선 정렬로 표시.
-  // 즐겨찾기로 등록해 둔 것 중 실제로 조합까지 완료한 것만 "즉시 소환!" 버튼으로 클릭 가능하다.
+  // 좌측 세로 아이콘 목록: "필드에 있는 신화"가 아니라 "지금 조합 가능한 신화"를 최대
+  // 5개까지, 즐겨찾기 우선 정렬로 보여준다(기획서 명시 사항 - 조합 재료가 갖춰진
+  // 영웅을 알려주는 자리이지, 이미 필드에 뽑아둔 영웅을 다시 보여주는 자리가 아니다).
+  // 이미 한 번 조합해서 무료 즉시소환이 풀린 영웅(unlockedInstantSummons)도 그대로
+  // 포함한다 - 이쪽은 재료 없이 클릭만으로 즉시 소환되고, 아직 안 풀린 조합 가능
+  // 영웅은 클릭 시 실제 조합(재료 소모)이 일어난다.
   function craftedShowcaseHeroIds(state) {
-    const seen = new Set();
-    const ids = [];
-    for (const slot of state.field) {
-      for (const occ of slot.occupants) {
-        const def = HEROES_BY_ID[occ.heroId];
-        if (def && (def.tier === 'mythic' || def.tier === 'immortal') && !seen.has(occ.heroId)) {
-          seen.add(occ.heroId);
-          ids.push(occ.heroId);
-        }
-      }
-    }
     const favoriteIds = new Set(state.heroSettings.filter((h) => h.favorite).map((h) => h.heroId));
+    const ids = heroesByTier('mythic')
+      .filter((heroDef) => state.unlockedInstantSummons.includes(heroDef.id) || craftMaterialsReady(state, heroDef))
+      .map((heroDef) => heroDef.id);
     ids.sort((a, b) => Number(favoriteIds.has(b)) - Number(favoriteIds.has(a)));
     return ids.slice(0, FAVORITE_BAR_MAX);
   }
@@ -261,12 +330,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
           {
             class: 'favorite-icon',
             title: heroDef?.name,
-            disabled: !unlocked,
-            onclick: unlocked ? () => apply(instantSummonFavorite(state, heroId)) : undefined,
+            onclick: () => apply(unlocked ? instantSummonFavorite(state, heroId) : craftMythic(state, heroId)),
           },
           [
             heroImage(heroDef, { className: 'favorite-icon-image' }),
-            unlocked ? el('span', { class: 'favorite-icon-label', text: '즉시 소환!' }) : null,
+            el('span', { class: 'favorite-icon-label', text: unlocked ? '즉시 소환!' : '조합 가능' }),
           ],
         );
       }),
@@ -279,18 +347,20 @@ export function GameScreen({ getState, dispatch, onExit }) {
       style: `left:${STAGE_LAYOUT.field.left}%; top:${STAGE_LAYOUT.field.top}%; width:${STAGE_LAYOUT.field.width}%; height:${STAGE_LAYOUT.field.height}%;`,
     });
     for (const slot of state.field) {
-      const isTarget = ui.moveMode && ui.selectedInstanceId;
       const filling = isImmobilizeFilling(state, slot);
       const cell = el('div', {
         class: [
           `field-slot count-${slot.occupants.length}`,
           slot.occupants.length ? '' : 'empty',
-          isTarget ? 'move-target' : '',
           filling ? 'immobilize-filling' : '',
           isImmobilized(state, slot) ? 'immobilize-active' : '',
         ].filter(Boolean).join(' '),
         style: `grid-column:${slot.col + 1}; grid-row:${slot.row + 1};${filling ? ` --fill-sec:${IMMOBILIZE_GAUGE_FILL_SEC}s; animation-delay:-${(IMMOBILIZE_GAUGE_FILL_SEC - state.eventLog.immobilizeEvent.timer) * 1000}ms;` : ''}`,
-        onclick: () => onSlotClick(state, slot),
+        'data-row': slot.row, 'data-col': slot.col,
+        // 탭/드래그는 위쪽 root pointerdown/pointermove/pointerup 핸들러가 전담한다
+        // (드래그 이동과 탭 선택을 한 제스처에서 구분해야 하므로 onclick을 쓰지 않음).
+        // ondragstart를 막아야 하는 이유는 heroVisual.js의 draggable=false 주석 참고.
+        ondragstart: (e) => e.preventDefault(),
       });
       slot.occupants.forEach((occ) => {
         const heroDef = HEROES_BY_ID[occ.heroId];
@@ -330,7 +400,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // "칸 클릭했을 때 팝업이 뜨는 게 아니라 위 아래로 버튼이 뜨는 것"). 판매/이동/강화는
   // 칸 위쪽에 쌓고, 합성과 영웅별 특수 액션은 칸 아래쪽에 쌓는다.
   function renderCellQuickActions(state) {
-    if (ui.moveMode) return null; // 이동 대상 선택 중엔 다른 칸 클릭을 방해하지 않게 숨김
     const found = selectedInstance(state);
     if (!found) return null;
     const { slot, instance } = found;
@@ -350,16 +419,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 반대로 일반 판매가 안 되고 채드가 필드에 있을 때만 "먹이기"로 처분할 수 있다 -
     // 그 자리가 일반 판매 버튼과 같은 위치(above)에 온다.
     if (heroDef.tier !== 'mythic' && heroDef.tier !== 'immortal') {
-      const preview = sellPreview(heroDef);
-      const icon = preview.gold ? UI_IMAGES.goldIcon : UI_IMAGES.luckstoneIcon;
-      const amount = preview.gold || preview.luckstone;
       above.push(el('button', {
-        class: 'cell-quick-btn cell-quick-sell',
+        class: 'cell-quick-btn cell-quick-sell', text: '판매',
         onclick: () => { apply(sellHero(state, instance.instanceId)); ui.selectedInstanceId = null; },
-      }, [
-        el('span', { text: '판매' }),
-        el('span', { class: 'cell-quick-reward' }, [el('img', { src: icon, alt: '' }), el('span', { text: `+${amount}` })]),
-      ]));
+      }));
     } else if (instance.heroId !== 'm_chad' && instance.heroId !== 'i_giga_chad') {
       // 기가채드(불멸)는 전용 판매(below의 '판매(+6💧)')가 따로 있어 채드 먹이기 대상에서 제외.
       const chad = state.field.flatMap((s) => s.occupants).find((o) => o.heroId === 'm_chad');
@@ -415,14 +478,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
         onclick: () => { apply(attemptSecondStageEvolution(state, instance.instanceId)); ui.selectedInstanceId = null; },
       }));
     }
-    // 이동/강화는 일반 액션이 아니라, 해당 불멸 조건이 그 이벤트를 요구하는 특정
-    // 영웅(탑 베인=이동, 아이언미야옹=강화)에 한해서만 진행도 카운트 용도로 노출한다.
-    if (heroDef.immortalCondition?.eventType === 'move') {
-      below.push(el('button', {
-        class: 'cell-quick-btn cell-quick-extra', text: '이동',
-        onclick: () => { ui.moveMode = true; render(state); },
-      }));
-    }
+    // 이동은 이제 버튼이 아니라 칸을 직접 드래그하는 방식이라(아래 드래그 핸들러
+    // 참고) 탑 베인도 별도 버튼이 필요 없다 - 드래그로 옮겨도 moveHero()가 그대로
+    // 호출되어 불멸 진행도가 똑같이 쌓인다. 강화만 버튼으로 남겨둔다(드래그로 대체할
+    // 수 없는 액션이라 아이언미야옹 전용 진행 조건 버튼을 유지).
     if (heroDef.immortalCondition?.eventType === 'enhance') {
       below.push(el('button', {
         class: 'cell-quick-btn cell-quick-extra',
@@ -486,11 +545,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   function onSlotClick(state, slot) {
-    if (ui.moveMode && ui.selectedInstanceId) {
-      ui.moveMode = false;
-      apply(moveHero(state, ui.selectedInstanceId, slot.row, slot.col));
-      return;
-    }
     const first = slot.occupants[0];
     ui.selectedInstanceId = first ? first.instanceId : null;
     render(getState());
