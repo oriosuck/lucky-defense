@@ -3,7 +3,12 @@
 
 // public/heroes/<id>.<ext> 로 이미지를 배치했다. 대부분 webp, 일부만 png.
 // import.meta.env.BASE_URL을 붙여서 서브 경로 배포(GitHub Pages 등)에서도 경로가 깨지지 않게 한다.
-const IMAGE_EXT_OVERRIDE = { i_devil_monopoly: 'png', i_knight_lancelot: 'png', i_archmage_gigi: 'png' };
+const IMAGE_EXT_OVERRIDE = {
+  i_devil_monopoly: 'png',
+  i_knight_lancelot: 'png',
+  i_archmage_gigi: 'png',
+  i_orc_leader: 'png',
+};
 function imagePath(id) {
   return `${import.meta.env.BASE_URL}heroes/${id}.${IMAGE_EXT_OVERRIDE[id] ?? 'webp'}`;
 }

@@ -1,7 +1,8 @@
-import { HEROES_BY_ID, TIER_LABEL } from '../data/heroes.js';
-import { STAGE_LAYOUT } from '../data/assets.js';
+import { HEROES_BY_ID, TIER_LABEL, heroesByTier, SECOND_STAGE_IMMORTAL } from '../data/heroes.js';
+import { STAGE_LAYOUT, BOSS_IMAGE, UI_IMAGES } from '../data/assets.js';
 import { missionDefinitions } from '../logic/missions.js';
 import { summonNormal, summonRoulette } from '../logic/summon.js';
+import { ROULETTE_SUCCESS_RATE, ROULETTE_COST } from '../data/heroes.js';
 import {
   synthesize,
   craftMythic,
@@ -21,10 +22,10 @@ import {
   ENHANCE_LUCKSTONE_COST,
 } from '../logic/actions.js';
 import { checkImmortalPromotion, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
-import { SECOND_STAGE_IMMORTAL } from '../data/heroes.js';
+import { IMMOBILIZE_GAUGE_FILL_SEC } from '../logic/waveEvents.js';
 import { fieldOccupantCount } from '../state/gameState.js';
 import { el } from './components/dom.js';
-import { heroPlaceholder, placeholderBlock } from './components/heroPlaceholder.js';
+import { heroImage } from './components/heroVisual.js';
 
 /**
  * @param {{ getState:()=>object, dispatch:(s:object)=>void, onExit:()=>void }} props
@@ -35,9 +36,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
   const ui = {
     selectedInstanceId: null,
     moveMode: false,
-    mythicPopup: null, // null | 'owned' | 'immortal'
-    missionPopup: false,
-    roulettePopup: false,
+    popup: null, // null | 'mythic' | 'roulette' | 'enhance' | 'mission'
+    mythicTab: 'mythic', // 'mythic' | 'immortal'
+    mythicSelectedId: null,
     monsters: [], // 좌->우 굴을 지나가는 장식용 몬스터 애니메이션 상태
     lastMonsterSpawnAt: null,
   };
@@ -46,8 +47,17 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (result?.newState) dispatch(result.newState);
   }
 
-  // 배경 이미지는 이번 리팩토링에서 제외됐지만, 재적용 시 다시 어긋나지 않도록
-  // 실제 원본 비율(688:1508)로 스테이지 컨테이너 크기를 유지한다(CLAUDE.md 참고).
+  function openPopup(name, state) {
+    ui.popup = name;
+    render(state);
+  }
+  function closePopup(state) {
+    ui.popup = null;
+    render(state);
+  }
+
+  // 배경 원본 비율(688:1508)을 유지한다 - 순수 CSS만으로는 뷰포트 비율에 따라 눌려 보이는
+  // 문제가 있어서 실측 후 픽셀로 못박는다(CLAUDE.md 참고).
   const STAGE_RATIO = 688 / 1508;
 
   function sizeStageToFit(wrap, stage) {
@@ -70,16 +80,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
   function render(state) {
     updateMonsterAnimation(state);
     root.innerHTML = '';
-    root.appendChild(renderTopBar(state));
-    root.appendChild(renderMonsterRow(state));
     const stage = renderStage(state);
     const stageWrap = el('div', { class: 'game-stage-wrap' }, [stage]);
     root.appendChild(stageWrap);
     sizeStageToFit(stageWrap, stage);
-    if (ui.mythicPopup) root.appendChild(renderMythicPopup(state));
-    if (ui.missionPopup) root.appendChild(renderMissionPopup(state));
-    if (ui.roulettePopup) root.appendChild(renderRoulettePopup(state));
-    if (state.result) root.appendChild(renderResultOverlay(state));
   }
 
   window.addEventListener('resize', () => {
@@ -105,7 +109,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   function renderStage(state) {
-    const stage = el('div', { class: 'game-stage stage-placeholder-bg' });
+    const stage = el('div', { class: 'game-stage' });
+    stage.appendChild(renderTopBadge(state));
+    stage.appendChild(renderMonsterRow(state));
     stage.appendChild(renderBoss(state));
     const now = Date.now();
     for (const m of ui.monsters) {
@@ -113,26 +119,47 @@ export function GameScreen({ getState, dispatch, onExit }) {
       stage.appendChild(
         el('div', {
           class: 'stage-monster',
-          text: '👹',
           style: `top:${STAGE_LAYOUT.leftHole.y}%; left:${STAGE_LAYOUT.leftHole.x}%; animation: monster-travel ${MONSTER_TRAVEL_MS}ms linear forwards; animation-delay: -${elapsed}ms;`,
-        }),
+        }, [el('img', { src: UI_IMAGES.monsterIcon, alt: '몬스터' })]),
       );
     }
     stage.appendChild(renderField(state));
     stage.appendChild(renderFavoriteBar(state));
     stage.appendChild(renderStageControls(state));
-    stage.appendChild(renderResourceOverlay(state));
+    stage.appendChild(renderResourceRow(state));
+    stage.appendChild(renderSideControls(state));
     const selPanel = renderSelectedPanel(state);
     if (selPanel) stage.appendChild(selPanel);
-    stage.appendChild(renderBottomOverlay(state));
+    stage.appendChild(renderActionRow(state));
+    stage.appendChild(renderEnhanceOpenBtn(state));
+    if (ui.popup === 'roulette') stage.appendChild(renderRoulettePopup(state));
+    if (ui.popup === 'enhance') stage.appendChild(renderEnhancePopup(state));
+    if (ui.popup === 'mythic') stage.appendChild(renderMythicPopup(state));
+    if (ui.popup === 'mission') stage.appendChild(renderMissionPopup(state));
+    if (state.result) stage.appendChild(renderResultOverlay(state));
     return stage;
+  }
+
+  function renderTopBadge(state) {
+    return el('div', { class: 'top-badge' }, [
+      el('span', { class: 'top-badge-label', text: `WAVE ${state.wave} · Lv.${state.wave}` }),
+      el('span', { class: 'top-badge-value', text: `${Math.max(0, Math.ceil(state.waveTimeLeft))}s` }),
+    ]);
+  }
+
+  function renderMonsterRow(state) {
+    return el('div', { class: 'monster-row' }, [
+      el('span', { class: 'monster-count-text', text: `${Math.floor(state.monsterCount)} / ${state.monsterMax}` }),
+    ]);
   }
 
   function renderBoss(state) {
     const raid = state.bossRaidWindow;
     const raidLabel = raid ? (raid.open ? '레이드 창 열림!' : '몬스터 소탕 대기 중') : null;
-    const boss = placeholderBlock('보스', { className: 'stage-boss' });
-    boss.style.cssText = `left:${STAGE_LAYOUT.boss.left}%; top:${STAGE_LAYOUT.boss.top}%; width:${STAGE_LAYOUT.boss.width}%; height:${STAGE_LAYOUT.boss.height}%;`;
+    const boss = el('div', {
+      class: 'stage-boss',
+      style: `left:${STAGE_LAYOUT.boss.left}%; top:${STAGE_LAYOUT.boss.top}%; width:${STAGE_LAYOUT.boss.width}%; height:${STAGE_LAYOUT.boss.height}%;`,
+    }, [el('img', { class: 'stage-boss-img', src: BOSS_IMAGE, alt: '보스' })]);
     if (raidLabel) boss.appendChild(el('span', { class: `raid-window-badge ${raid.open ? 'open' : ''}`, text: raidLabel }));
     return boss;
   }
@@ -149,23 +176,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
         },
       }),
       el('button', { class: 'stage-control-btn', text: '🚪', onclick: onExit }),
-    ]);
-  }
-
-  function renderTopBar(state) {
-    return el('div', { class: 'top-bar' }, [
-      el('div', { class: 'top-bar-wave' }, [
-        el('span', { class: 'wave-label', text: `WAVE ${state.wave}` }),
-        el('span', { class: 'timer', text: `${Math.max(0, Math.ceil(state.waveTimeLeft))}s` }),
-      ]),
-      el('div', { class: 'top-bar-level', text: `Lv.${state.wave}` }),
-    ]);
-  }
-
-  function renderMonsterRow(state) {
-    return el('div', { class: 'monster-row' }, [
-      el('span', { class: 'monster-count-icon', text: '💀' }),
-      el('span', { class: 'monster-count-text', text: `${Math.floor(state.monsterCount)} / ${state.monsterMax}` }),
     ]);
   }
 
@@ -207,7 +217,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
             onclick: unlocked ? () => apply(instantSummonFavorite(state, heroId)) : undefined,
           },
           [
-            heroPlaceholder(heroDef, { className: 'favorite-icon-image' }),
+            heroImage(heroDef, { className: 'favorite-icon-image' }),
             unlocked ? el('span', { class: 'favorite-icon-label', text: '즉시 소환!' }) : null,
           ],
         );
@@ -222,9 +232,16 @@ export function GameScreen({ getState, dispatch, onExit }) {
     });
     for (const slot of state.field) {
       const isTarget = ui.moveMode && ui.selectedInstanceId;
+      const filling = isImmobilizeFilling(state, slot);
       const cell = el('div', {
-        class: `field-slot count-${slot.occupants.length}${slot.occupants.length ? '' : ' empty'}${isTarget ? ' move-target' : ''}`,
-        style: `grid-column:${slot.col + 1}; grid-row:${slot.row + 1};`,
+        class: [
+          `field-slot count-${slot.occupants.length}`,
+          slot.occupants.length ? '' : 'empty',
+          isTarget ? 'move-target' : '',
+          filling ? 'immobilize-filling' : '',
+          isImmobilized(state, slot) ? 'immobilize-active' : '',
+        ].filter(Boolean).join(' '),
+        style: `grid-column:${slot.col + 1}; grid-row:${slot.row + 1};${filling ? ` --fill-sec:${IMMOBILIZE_GAUGE_FILL_SEC}s; animation-delay:-${(IMMOBILIZE_GAUGE_FILL_SEC - state.eventLog.immobilizeEvent.timer) * 1000}ms;` : ''}`,
         onclick: () => onSlotClick(state, slot),
       });
       slot.occupants.forEach((occ) => {
@@ -232,15 +249,16 @@ export function GameScreen({ getState, dispatch, onExit }) {
         const debuffed = state.eventLog.debuffEvent?.instanceId === occ.instanceId;
         cell.appendChild(
           el('div', {
-            class: `hero-token tier-${heroDef.tier}${occ.instanceId === ui.selectedInstanceId ? ' selected' : ''}${debuffed ? ' debuffed' : ''}`,
+            class: `hero-token${occ.instanceId === ui.selectedInstanceId ? ' selected' : ''}${debuffed ? ' debuffed' : ''}`,
           }, [
-            heroPlaceholder(heroDef, { className: 'hero-token-image', showName: false }),
+            heroImage(heroDef, { className: 'hero-token-image', instance: occ }),
             occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
           ]),
         );
       });
-      if (isImmobilizeFilling(state, slot)) cell.appendChild(el('div', { class: 'immobilize-fill-mark', text: '⏳' }));
-      if (isImmobilized(state, slot)) cell.appendChild(el('div', { class: 'immobilize-mark', text: '😵' }));
+      if (isImmobilized(state, slot)) {
+        cell.appendChild(el('div', { class: 'immobilize-mark' }, [el('img', { src: UI_IMAGES.immobilizeIcon, alt: '이동불능' })]));
+      }
       if (isDeleteTarget(state, slot)) cell.appendChild(el('div', { class: 'delete-mark', text: '❌' }));
       if (isTreasureSlot(state, slot)) cell.appendChild(el('div', { class: 'treasure-mark', text: '💰' }));
       grid.appendChild(cell);
@@ -249,7 +267,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   // m_tar(단계별)/m_dragon(드레인 준비) 등, 필드에서 상태에 따라 표시가 달라지던 영웅들을
-  // 위한 이름 라벨 - 이미지가 없는 지금은 상태를 텍스트로만 구분해 보여준다.
+  // 위한 이름 라벨.
   function heroDisplayLabel(instance, heroDef) {
     if (heroDef.id === 'm_tar') return `${heroDef.name} ${instance.tarStage ?? 1}단계`;
     if (heroDef.id === 'm_dragon' && instance.immortalEligible) return `${heroDef.name}(드레인)`;
@@ -284,22 +302,32 @@ export function GameScreen({ getState, dispatch, onExit }) {
     render(getState());
   }
 
-  function renderResourceOverlay(state) {
+  function renderResourceRow(state) {
     return el('div', { class: 'stage-resource-row' }, [
       el('div', { class: 'resource-bar' }, [
-        el('span', { class: 'resource-value resource-gold', text: `💰 ${Math.floor(state.gold)}` }),
-        el('span', { class: 'resource-value resource-luckstone', text: `💎 ${state.luckstone}` }),
-        el('span', { class: 'resource-value resource-pop', text: `👥 ${fieldOccupantCount(state)}/${state.fieldMaxCapacity}` }),
+        el('span', { class: 'resource-value resource-gold', text: `${Math.floor(state.gold)}` }),
+        el('span', { class: 'resource-value resource-luckstone', text: `${state.luckstone}` }),
+        el('span', { class: 'resource-value resource-pop', text: `${fieldOccupantCount(state)}/${state.fieldMaxCapacity}` }),
       ]),
+    ]);
+  }
+
+  function renderSideControls(state) {
+    return el('div', { class: 'stage-side-controls' }, [
       el('button', {
-        class: `speed-toggle-btn ${state.speed === 2 ? 'active' : ''}`,
-        text: state.speed === 2 ? 'x2' : 'x1',
+        class: 'speed-toggle-btn',
+        title: state.speed === 2 ? '배속 x2 (클릭 시 x1)' : '배속 x1 (클릭 시 x2)',
         onclick: () => {
           const next = structuredClone(state);
           next.speed = state.speed === 2 ? 1 : 2;
           dispatch(next);
         },
-      }),
+      }, [el('img', { src: state.speed === 2 ? UI_IMAGES.speedOn : UI_IMAGES.speedOff, alt: '배속' })]),
+      el('button', {
+        class: 'mission-toggle-btn',
+        title: '미션',
+        onclick: () => openPopup('mission', state),
+      }, [el('img', { src: UI_IMAGES.skullIcon, alt: '미션' })]),
     ]);
   }
 
@@ -373,13 +401,18 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return el('div', { class: 'selected-panel' }, [
       el('button', { class: 'selected-close', text: '✕', onclick: () => { ui.selectedInstanceId = null; render(state); } }),
       el('div', { class: 'selected-header' }, [
-        heroPlaceholder(heroDef, { className: 'selected-image', label: heroDisplayLabel(instance, heroDef) }),
-        el('div', { class: 'selected-title', text: `${heroDef.name} (${TIER_LABEL[heroDef.tier]}) +${instance.enhanceLevel}` }),
+        heroImage(heroDef, { className: 'selected-image', instance }),
+        el('div', { class: 'selected-title', text: `${heroDisplayLabel(instance, heroDef)} (${TIER_LABEL[heroDef.tier]}) +${instance.enhanceLevel}` }),
       ]),
       heroDef.immortalCondition
         ? el('div', { class: 'immortal-progress', text: `불멸 진행도: ${Math.floor(instance.progress ?? 0)}${heroDef.immortalCondition.target != null ? ' / ' + heroDef.immortalCondition.target : ''}` })
         : null,
-      extraStatusText(instance, heroDef) ? el('div', { class: 'immortal-progress', text: extraStatusText(instance, heroDef) }) : null,
+      extraStatusText(instance, heroDef)
+        ? el('div', { class: 'immortal-progress extra-status-line' }, [
+            instance.heroId === 'm_mama' ? el('img', { class: 'extra-status-icon', src: UI_IMAGES.impIcon, alt: '' }) : null,
+            el('span', { text: extraStatusText(instance, heroDef) }),
+          ])
+        : null,
       el('div', { class: 'action-buttons' }, buttons),
     ]);
   }
@@ -396,106 +429,195 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return null;
   }
 
-  function renderBottomOverlay(state) {
+  function renderActionRow(state) {
     const mythicBadgeCount = craftableMythicCount(state);
-    return el('div', { class: 'stage-bottom-overlay' }, [
-      el('div', { class: 'stage-bottom-row' }, [
-        el('button', {
-          class: 'stage-btn mythic-btn',
-          onclick: () => { ui.mythicPopup = 'owned'; render(state); },
-        }, [el('span', { class: 'stage-btn-label', text: '신화' }), el('span', { class: 'hex-badge', text: String(mythicBadgeCount) })]),
-        el('button', {
-          class: 'stage-btn summon-btn',
-          onclick: () => apply(summonNormal(state)),
-        }, [el('span', { class: 'stage-btn-label', text: '소환' }), el('span', { class: 'summon-cost-overlay', text: `${state.normalSummonCost}G` })]),
-        el('button', {
-          class: 'stage-btn roulette-btn',
-          onclick: () => { ui.roulettePopup = true; render(state); },
-        }, [el('span', { class: 'stage-btn-label', text: '룰렛' })]),
-        el('button', { class: 'stage-btn mission-btn', onclick: () => { ui.missionPopup = true; render(state); } }, [
-          el('span', { class: 'stage-btn-label', text: '☰' }),
-        ]),
+    return el('div', { class: 'action-row' }, [
+      el('button', {
+        class: 'side-btn', title: '신화',
+        onclick: () => { ui.mythicSelectedId = null; openPopup('mythic', state); },
+      }, [
+        el('img', { src: UI_IMAGES.mythicBtn, alt: '신화' }),
+        el('span', { class: 'hex-badge', text: String(mythicBadgeCount) }),
       ]),
-      el('div', { class: 'stage-enhance-row' }, [
-        el('button', {
-          class: 'stage-btn enhance-btn',
-          disabled: !ui.selectedInstanceId || state.gold < ENHANCE_GOLD_COST || state.luckstone < ENHANCE_LUCKSTONE_COST,
-          onclick: () => apply(enhanceHero(state, ui.selectedInstanceId)),
-        }, [el('span', { class: 'stage-btn-label', text: `강화 (${ENHANCE_GOLD_COST}G ${ENHANCE_LUCKSTONE_COST}💎)` })]),
+      el('button', {
+        class: 'summon-btn-wrap', title: '소환',
+        disabled: state.gold < state.normalSummonCost || fieldOccupantCount(state) >= state.fieldMaxCapacity,
+        onclick: () => apply(summonNormal(state)),
+      }, [
+        el('img', { src: UI_IMAGES.summonBtn, alt: '소환' }),
+        el('span', { class: 'summon-cost-overlay', text: `${state.normalSummonCost}G` }),
       ]),
+      el('button', {
+        class: 'side-btn', title: '룰렛',
+        onclick: () => openPopup('roulette', state),
+      }, [el('img', { src: UI_IMAGES.rouletteBtn, alt: '룰렛' })]),
     ]);
   }
 
+  function renderEnhanceOpenBtn(state) {
+    return el('button', {
+      class: 'enhance-open-btn', title: '강화',
+      onclick: () => openPopup('enhance', state),
+    }, [el('img', { src: UI_IMAGES.enhanceBtn, alt: '강화' })]);
+  }
+
   const ROULETTE_TIERS = [
-    { tier: 'rare', slot: 'left', cost: 1, cls: 'rr-rare', label: '희귀 룰렛' },
-    { tier: 'hero', slot: 'left', cost: 1, cls: 'rr-hero', label: '영웅 룰렛' },
-    { tier: 'legendary', slot: 'right', cost: 2, cls: 'rr-legendary', label: '전설 룰렛' },
+    { tier: 'rare', slot: 'left', img: UI_IMAGES.rouletteRare },
+    { tier: 'hero', slot: 'left', img: UI_IMAGES.rouletteHero },
+    { tier: 'legendary', slot: 'right', img: UI_IMAGES.rouletteLegendary },
   ];
 
   function renderRoulettePopup(state) {
-    const items = ROULETTE_TIERS.map((r) =>
-      el('button', {
-        class: `roulette-item-btn ${r.cls}`,
-        disabled: state.luckstone < r.cost,
-        onclick: () => apply(summonRoulette(state, r.tier, r.slot)),
-      }, [
-        el('span', { class: 'roulette-item-label', text: r.label }),
-        el('span', { class: 'roulette-item-cost', text: `💎${r.cost}` }),
-      ]),
-    );
-    return el('div', { class: 'popup-overlay', onclick: (e) => { if (e.target === e.currentTarget) { ui.roulettePopup = false; render(state); } } }, [
-      el('div', { class: 'popup-box roulette-popup-box' }, [
-        el('button', { class: 'popup-close', text: '✕', onclick: () => { ui.roulettePopup = false; render(state); } }),
-        el('h3', { text: '룰렛' }),
-        el('div', { class: 'roulette-popup-status' }, [
-          el('span', { text: `보유 행운석: ${state.luckstone}` }),
-          el('span', { text: `필드 영웅: ${fieldOccupantCount(state)} / ${state.fieldMaxCapacity}` }),
+    const items = ROULETTE_TIERS.map((r) => {
+      const cost = ROULETTE_COST[r.slot];
+      return el('div', { class: 'roulette-item' }, [
+        el('span', { class: 'roulette-pct', text: `${Math.round(ROULETTE_SUCCESS_RATE[r.tier] * 100)}%` }),
+        el('button', {
+          class: 'roulette-wheel-btn',
+          disabled: state.luckstone < cost,
+          onclick: () => apply(summonRoulette(state, r.tier, r.slot)),
+        }, [
+          el('img', { src: r.img, alt: TIER_LABEL[r.tier] }),
+          el('span', { class: 'roulette-item-cost' }, [el('img', { src: UI_IMAGES.luckstoneIcon, alt: '' }), el('span', { text: String(cost) })]),
         ]),
-        el('div', { class: 'roulette-row' }, items),
+      ]);
+    });
+    return el('div', { class: 'game-popup' }, [
+      el('div', { class: 'popup-topbar' }, [
+        el('span', { class: 'popup-stat' }, [el('img', { src: UI_IMAGES.luckstoneIcon, alt: '' }), el('span', { text: String(state.luckstone) })]),
+        el('span', { class: 'popup-stat', text: `👥 ${fieldOccupantCount(state)}/${state.fieldMaxCapacity}` }),
+        el('button', { class: 'popup-close', text: '✕', onclick: () => closePopup(state) }),
       ]),
+      el('div', { class: 'roulette-row' }, items),
+    ]);
+  }
+
+  // 강화 팝업 4칸. "일반 강화"만 실제 메커니즘(enhanceHero, instance.enhanceLevel)과 연결되어
+  // 있다. "확률 강화"는 기획서 확정대로 항상 맥스라 상태만 보여준다(눌러도 변화 없음).
+  // "영웅/전설 강화"는 대응하는 실제 게임 상태가 없어 잠금(준비 중)으로 노출한다
+  // (CLAUDE.md에 근거 정리해둠).
+  function renderEnhancePopup(state) {
+    const found = selectedInstance(state);
+    const canEnhanceCommon = found && state.gold >= ENHANCE_GOLD_COST && state.luckstone >= ENHANCE_LUCKSTONE_COST;
+    const cols = [
+      el('button', {
+        class: 'enhance-col', disabled: !canEnhanceCommon,
+        onclick: () => { if (found) apply(enhanceHero(state, found.instance.instanceId)); },
+      }, [
+        el('img', { class: 'enhance-col-icon', src: UI_IMAGES.enhanceCommon, alt: '일반 강화' }),
+        el('span', { class: 'enhance-col-lv', text: found ? `+${found.instance.enhanceLevel}` : '영웅 선택' }),
+        el('span', { class: 'enhance-col-cost' }, [el('img', { src: UI_IMAGES.goldIcon, alt: '' }), el('span', { text: String(ENHANCE_GOLD_COST) })]),
+      ]),
+      el('button', { class: 'enhance-col', disabled: true }, [
+        el('img', { class: 'enhance-col-icon', src: UI_IMAGES.enhanceRate, alt: '확률 강화' }),
+        el('span', { class: 'enhance-col-lv', text: 'MAX' }),
+        el('span', { class: 'enhance-col-locked-label', text: '항상 최대 고정' }),
+      ]),
+      el('button', { class: 'enhance-col', disabled: true }, [
+        el('img', { class: 'enhance-col-icon', src: UI_IMAGES.enhanceEpic, alt: '영웅 강화' }),
+        el('span', { class: 'enhance-col-locked-label', text: '준비 중' }),
+      ]),
+      el('button', { class: 'enhance-col', disabled: true }, [
+        el('img', { class: 'enhance-col-icon', src: UI_IMAGES.enhanceLegend, alt: '전설 강화' }),
+        el('span', { class: 'enhance-col-locked-label', text: '준비 중' }),
+      ]),
+    ];
+    return el('div', { class: 'game-popup' }, [
+      el('div', { class: 'popup-topbar' }, [
+        el('span', { class: 'popup-stat' }, [el('img', { src: UI_IMAGES.goldIcon, alt: '' }), el('span', { text: String(Math.floor(state.gold)) })]),
+        el('span', { class: 'popup-stat' }, [el('img', { src: UI_IMAGES.luckstoneIcon, alt: '' }), el('span', { text: String(state.luckstone) })]),
+        el('button', { class: 'popup-close', text: '✕', onclick: () => closePopup(state) }),
+      ]),
+      el('div', { class: 'enhance-cols' }, cols),
     ]);
   }
 
   function renderMythicPopup(state) {
-    const ownedMythicIds = state.heroSettings
-      .map((h) => h.heroId)
-      .filter((id) => HEROES_BY_ID[id]?.tier === 'mythic');
-
-    const tabs = el('div', { class: 'popup-tabs' }, [
-      el('button', { class: `btn ${ui.mythicPopup === 'owned' ? 'active' : ''}`, text: '보유 영웅', onclick: () => { ui.mythicPopup = 'owned'; render(state); } }),
-      el('button', { class: `btn ${ui.mythicPopup === 'immortal' ? 'active' : ''}`, text: '불멸 조건', onclick: () => { ui.mythicPopup = 'immortal'; render(state); } }),
-    ]);
-
-    let body;
-    if (ui.mythicPopup === 'owned') {
-      body = el('ul', { class: 'mythic-list' }, ownedMythicIds.map((id) => {
-        const heroDef = HEROES_BY_ID[id];
-        const missing = (heroDef.synthMaterials ?? []).filter((m) => countHeroOnField(state, m.heroId).count < m.count);
-        return el('li', {}, [
-          heroPlaceholder(heroDef, { className: 'mythic-list-image' }),
-          el('button', {
-            class: 'btn', text: '조합', disabled: missing.length > 0,
-            onclick: () => apply(craftMythic(state, id)),
-          }),
-          missing.length ? el('span', { class: 'missing-note', text: ` 부족: ${missing.map((m) => HEROES_BY_ID[m.heroId].name).join(', ')}` }) : null,
-        ]);
-      }));
-    } else {
-      const activeMythics = state.field.flatMap((s) => s.occupants.filter((o) => HEROES_BY_ID[o.heroId]?.tier === 'mythic'));
-      body = el('ul', { class: 'mythic-list' }, activeMythics.map((instance) => {
-        const heroDef = HEROES_BY_ID[instance.heroId];
-        const cond = heroDef.immortalCondition;
-        return el('li', {}, [
-          heroPlaceholder(heroDef, { className: 'mythic-list-image', label: heroDisplayLabel(instance, heroDef) }),
-          el('span', { text: extraStatusText(instance, heroDef) ?? `${cond.name}: ${Math.floor(instance.progress ?? 0)}${cond.target != null ? ' / ' + cond.target : ''}` }),
-        ]);
-      }));
-      if (!activeMythics.length) body = el('div', { text: '필드에 배치된 신화 등급 영웅이 없습니다.' });
+    const allMythics = heroesByTier('mythic');
+    if (!ui.mythicSelectedId) {
+      ui.mythicSelectedId = allMythics.find((h) => craftMaterialsReady(state, h))?.id ?? allMythics[0]?.id ?? null;
     }
+    const selectedDef = HEROES_BY_ID[ui.mythicSelectedId];
 
-    return el('div', { class: 'popup-overlay', onclick: (e) => { if (e.target === e.currentTarget) { ui.mythicPopup = null; render(state); } } }, [
-      el('div', { class: 'popup-box' }, [tabs, body, el('button', { class: 'btn', text: '닫기', onclick: () => { ui.mythicPopup = null; render(state); } })]),
+    return el('div', { class: 'mythic-popup' }, [
+      renderMythicDetailCard(state, selectedDef),
+      ui.mythicTab === 'mythic' ? renderMythicGrid(state, allMythics) : renderImmortalGrid(state),
+      el('div', { class: 'mythic-tabs' }, [
+        el('button', { class: `mythic-tab ${ui.mythicTab === 'mythic' ? 'active' : ''}`, text: '신화', onclick: () => { ui.mythicTab = 'mythic'; render(state); } }),
+        el('button', { class: `mythic-tab ${ui.mythicTab === 'immortal' ? 'active' : ''}`, text: '불멸', onclick: () => { ui.mythicTab = 'immortal'; render(state); } }),
+      ]),
     ]);
+  }
+
+  function craftMaterialsReady(state, heroDef) {
+    return (heroDef.synthMaterials ?? []).every((m) => countHeroOnField(state, m.heroId).count >= m.count);
+  }
+
+  function renderMythicDetailCard(state, heroDef) {
+    if (!heroDef) {
+      return el('div', { class: 'mythic-detail-card' }, [el('div', { class: 'mythic-empty-note', text: '신화 등급 영웅이 없습니다.' })]);
+    }
+    const materials = (heroDef.synthMaterials ?? []).flatMap((m) => {
+      const owned = countHeroOnField(state, m.heroId).count;
+      const matDef = HEROES_BY_ID[m.heroId];
+      return [el('div', { class: `mat ${owned >= m.count ? 'ready' : ''}` }, [
+        heroImage(matDef, { className: 'mat-image' }),
+        el('span', { class: 'mat-count', text: `${Math.min(owned, m.count)}/${m.count}` }),
+      ])];
+    });
+    const ready = craftMaterialsReady(state, heroDef);
+    return el('div', { class: 'mythic-detail-card' }, [
+      el('button', { class: 'popup-close', text: '✕', onclick: () => closePopup(state) }),
+      el('div', { class: 'mythic-detail-name', text: heroDef.name }, [el('span', { class: 'tier-label', text: TIER_LABEL[heroDef.tier] })]),
+      el('div', { class: 'mythic-materials' }, [
+        ...materials,
+        el('span', { class: 'mat-arrow', text: '→' }),
+        el('div', { class: 'mat-result' }, [heroImage(heroDef, { className: 'mat-image' })]),
+      ]),
+      el('button', {
+        class: 'mythic-summon-btn', text: '조합', disabled: !ready,
+        onclick: () => apply(craftMythic(state, heroDef.id)),
+      }),
+    ]);
+  }
+
+  function renderMythicGrid(state, allMythics) {
+    return el('div', { class: 'mythic-grid' }, allMythics.map((heroDef) => {
+      const ready = craftMaterialsReady(state, heroDef);
+      const fieldCount = countHeroOnField(state, heroDef.id).count;
+      return el('div', {
+        class: `mythic-cell ${ready ? 'ready' : ''} ${ui.mythicSelectedId === heroDef.id ? 'selected' : ''}`,
+        onclick: () => { ui.mythicSelectedId = heroDef.id; render(state); },
+      }, [
+        heroImage(heroDef, { className: 'mythic-cell-image' }),
+        el('div', { class: 'mythic-progress', text: fieldCount > 0 ? `보유 ${fieldCount}` : (ready ? '조합 가능' : '재료 부족') }),
+      ]);
+    }));
+  }
+
+  // 불멸 탭: 27개 불멸 등급 + N차 변신(사신개구리변신)까지 전부 나열, 실제 승급 조건
+  // 충족 여부에 따라 잠김/해금 표시. 판정은 필드에 있는 원본(신화 또는 직전 불멸) 개체의
+  // 실제 progress/immortalEligible 값을 그대로 쓴다.
+  function immortalUnlockStatus(state, immortalDef) {
+    const baseId = immortalDef.baseHeroId;
+    const onField = state.field.flatMap((s) => s.occupants).filter((o) => o.heroId === baseId);
+    if (!onField.length) return false;
+    const baseDef = HEROES_BY_ID[baseId];
+    const cond = baseDef?.immortalCondition;
+    if (SECOND_STAGE_IMMORTAL[baseId]) return true; // 이미 불멸이면 2차 변신은 언제든 시도 가능
+    if (!cond) return false;
+    return onField.some((inst) => inst.immortalEligible || cond.target == null || (inst.progress ?? 0) >= cond.target);
+  }
+
+  function renderImmortalGrid(state) {
+    const allImmortals = [...heroesByTier('immortal')];
+    return el('div', { class: 'mythic-grid' }, allImmortals.map((heroDef) => {
+      const unlocked = immortalUnlockStatus(state, heroDef);
+      return el('div', { class: `mythic-cell ${unlocked ? 'ready' : 'locked'}` }, [
+        heroImage(heroDef, { className: 'mythic-cell-image' }),
+        el('div', { class: 'mythic-progress', text: unlocked ? '해금' : '잠김' }),
+      ]);
+    }));
   }
 
   function renderMissionPopup(state) {
@@ -503,8 +625,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
       const progress = state.missions.find((m) => m.missionId === def.id);
       return el('li', { class: progress?.completed ? 'completed' : '' }, `${def.name}: ${progress?.current ?? 0} / ${def.target} - ${def.description}`);
     });
-    return el('div', { class: 'popup-overlay', onclick: (e) => { if (e.target === e.currentTarget) { ui.missionPopup = false; render(state); } } }, [
-      el('div', { class: 'popup-box' }, [el('h3', { text: '미션' }), el('ul', {}, items), el('button', { class: 'btn', text: '닫기', onclick: () => { ui.missionPopup = false; render(state); } })]),
+    return el('div', { class: 'popup-overlay', onclick: (e) => { if (e.target === e.currentTarget) closePopup(state); } }, [
+      el('div', { class: 'popup-box' }, [el('h3', { text: '미션' }), el('ul', {}, items), el('button', { class: 'btn', text: '닫기', onclick: () => closePopup(state) })]),
     ]);
   }
 

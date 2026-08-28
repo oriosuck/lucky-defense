@@ -13,7 +13,7 @@ import {
 
 // ---- 이동불능(즉시형/게이지형) - 게임당 정확히 2회, 라운드는 createGameState에서 미리 확정됨 ----
 const IMMOBILIZE_INSTANT_SEC = 5;
-const IMMOBILIZE_GAUGE_FILL_SEC = 5;
+export const IMMOBILIZE_GAUGE_FILL_SEC = 5;
 const IMMOBILIZE_GAUGE_LOCK_SEC = 10;
 
 // ---- 삭제 공격 ("삭제 있는 버전"에서만, 13/20라운드) ----
