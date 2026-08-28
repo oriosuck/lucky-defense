@@ -65,7 +65,6 @@ export function createGameState(config) {
     gameType: config.gameType,
     immortalPet: config.immortalPet,
     heroSettings: config.heroSettings ?? [],
-    unlockedInstantSummons: [], // 즐겨찾기 등록 + 조합 완료된 신화 heroId 목록 (좌측 즉시소환 버튼)
     missions: createMissionProgress(),
     bossAttackSchedule: {
       nextAttackRound: rollNextBossAttackRound(0),

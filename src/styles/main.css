@@ -484,12 +484,10 @@ body {
 }
 .field-slot.immobilize-active { outline: 2px solid #e74c3c; }
 
-/* 보스 일반공격(디버프) - 실질 효과 없음, 대상 영웅만 보라색으로 표시. 색 틴트
-   자체는 GameScreen.js가 인라인 filter로 합성해서 넣는다(위 .stage-hero-image
-   주석 참고) - 여기선 테두리만 그린다. */
-.stage-hero-token.debuffed .stage-hero-image {
-  outline: 2px solid #a259ff;
-}
+/* 보스 일반공격(디버프) - 실질 효과 없음, 대상 영웅만 보라색으로 표시. 사각 테두리
+   없이 색조 변경만 한다(사용자 지적 - "네모박스 하지 말고 색상만 보라색으로").
+   색 틴트는 GameScreen.js가 인라인 filter(sepia+hue-rotate+saturate)로 합성해서
+   넣는다(위 .stage-hero-image 주석 참고) - 여기엔 더 이상 규칙이 필요 없다. */
 
 /* ---- 상단 우측 컨트롤(일시정지/나가기) ---- */
 /* 일시정지/나가기 버튼을 더 붙여서 한 쌍처럼 보이게 한다(사용자 지적 - 서로 떨어져
