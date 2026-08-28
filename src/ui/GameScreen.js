@@ -24,8 +24,8 @@ import {
 } from '../logic/actions.js';
 import { checkImmortalPromotion, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
 import { IMMOBILIZE_GAUGE_FILL_SEC } from '../logic/waveEvents.js';
-import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST } from '../data/constants.js';
-import { fieldOccupantCount } from '../state/gameState.js';
+import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST, MONSTER_PER_ROUND } from '../data/constants.js';
+import { fieldOccupantCount, waveDuration } from '../state/gameState.js';
 import { el } from './components/dom.js';
 import { heroImage } from './components/heroVisual.js';
 
@@ -153,16 +153,34 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return stage;
   }
 
+  function formatClock(sec) {
+    const s = Math.max(0, Math.ceil(sec));
+    const mm = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    return `${mm}:${ss}`;
+  }
+
   function renderTopBadge(state) {
     return el('div', { class: 'top-badge' }, [
-      el('span', { class: 'top-badge-label', text: `WAVE ${state.wave} · Lv.${state.wave}` }),
-      el('span', { class: 'top-badge-value', text: `${Math.max(0, Math.ceil(state.waveTimeLeft))}s` }),
+      el('span', { class: 'top-badge-label', text: `WAVE ${state.wave}` }),
+      el('span', { class: 'top-badge-value', text: formatClock(state.waveTimeLeft) }),
     ]);
+  }
+
+  // 라운드당 총 40마리가 시간에 따라 한 마리씩 등장하는 진행도(0→40)를 표시한다.
+  // 필드 누적 몬스터 수(state.monsterCount/monsterMax, 도달 시 패배)와는 별개의 값 -
+  // 그쪽은 처치로 줄어들 수 있는 내부 판정용이라 화면에 그대로 보여주면 "40에서
+  // 0으로 줄어드는 것처럼 보인다"는 오해를 사서, 라운드 진행도만 따로 계산해서 보여준다.
+  function roundMonsterSpawnProgress(state) {
+    if (state.wave < 1) return 0;
+    const duration = waveDuration(state.wave);
+    const elapsed = duration - state.waveTimeLeft;
+    return Math.max(0, Math.min(MONSTER_PER_ROUND, Math.floor((elapsed / duration) * MONSTER_PER_ROUND)));
   }
 
   function renderMonsterRow(state) {
     return el('div', { class: 'monster-row' }, [
-      el('span', { class: 'monster-count-text', text: `${Math.floor(state.monsterCount)} / ${state.monsterMax}` }),
+      el('span', { class: 'monster-count-text', text: `${roundMonsterSpawnProgress(state)} / ${MONSTER_PER_ROUND}` }),
     ]);
   }
 
@@ -315,12 +333,18 @@ export function GameScreen({ getState, dispatch, onExit }) {
     render(getState());
   }
 
+  // resource_bar.png("재화 및 맵 카운트 바.png")에는 코인/행운석/인원 아이콘과 "/" 구분자가
+  // 전부 그림 안에 이미 박혀있다(빈 값 없이 장식으로만). 텍스트를 각 아이콘 자리 위에 그대로
+  // 얹으면 숫자가 아이콘과 겹쳐서 안 보이는 문제가 있었다 - 실측(bbox 스캔)한 아이콘 위치
+  // 기준으로 각 숫자를 아이콘 "다음" 빈 공간에 배치했다. 인원 칸은 그림에 이미 "/"가 있어서
+  // 직접 만든 텍스트에 "/"를 또 넣지 않고, 그 "/" 좌우로 현재/최대값만 나눠서 배치한다.
   function renderResourceRow(state) {
     return el('div', { class: 'stage-resource-row' }, [
       el('div', { class: 'resource-bar' }, [
         el('span', { class: 'resource-value resource-gold', text: `${Math.floor(state.gold)}` }),
         el('span', { class: 'resource-value resource-luckstone', text: `${state.luckstone}` }),
-        el('span', { class: 'resource-value resource-pop', text: `${fieldOccupantCount(state)}/${state.fieldMaxCapacity}` }),
+        el('span', { class: 'resource-value resource-pop-current', text: `${fieldOccupantCount(state)}` }),
+        el('span', { class: 'resource-value resource-pop-max', text: `${state.fieldMaxCapacity}` }),
       ]),
     ]);
   }
