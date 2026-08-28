@@ -310,9 +310,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   // 좌우 굴에 보라색 소용돌이(몬스터 등장 지점 강조)를 항상 띄우고, 라운드 종료
-  // 5초 전부터는 왼쪽 굴 위에 카운트다운 배지를 추가로 띄운다.
+  // 5초 전부터는 왼쪽 굴 위에 카운트다운 배지를 추가로 띄운다. 0라운드(1웨이브
+  // 시작 전 5초 대기 구간)에도 이미 waveTimeLeft가 5→0으로 카운트다운 중이라
+  // 똑같이 보여준다(사용자 요청 - "0라운드부터 보라색이 나타나야 함").
   function renderHoleEffects(state) {
-    if (state.wave < 1 || state.result) return null;
+    if (state.wave < 0 || state.result) return null;
     const nodes = [
       el('div', { class: 'hole-vortex', style: `left:${STAGE_LAYOUT.leftHole.x}%; top:${STAGE_LAYOUT.leftHole.y}%;` }),
       el('div', { class: 'hole-vortex', style: `left:${STAGE_LAYOUT.rightHole.x}%; top:${STAGE_LAYOUT.rightHole.y}%;` }),
@@ -384,6 +386,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   function renderFavoriteBar(state) {
     const items = favoriteBarItems(state);
+    const favoriteIds = new Set(state.heroSettings.filter((h) => h.favorite).map((h) => h.heroId));
+    // 즐겨찾기로 등록해 둔 영웅은 왼쪽 아이콘에도 별표를 달아 표시한다(사용자 요청).
+    const starBadge = (heroId) => (favoriteIds.has(heroId) ? el('span', { class: 'favorite-icon-star', text: '★' }) : null);
     return el(
       'div',
       { class: 'favorite-bar' },
@@ -402,6 +407,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
             },
             [
               heroImage(immortalDef, { className: 'favorite-icon-image' }),
+              starBadge(item.heroId),
               el('span', { class: 'favorite-icon-label', text: '승급 가능!' }),
             ],
           );
@@ -416,6 +422,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
           },
           [
             heroImage(heroDef, { className: 'favorite-icon-image' }),
+            starBadge(item.heroId),
             el('span', { class: 'favorite-icon-label', text: unlocked ? '즉시 소환!' : '조합 가능' }),
           ],
         );
@@ -502,17 +509,19 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   // 필드 캐릭터는 칸 안에 눕혀 넣는 flex 자식이 아니라, 칸 좌표를 기준으로 절대배치되는
   // 별도 오버레이 레이어로 그린다(.field-slot이 overflow:hidden이라 칸보다 큰 이미지를
-  // 담을 수 없어서). 칸 높이의 1.75배로 세로로 키우고 이미지 발밑을 칸 하단(바닥선)에
-  // 맞춰서 서 있는 것처럼 보이게 하며, z-index를 그리드 행(row) 번호로 매겨 아래쪽
-  // (화면 앞쪽) 행 캐릭터가 위쪽(화면 뒷쪽) 행 캐릭터를 가리는 입체감을 낸다
-  // (사용자 참고 스크린샷 그대로 - 원근감 있는 배치).
+  // 담을 수 없어서). 이미지 발밑을 칸 하단(바닥선)에 맞춰서 서 있는 것처럼 보이게 하며,
+  // z-index를 그리드 행(row) 번호로 매겨 아래쪽(화면 앞쪽) 행 캐릭터가 위쪽(화면 뒷쪽)
+  // 행 캐릭터를 가리는 입체감을 낸다(사용자 참고 스크린샷 그대로 - 원근감 있는 배치).
+  // 단, 캐릭터는 항상 칸 안에 완전히 들어가 있어야 한다(사용자 지적 - 예전엔 칸 높이의
+  // 1.75배로 키워서 위로 삐져나오게 했었는데, 이제는 칸 높이 이내로만 그린다).
   //
   // 캐릭터 크기는 그 칸에 몇 마리가 쌓여있든 항상 고정이다(사용자 지적 - 예전엔
   // 칸 너비를 마리 수만큼 나눠서 1마리일 때와 3마리일 때 크기가 달라졌었음).
-  const HERO_TOKEN_HEIGHT_RATIO = 1.75; // 칸 높이 대비 1.5~2배 사이
-  const HERO_TOKEN_WIDTH_RATIO = 0.7; // 칸 너비 대비 고정 폭(기존보다 30% 축소)
+  const HERO_TOKEN_HEIGHT_RATIO = 0.8; // 칸 높이 이내로 완전히 들어가도록(사용자 지적 - 칸 밖으로 나가면 안 됨)
+  const HERO_TOKEN_WIDTH_RATIO = 0.44; // 칸 너비 대비 고정 폭 - 대열을 조밀하게 좁힘(사용자 지적)
   const IMP_TOKEN_SCALE = 0.5; // 마마 임프는 다른 캐릭터의 절반 크기(사용자 지적 - 너무 컸음)
-  const ULTIMATE_FLASH_MS = 1200; // 베인 궁 이펙트 지속 시간
+  const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
+  const ATTACK_CYCLE_MS = 900; // 공격 모션(위아래 스쿼시-스트레치) 반복 주기
 
   // 한 칸에 쌓인 마리 수별 배치 오프셋(토큰 폭/높이 대비 비율). 3마리는 일렬이 아니라
   // 뒤 2마리 + 앞 1마리의 삼각형 대열로 배치한다(사용자 참고 이미지). 인덱스 순서가
@@ -520,12 +529,35 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 안에서는 z-index를 따로 안 써도 DOM에 그려지는 순서만으로 앞/뒤가 갈림).
   function stackOffsets(n) {
     if (n <= 1) return [{ dx: 0, dy: 0 }];
-    if (n === 2) return [{ dx: -0.32, dy: 0 }, { dx: 0.32, dy: 0 }];
+    if (n === 2) return [{ dx: -0.22, dy: 0 }, { dx: 0.22, dy: 0 }];
     return [
-      { dx: -0.5, dy: -0.32 }, // 뒤-왼쪽
-      { dx: 0.5, dy: -0.32 }, // 뒤-오른쪽
-      { dx: 0, dy: 0.22 }, // 앞-중앙
+      { dx: -0.3, dy: -0.2 }, // 뒤-왼쪽
+      { dx: 0.3, dy: -0.2 }, // 뒤-오른쪽
+      { dx: 0, dy: 0 }, // 앞-중앙
     ];
+  }
+
+  // 인스턴스마다 애니메이션 시작 위상을 다르게 흩뿌리기 위한 안정적 해시 - 같은
+  // 개체는 항상 같은 위상을 가져야 렌더마다(0.2초마다 DOM이 통째로 재생성돼도)
+  // 애니메이션이 튀지 않는다.
+  function hashPhase(id, mod) {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return h % mod;
+  }
+
+  // 선택/합성가능 표시는 칸을 감싸는 사각 테두리가 아니라(사용자 지적 - "누가
+  // 네모로 하랬냐"), 캐릭터 이미지의 실제 알파 채널(실루엣)을 따라가는 흰색
+  // 외곽선이어야 한다. drop-shadow를 8방향으로 얇게 겹쳐 쌓으면 투명 배경은 그대로
+  // 투명하게 두고 그림이 있는 픽셀 가장자리에만 색이 번져서 실루엣 외곽선처럼 보인다.
+  const OUTLINE_OFFSET_PX = 2;
+  function outlineFilter() {
+    const offsets = [
+      [OUTLINE_OFFSET_PX, 0], [-OUTLINE_OFFSET_PX, 0], [0, OUTLINE_OFFSET_PX], [0, -OUTLINE_OFFSET_PX],
+      [OUTLINE_OFFSET_PX, OUTLINE_OFFSET_PX], [-OUTLINE_OFFSET_PX, OUTLINE_OFFSET_PX],
+      [OUTLINE_OFFSET_PX, -OUTLINE_OFFSET_PX], [-OUTLINE_OFFSET_PX, -OUTLINE_OFFSET_PX],
+    ];
+    return offsets.map(([x, y]) => `drop-shadow(${x}px ${y}px 0 #fff)`).join(' ');
   }
 
   function renderHeroTokenLayer(state) {
@@ -548,40 +580,50 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
       const selected = ui.selectedSlot && ui.selectedSlot.row === slot.row && ui.selectedSlot.col === slot.col;
       // 3마리가 다 차면(합성 가능한 등급 - 일반~영웅만, 전설 이상은 스택 개념이 없거나
-      // 합성 대상이 아님) 선택 여부와 무관하게 흰 테두리로 "합성 가능"을 항상 표시한다.
-      // 선택했을 때도 개체마다 따로 테두리를 그리지 않고 무리 전체를 감싸는 테두리
-      // 하나만 그린다(사용자 참고 이미지 그대로).
+      // 합성 대상이 아님) 선택 여부와 무관하게 흰 외곽선으로 "합성 가능"을 항상
+      // 표시한다. 개체마다 실루엣 외곽선이 각각 그려지므로 몇 마리든 outlined 플래그
+      // 하나로 충분하다(칸을 감싸는 사각 박스 대신).
       const firstHeroDef = HEROES_BY_ID[slot.occupants[0].heroId];
       const readyToCombine = n === 3 && ['normal', 'rare', 'hero'].includes(firstHeroDef?.tier);
-      if (selected || readyToCombine) {
-        const left = Math.min(...positions.map((p) => p.centerX)) - tokenWidth / 2;
-        const right = Math.max(...positions.map((p) => p.centerX)) + tokenWidth / 2;
-        const top = Math.min(...positions.map((p) => p.top));
-        const bottom = Math.max(...positions.map((p) => p.top)) + tokenHeight;
-        layer.appendChild(el('div', {
-          class: 'stage-hero-selection-halo',
-          style: `left:${(left + right) / 2}%; top:${top}%; width:${right - left}%; height:${bottom - top}%; z-index:${1 + slot.row};`,
-        }));
-      }
+      const outlined = selected || readyToCombine;
 
       slot.occupants.forEach((occ, i) => {
         const heroDef = HEROES_BY_ID[occ.heroId];
         const debuffed = state.eventLog.debuffEvent?.instanceId === occ.instanceId;
-        // 탑 베인이 방금 궁극기 환산 임계치(11회 이동)를 넘겼으면 잠깐 이펙트를 준다
-        // (사용자 요청 - immortal.js의 recordImmortalEvent가 남긴 타임스탬프 확인).
-        // 게임 루프가 0.2초마다 전체 DOM을 다시 그리는 구조라(main.js), infinite
-        // 애니메이션에 고정 delay를 넣으면 매번 처음부터 재생되며 멈춘 것처럼 보인다
-        // (몬스터 이동 애니메이션과 같은 함정, CLAUDE.md 참고) - 실제 경과 시간 기준으로
-        // animation-delay를 매 렌더 다시 계산해서 넣는다.
+        // 탑 베인이 방금 궁극기 환산 임계치(이동 왕복 15~20회 랜덤)를 넘겼으면 잠깐
+        // 이펙트를 준다(사용자 요청 - immortal.js의 recordImmortalEvent가 남긴
+        // 타임스탬프 확인). 게임 루프가 0.2초마다 전체 DOM을 다시 그리는 구조라
+        // (main.js), infinite 애니메이션에 고정 delay를 넣으면 매번 처음부터
+        // 재생되며 멈춘 것처럼 보인다(몬스터 이동 애니메이션과 같은 함정, CLAUDE.md
+        // 참고) - 실제 경과 시간 기준으로 animation-delay를 매 렌더 다시 계산해서
+        // 넣는다.
         const ultimateElapsedMs = occ.ultimateFlashAt ? Date.now() - occ.ultimateFlashAt : Infinity;
         const usingUltimate = occ.heroId === 'm_bane' && ultimateElapsedMs < ULTIMATE_FLASH_MS;
         const { centerX, top } = positions[i];
+
+        // filter는 CSS 클래스를 여러 개 동시에 걸어도 서로 값을 덮어쓸 뿐 합쳐지지
+        // 않는다(마지막에 매치된 규칙만 적용됨) - 선택 외곽선/디버프/궁극기 발광이
+        // 동시에 필요할 수 있어서 상태에 맞는 filter 문자열을 직접 합성해 인라인
+        // style로 넣는다.
+        const filterParts = ['drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5))'];
+        if (usingUltimate) filterParts.push('drop-shadow(0 0 10px #ffd54a)', 'drop-shadow(0 0 18px #ff9d2f)');
+        if (debuffed) filterParts.push('sepia(1)', 'hue-rotate(220deg)', 'saturate(3)');
+        if (outlined) filterParts.push(outlineFilter());
+
+        // 공격 모션(위아래로 살짝 늘어났다 줄어드는 스쿼시-스트레치)도 궁 링/몬스터
+        // 이동과 같은 이유로 실제 경과 시간 기준 위상을 매 렌더 다시 계산한다 - 예전
+        // token-pop 팝인 애니메이션은 고정 delay라 0.2초 재렌더마다 처음부터 다시
+        // 재생되며 "깜빡이는" 것처럼 보였다(사용자 지적으로 제거, main.css 참고).
+        const attackStagger = hashPhase(occ.instanceId, ATTACK_CYCLE_MS);
+        const attackPhase = (Date.now() + attackStagger) % ATTACK_CYCLE_MS;
+        const imgStyle = `filter:${filterParts.join(' ')}; animation-delay:-${attackPhase}ms;`;
+
         layer.appendChild(el('div', {
           class: `stage-hero-token${debuffed ? ' debuffed' : ''}${usingUltimate ? ' ultimate-flash' : ''}`,
           style: `left:${centerX}%; top:${top}%; width:${tokenWidth}%; height:${tokenHeight}%; z-index:${2 + slot.row};${usingUltimate ? ` --ring-delay:-${ultimateElapsedMs % 800}ms;` : ''}`,
         }, [
           el('div', { class: 'stage-hero-shadow' }),
-          heroImage(heroDef, { className: 'stage-hero-image', instance: occ }),
+          heroImage(heroDef, { className: 'stage-hero-image', instance: occ, style: imgStyle }),
           occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
         ]));
       });

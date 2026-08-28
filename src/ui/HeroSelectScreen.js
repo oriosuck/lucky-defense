@@ -1,5 +1,5 @@
 import { TIER_LABEL, heroesByTier } from '../data/heroes.js';
-import { savePreset, listPresets, loadPreset, deletePreset, PRESET_NAME_MAX_LENGTH } from '../state/presetStore.js';
+import { savePreset, listPresets, loadPreset, deletePreset, PRESET_NAME_MAX_LENGTH, getDefaultPresetId, setDefaultPreset } from '../state/presetStore.js';
 import { el } from './components/dom.js';
 import { heroImage } from './components/heroVisual.js';
 
@@ -22,6 +22,10 @@ function isStartReady(s) {
 export function HeroSelectScreen({ onStart }) {
   const root = el('div', { class: 'screen hero-select-screen' });
   const local = createLocalState();
+  // 드롭다운에서 어떤 프리셋을 골랐는지는 렌더마다 <select>가 새로 만들어지므로
+  // (root.innerHTML='' 재생성 패턴) DOM에 안 남고 별도로 기억해둬야 삭제/기본값
+  // 지정 버튼이 "지금 고른 프리셋"을 계속 알 수 있다.
+  let presetSelection = '';
 
   function update() {
     root.innerHTML = '';
@@ -53,6 +57,17 @@ export function HeroSelectScreen({ onStart }) {
     update();
   }
 
+  // 화면을 열 때 기본값으로 지정된 프리셋이 있으면 자동으로 불러온다(사용자 요청).
+  const defaultPresetId = getDefaultPresetId();
+  if (defaultPresetId) {
+    const defaultPreset = loadPreset(defaultPresetId);
+    if (defaultPreset) {
+      local.gameType = defaultPreset.gameType;
+      local.immortalPet = defaultPreset.immortalPet;
+      local.settings = new Map((defaultPreset.heroSettings ?? []).map((h) => [h.heroId, { immortal: h.immortal, favorite: h.favorite }]));
+    }
+  }
+
   function renderPresetBar() {
     const nameInput = el('input', { type: 'text', maxlength: String(PRESET_NAME_MAX_LENGTH), placeholder: '프리셋 이름' });
     const status = el('span', { class: 'preset-status' });
@@ -66,35 +81,64 @@ export function HeroSelectScreen({ onStart }) {
           immortalPet: local.immortalPet,
           heroSettings: collectHeroSettings(),
         });
-        status.textContent = result.ok
-          ? '저장됨'
-          : { 'empty-name': '이름을 입력하세요', 'name-too-long': '이름이 너무 깁니다', 'duplicate-name': '이미 존재하는 이름입니다', unavailable: '이 브라우저에서는 저장이 안 됩니다', quota: '저장 공간이 부족합니다' }[result.reason] ?? '저장 실패';
+        if (result.ok) {
+          nameInput.value = '';
+          update();
+          return;
+        }
+        status.textContent = { 'empty-name': '이름을 입력하세요', 'name-too-long': '이름이 너무 깁니다', 'duplicate-name': '이미 존재하는 이름입니다', unavailable: '이 브라우저에서는 저장이 안 됩니다', quota: '저장 공간이 부족합니다' }[result.reason] ?? '저장 실패';
       },
     });
 
     const presets = listPresets();
+    const currentDefaultId = getDefaultPresetId();
+    if (presetSelection && !presets.some((p) => p.id === presetSelection)) presetSelection = ''; // 방금 삭제된 프리셋이면 선택 해제
     const loadSelect = el(
       'select',
       {},
-      [el('option', { value: '', text: presets.length ? '불러오기...' : '저장된 프리셋 없음' }), ...presets.map((p) => el('option', { value: p.id, text: p.name }))],
+      [
+        el('option', { value: '', text: presets.length ? '불러오기...' : '저장된 프리셋 없음', selected: presetSelection === '' }),
+        ...presets.map((p) => el('option', {
+          value: p.id,
+          text: p.id === currentDefaultId ? `★ ${p.name}` : p.name,
+          selected: p.id === presetSelection,
+        })),
+      ],
     );
     loadSelect.addEventListener('change', () => {
-      if (!loadSelect.value) return;
-      const preset = loadPreset(loadSelect.value);
+      presetSelection = loadSelect.value;
+      if (!presetSelection) return;
+      const preset = loadPreset(presetSelection);
       if (preset) applyPreset(preset);
     });
 
     const deleteBtn = el('button', {
       class: 'btn btn-danger',
       text: '삭제',
+      disabled: !presetSelection,
       onclick: () => {
-        if (!loadSelect.value) return;
-        deletePreset(loadSelect.value);
+        if (!presetSelection) return;
+        deletePreset(presetSelection);
+        presetSelection = '';
         update();
       },
     });
 
-    return el('div', { class: 'preset-bar' }, [nameInput, saveBtn, loadSelect, deleteBtn, status]);
+    // 선택된 프리셋을 "기본값"으로 지정 - 다음에 화면을 열 때 자동으로 불러와진다
+    // (사용자 요청). 이미 기본값인 프리셋을 다시 누르면 해제된다.
+    const isCurrentDefault = presetSelection && presetSelection === currentDefaultId;
+    const defaultBtn = el('button', {
+      class: `btn${isCurrentDefault ? ' active' : ''}`,
+      text: isCurrentDefault ? '기본값 해제' : '기본값으로 설정',
+      disabled: !presetSelection,
+      onclick: () => {
+        if (!presetSelection) return;
+        setDefaultPreset(isCurrentDefault ? null : presetSelection);
+        update();
+      },
+    });
+
+    return el('div', { class: 'preset-bar' }, [nameInput, saveBtn, loadSelect, defaultBtn, deleteBtn, status]);
   }
 
   function renderHeroCard(heroDef) {
@@ -154,13 +198,14 @@ export function HeroSelectScreen({ onStart }) {
 
     return el('div', { class: 'hero-select-inner' }, [
       el('div', { class: 'top-bar' }, [startBtn]),
+      // 프리셋 저장/불러오기는 맨 밑이 아니라 화면 맨 위쪽에 둔다(사용자 요청).
+      renderPresetBar(),
       el('section', { class: 'options' }, [
         el('div', { class: 'radio-group' }, gameTypeRadios),
         el('div', { class: 'radio-group' }, petRadios),
         el('p', { class: 'options-note', text: '모든 유물은 항상 최대 레벨(11)로 고정되어 있습니다. 신화 등급을 제외한 모든 영웅은 기본으로 보유한 상태로 시작합니다.' }),
       ]),
       el('section', { class: 'hero-grid' }, SELECTABLE_TIERS.flatMap((tier) => heroesByTier(tier).map(renderHeroCard))),
-      renderPresetBar(),
     ]);
   }
 

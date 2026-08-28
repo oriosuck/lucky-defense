@@ -218,14 +218,19 @@ export function recordImmortalEvent(state, instanceId, eventType, payload = {}) 
   const before = found.instance.progress ?? 0;
   found.instance.progress = before + amount;
 
-  // 탑 베인은 이동 moveToUltimateRatio(11)회마다 "궁극기 1회 사용"으로 환산된다
-  // (기획서 수치). 실제 데미지 계산은 범위 밖이라, 그 순간을 넘길 때마다 필드에서
-  // 잠깐 궁 이펙트를 보여주는 용도로만 타임스탬프를 남긴다(사용자 요청 - "베인이
-  // 궁 쓸 때 효과 주기").
-  if (found.instance.heroId === 'm_bane' && cond.extra?.moveToUltimateRatio) {
-    const ratio = cond.extra.moveToUltimateRatio;
-    if (Math.floor(before / ratio) < Math.floor(found.instance.progress / ratio)) {
+  // 탑 베인은 이동 왕복 15~20회(매번 랜덤)마다 "궁극기 1회 사용"으로 환산된다
+  // (사용자 재확인 사항). 실제 데미지 계산은 범위 밖이라, 그 순간을 넘길 때마다
+  // 필드에서 잠깐 궁 이펙트를 보여주는 용도로만 타임스탬프를 남긴다. 고정 비율
+  // 대신 "다음 임계치"를 개체에 저장해두고, 넘길 때마다 다시 랜덤으로 다음
+  // 임계치를 뽑는다.
+  if (found.instance.heroId === 'm_bane' && cond.extra?.ultimateThresholdMin) {
+    const { ultimateThresholdMin: min, ultimateThresholdMax: max } = cond.extra;
+    if (found.instance.nextUltimateAt == null) {
+      found.instance.nextUltimateAt = before + min + Math.floor(Math.random() * (max - min + 1));
+    }
+    if (found.instance.progress >= found.instance.nextUltimateAt) {
       found.instance.ultimateFlashAt = Date.now();
+      found.instance.nextUltimateAt = found.instance.progress + min + Math.floor(Math.random() * (max - min + 1));
     }
   }
 
