@@ -195,23 +195,20 @@ body {
 }
 .stage-monster img { width: 100%; height: 100%; object-fit: contain; }
 /* 전장 박스(left:12.5%~86.92%, top:43.63%~62.07%) 바깥쪽 왼쪽/아래/오른쪽 세 변을
-   둘러서 이동한다(사용자가 준 참고 이미지의 빨간 경로 그대로) - 굴(y≈44.2%)에서 나온
-   직후 곧바로 바깥쪽(x:7%, 전장 왼쪽 밖)으로 빠져서 아래(top:65%, 전장 아래 밖)로
-   내려가고, 전장 아래를 가로질러 반대쪽(x:93%, 전장 오른쪽 밖)으로 갔다가 다시
-   위(반대쪽 굴)로 올라간다. 굴 근처(전장과 y가 겹치는 아주 짧은 구간)만 계속 투명
-   상태로 순간이동시켜서 전장 진입/이탈 지점에서도 캐릭터 칸을 가로지르지 않는다.
+   둘러서 이동한다(사용자가 준 참고 이미지의 빨간 경로 그대로). 굴 좌표를 배경 원화의
+   실제 톱니바퀴 허브 위치(x:8%/92%, y:40.5%)로 다시 실측했더니 애초에 전장 박스
+   바깥(x도 12.5~86.92% 밖, y도 43.63% 밖)이라, 예전처럼 굴 근처를 투명 처리해서
+   가릴 필요가 아예 없어졌다 - 경로 전체가 항상 전장 박스 밖이라 시작부터 끝까지
+   계속 보여도 캐릭터 칸을 가로지르지 않는다.
    좌표는 src/data/assets.js의 STAGE_LAYOUT과 맞춰져 있음 */
 @keyframes monster-travel {
-  0% { left: 14.97%; top: 44.23%; opacity: 0; }
-  4% { left: 11%; top: 45%; opacity: 0; }
-  5% { opacity: 1; }
-  18% { left: 7%; top: 58%; }
-  30% { left: 7%; top: 65%; }
+  0% { left: 8%; top: 40.5%; opacity: 0; }
+  4% { opacity: 1; }
+  20% { left: 7%; top: 65%; }
   70% { left: 93%; top: 65%; }
-  82% { left: 93%; top: 58%; }
-  95% { left: 89%; top: 45%; opacity: 1; }
-  96% { opacity: 0; }
-  100% { left: 85.03%; top: 44.3%; opacity: 0; }
+  86% { left: 92%; top: 40.5%; }
+  96% { opacity: 1; }
+  100% { left: 92%; top: 40.5%; opacity: 0; }
 }
 
 /* 좌우 굴 자리에 보라색 소용돌이 효과 - 몬스터가 나오는 위치라는 걸 시각적으로
@@ -300,28 +297,31 @@ body {
 .hero-token-image { width: 100%; height: 100%; object-fit: contain; display: block; }
 .hero-token.selected { outline: 2px solid var(--gold); border-radius: 4px; }
 
-/* 판매/합성 버튼: 선택 패널(모달) 안이 아니라 선택된 칸 바로 위/아래에 붙는다.
-   래퍼는 클릭을 막지 않게 pointer-events:none, 버튼 자체만 auto로 되돌린다. */
+/* 판매/이동/강화/합성 등 모든 선택-영웅 조작 버튼: 선택 패널(모달) 안이 아니라
+   선택된 칸 바로 위/아래에 세로로 쌓인다. 래퍼(.cell-quick-actions,
+   .cell-quick-stack)는 클릭을 막지 않게 pointer-events:none, 버튼 자체만
+   auto로 되돌린다 - 버튼별 위치는 .cell-quick-stack이 담당하고(칸 좌표로
+   position:absolute) 그 안의 버튼들은 flex column으로 자연스럽게 쌓인다. */
 .cell-quick-actions { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
 .cell-quick-btn {
-  position: absolute; pointer-events: auto;
+  pointer-events: auto;
   display: flex; flex-direction: column; align-items: center; gap: 1px;
-  border-radius: 8px; padding: 3px 7px;
+  border-radius: 8px; padding: 3px 7px; border: 2px solid;
   color: #fff; font-weight: 800; font-size: 9px;
   cursor: pointer; white-space: nowrap;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
-.cell-quick-sell {
-  transform: translate(-50%, calc(-100% - 3px));
-  background: linear-gradient(180deg, #e0483f, #b22e26);
-  border: 2px solid #7a1a15;
+.cell-quick-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cell-quick-close {
+  background: rgba(20, 16, 26, 0.85); border-color: rgba(255, 255, 255, 0.3);
+  padding: 1px 6px; font-size: 10px;
 }
-.cell-quick-synth {
-  transform: translate(-50%, 3px);
-  background: linear-gradient(180deg, #f5c542, #d99e1f);
-  border: 2px solid #7a4d10;
-  color: #3a2205;
-}
+.cell-quick-sell { background: linear-gradient(180deg, #e0483f, #b22e26); border-color: #7a1a15; }
+.cell-quick-move { background: linear-gradient(180deg, #4a90d9, #2f6fb0); border-color: #1c3358; }
+.cell-quick-enhance { background: linear-gradient(180deg, #3f6fb0, #2b4d80); border-color: #1c3358; }
+.cell-quick-synth { background: linear-gradient(180deg, #f5c542, #d99e1f); border-color: #7a4d10; color: #3a2205; }
+.cell-quick-extra { background: linear-gradient(180deg, #6b4fa0, #4a3480); border-color: #2c1d5a; }
+.cell-quick-extra.active { border-color: var(--gold); }
 .cell-quick-reward { display: flex; align-items: center; gap: 2px; font-size: 9px; }
 .cell-quick-reward img { width: 10px; height: 10px; object-fit: contain; }
 .enhance-badge {
@@ -422,26 +422,22 @@ body {
 }
 .speed-toggle-btn img, .mission-toggle-btn img { width: 100%; height: 100%; object-fit: contain; }
 
-/* ---- 선택된 영웅 패널: 선택했을 때만 보스 위에 겹쳐서 뜬다 ---- */
-.selected-panel {
-  position: absolute; left: 8%; top: 8%; width: 84%; height: 36%; z-index: 5;
-  background: rgba(18, 14, 24, 0.94); border: 1px solid rgba(255, 255, 255, 0.12);
-  padding: 3%; border-radius: 12px; box-sizing: border-box;
-  display: flex; flex-direction: column; gap: 3%;
-  overflow-y: auto;
+/* ---- 선택된 영웅의 조작 버튼: 팝업 패널이 아니라 선택된 칸 바로 위/아래에 쌓이는
+   작은 버튼 묶음이다("칸 클릭했을 때 팝업이 뜨는 게 아니라 위 아래로 버튼이 뜨는
+   것" - 사용자 지정 UI). 큰 카드로 감싸지 않고 버튼 하나하나를 개별 pill로 쌓는다. */
+.cell-quick-stack {
+  position: absolute; z-index: 6;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  pointer-events: none; /* 컨테이너 자체는 클릭을 막지 않고, 버튼(cell-quick-btn)만 auto */
 }
-.selected-close {
-  position: absolute; right: 2%; top: 2%;
-  width: 20px; height: 20px; border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1); border: none; color: var(--text); cursor: pointer;
+.cell-quick-stack-above { transform: translate(-50%, -100%); margin-top: -4px; }
+.cell-quick-stack-below { transform: translate(-50%, 0); margin-top: 4px; }
+.cell-status-badge {
+  pointer-events: none;
+  background: rgba(20, 16, 26, 0.85); border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px; padding: 2px 8px;
+  color: var(--gem); font-size: 10px; font-weight: 700; white-space: nowrap;
 }
-.selected-header { display: flex; align-items: center; gap: 8px; }
-.selected-image { width: 48px; height: 48px; flex-shrink: 0; background: #0c0c14; border-radius: 6px; object-fit: contain; }
-.selected-title { font-weight: 600; font-size: 13px; }
-.immortal-progress { font-size: 12px; color: var(--gem); }
-.extra-status-line { display: flex; align-items: center; gap: 4px; }
-.extra-status-icon { width: 14px; height: 14px; object-fit: contain; }
-.action-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* ---- 하단 버튼 행: 신화 / 소환 / 룰렛 ---- */
 .action-row {

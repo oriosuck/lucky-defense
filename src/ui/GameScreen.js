@@ -105,7 +105,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
   window.addEventListener('pointerup', () => { pointerDown = false; });
   window.addEventListener('pointercancel', () => { pointerDown = false; });
 
-  const MONSTER_TRAVEL_MS = 2600;
+  const MONSTER_TRAVEL_MS = 10400; // 기존 2600ms의 4배로 느리게(사용자 요청)
 
   // 장식용 몬스터 스프라이트 개수를 몬스터 카운트 바에 표시되는 값(state.monsterCount)과
   // 항상 정확히 같게 유지한다 - 예전엔 몬스터가 한 바퀴(MONSTER_TRAVEL_MS) 돌고 나면
@@ -146,8 +146,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
     stage.appendChild(renderStageControls(state));
     stage.appendChild(renderResourceRow(state));
     stage.appendChild(renderSideControls(state));
-    const selPanel = renderSelectedPanel(state);
-    if (selPanel) stage.appendChild(selPanel);
     stage.appendChild(renderActionRow(state));
     stage.appendChild(renderEnhanceOpenBtn(state));
     if (ui.popup === 'roulette') stage.appendChild(renderRoulettePopup(state));
@@ -327,8 +325,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
     };
   }
 
-  // 판매/합성은 선택 패널 팝업이 아니라 선택된 칸 바로 위/아래에 붙는 작은 버튼으로
-  // 뜬다(사용자 지정 UI) - 판매는 칸 위, 합성(3마리 다 찼을 때만)은 칸 아래.
+  // 선택된 영웅의 모든 조작(이동/강화/판매/합성/영웅별 특수 액션)을 큰 팝업 패널이
+  // 아니라 선택된 칸 바로 위/아래에 붙는 작은 버튼 묶음으로 띄운다(사용자 지정 UI -
+  // "칸 클릭했을 때 팝업이 뜨는 게 아니라 위 아래로 버튼이 뜨는 것"). 판매/이동/강화는
+  // 칸 위쪽에 쌓고, 합성과 영웅별 특수 액션은 칸 아래쪽에 쌓는다.
   function renderCellQuickActions(state) {
     if (ui.moveMode) return null; // 이동 대상 선택 중엔 다른 칸 클릭을 방해하지 않게 숨김
     const found = selectedInstance(state);
@@ -337,32 +337,118 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const heroDef = HEROES_BY_ID[instance.heroId];
     const rect = fieldCellRect(slot.row, slot.col);
     const centerX = rect.left + rect.width / 2;
-    const nodes = [];
+
+    const above = [];
+    const below = [];
+
+    above.push(el('button', {
+      class: 'cell-quick-btn cell-quick-close', text: '✕',
+      onclick: () => { ui.selectedInstanceId = null; render(state); },
+    }));
 
     if (heroDef.tier !== 'mythic' && heroDef.tier !== 'immortal') {
       const preview = sellPreview(heroDef);
       const icon = preview.gold ? UI_IMAGES.goldIcon : UI_IMAGES.luckstoneIcon;
       const amount = preview.gold || preview.luckstone;
-      nodes.push(el('button', {
+      above.push(el('button', {
         class: 'cell-quick-btn cell-quick-sell',
-        style: `left:${centerX}%; top:${rect.top}%;`,
         onclick: () => { apply(sellHero(state, instance.instanceId)); ui.selectedInstanceId = null; },
       }, [
         el('span', { text: '판매' }),
         el('span', { class: 'cell-quick-reward' }, [el('img', { src: icon, alt: '' }), el('span', { text: `+${amount}` })]),
       ]));
     }
+    above.push(el('button', {
+      class: 'cell-quick-btn cell-quick-move', text: '이동',
+      onclick: () => { ui.moveMode = true; render(state); },
+    }));
+    above.push(el('button', {
+      class: 'cell-quick-btn cell-quick-enhance',
+      text: `강화 (${ENHANCE_GOLD_COST}G ${ENHANCE_LUCKSTONE_COST}💎)`,
+      disabled: state.gold < ENHANCE_GOLD_COST || state.luckstone < ENHANCE_LUCKSTONE_COST,
+      onclick: () => apply(enhanceHero(state, instance.instanceId)),
+    }));
 
     if (slot.occupants.length === 3 && heroDef.tier !== 'legendary') {
-      nodes.push(el('button', {
-        class: 'cell-quick-btn cell-quick-synth',
-        style: `left:${centerX}%; top:${rect.top + rect.height}%;`,
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-synth', text: '합성',
         onclick: () => apply(synthesize(state, slot.row, slot.col)),
-      }, [el('span', { text: '합성' })]));
+      }));
+    }
+    if (instance.heroId === 'm_mama') {
+      below.push(el('button', {
+        class: `cell-quick-btn cell-quick-extra ${instance.breakthrough ? 'active' : ''}`, text: '돌파',
+        onclick: () => apply(toggleBreakthrough(state, instance.instanceId)),
+      }));
+    }
+    if (heroDef.tier === 'mythic' && heroDef.immortalCondition) {
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra', text: '승급 시도',
+        onclick: () => apply(checkImmortalPromotion(state, instance.instanceId)),
+      }));
+    }
+    if (instance.heroId === 'i_giga_chad') {
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra', text: '판매(+6💧)',
+        onclick: () => apply(sellGigaChad(state, instance.instanceId)),
+      }));
+    }
+    if (instance.heroId === 'm_tar' && countHeroOnField(state, 'm_tar').count > 1) {
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra', text: '동족포식',
+        onclick: () => apply(cannibalizeTar(state, instance.instanceId)),
+      }));
+    }
+    if (instance.heroId === 'm_indy') {
+      const canDig = state.indyTreasure.slot && state.indyTreasure.slot.row === slot.row && state.indyTreasure.slot.col === slot.col;
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra', text: '발굴', disabled: !canDig,
+        onclick: () => apply(digTreasure(state, instance.instanceId)),
+      }));
+    }
+    if (SECOND_STAGE_IMMORTAL[instance.heroId]) {
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra',
+        text: `2차 변신(성공 ${Math.round(SECOND_STAGE_IMMORTAL[instance.heroId].successRate * 100)}%)`,
+        onclick: () => { apply(attemptSecondStageEvolution(state, instance.instanceId)); ui.selectedInstanceId = null; },
+      }));
+    }
+    if (heroDef.tier === 'mythic' && instance.heroId !== 'm_chad') {
+      const chad = state.field.flatMap((s) => s.occupants).find((o) => o.heroId === 'm_chad');
+      if (chad) {
+        below.push(el('button', {
+          class: 'cell-quick-btn cell-quick-extra', text: '채드 먹이기(+5💧)',
+          onclick: () => { apply(feedMythicToChad(state, chad.instanceId, instance.instanceId)); ui.selectedInstanceId = null; },
+        }));
+      }
     }
 
-    if (!nodes.length) return null;
-    return el('div', { class: 'cell-quick-actions' }, nodes);
+    // 불멸 진행도/마마 임프 수/타르 단계 등 부가 정보는 큰 카드 대신 작은 배지 한 줄로만
+    // 보여준다.
+    const statusText = extraStatusText(instance, heroDef);
+    const displayLabel = heroDisplayLabel(instance, heroDef);
+    const statusParts = [];
+    if (displayLabel !== heroDef.name) statusParts.push(displayLabel);
+    if (heroDef.immortalCondition) {
+      statusParts.push(`불멸 ${Math.floor(instance.progress ?? 0)}${heroDef.immortalCondition.target != null ? '/' + heroDef.immortalCondition.target : ''}`);
+    }
+    if (statusText) statusParts.push(statusText);
+    if (statusParts.length) {
+      above.unshift(el('div', { class: 'cell-status-badge', text: statusParts.join(' · ') }));
+    }
+
+    const aboveWrap = el('div', {
+      class: 'cell-quick-stack cell-quick-stack-above',
+      style: `left:${centerX}%; top:${rect.top}%;`,
+    }, above);
+    const belowWrap = below.length
+      ? el('div', {
+          class: 'cell-quick-stack cell-quick-stack-below',
+          style: `left:${centerX}%; top:${rect.top + rect.height}%;`,
+        }, below)
+      : null;
+
+    return el('div', { class: 'cell-quick-actions' }, [aboveWrap, belowWrap].filter(Boolean));
   }
 
   // m_tar(단계별)/m_dragon(드레인 준비) 등, 필드에서 상태에 따라 표시가 달라지던 영웅들을
@@ -445,81 +531,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
     }
     ui.selectedInstanceId = null;
     return null;
-  }
-
-  function renderSelectedPanel(state) {
-    const found = selectedInstance(state);
-    if (!found) return null;
-    const { slot, instance } = found;
-    const heroDef = HEROES_BY_ID[instance.heroId];
-    const buttons = [];
-
-    buttons.push(el('button', { class: 'btn', text: '이동', onclick: () => { ui.moveMode = true; render(state); } }));
-    buttons.push(el('button', {
-      class: 'btn', text: `강화 (${ENHANCE_GOLD_COST}G ${ENHANCE_LUCKSTONE_COST}💎)`,
-      disabled: state.gold < ENHANCE_GOLD_COST || state.luckstone < ENHANCE_LUCKSTONE_COST,
-      onclick: () => apply(enhanceHero(state, instance.instanceId)),
-    }));
-
-    // 판매/합성은 선택 패널이 아니라 칸 위/아래에 붙는 버튼으로 따로 뜬다
-    // (renderCellQuickActions 참고).
-    if (instance.heroId === 'm_mama') {
-      buttons.push(el('button', {
-        class: `btn ${instance.breakthrough ? 'active' : ''}`, text: '돌파', onclick: () => apply(toggleBreakthrough(state, instance.instanceId)),
-      }));
-    }
-    if (heroDef.tier === 'mythic' && heroDef.immortalCondition) {
-      buttons.push(el('button', {
-        class: 'btn', text: '승급 시도',
-        onclick: () => apply(checkImmortalPromotion(state, instance.instanceId)),
-      }));
-    }
-    if (instance.heroId === 'i_giga_chad') {
-      buttons.push(el('button', { class: 'btn', text: '판매(+6 행운석)', onclick: () => apply(sellGigaChad(state, instance.instanceId)) }));
-    }
-    if (instance.heroId === 'm_tar' && countHeroOnField(state, 'm_tar').count > 1) {
-      buttons.push(el('button', { class: 'btn', text: '동족포식', onclick: () => apply(cannibalizeTar(state, instance.instanceId)) }));
-    }
-    if (instance.heroId === 'm_indy') {
-      const canDig = state.indyTreasure.slot && state.indyTreasure.slot.row === slot.row && state.indyTreasure.slot.col === slot.col;
-      buttons.push(el('button', {
-        class: 'btn', text: '발굴', disabled: !canDig,
-        onclick: () => apply(digTreasure(state, instance.instanceId)),
-      }));
-    }
-    if (SECOND_STAGE_IMMORTAL[instance.heroId]) {
-      buttons.push(el('button', {
-        class: 'btn', text: `2차 변신 시도(성공 ${Math.round(SECOND_STAGE_IMMORTAL[instance.heroId].successRate * 100)}%, 실패 시 소멸)`,
-        onclick: () => { apply(attemptSecondStageEvolution(state, instance.instanceId)); ui.selectedInstanceId = null; },
-      }));
-    }
-    if (heroDef.tier === 'mythic' && instance.heroId !== 'm_chad') {
-      const chad = state.field.flatMap((s) => s.occupants).find((o) => o.heroId === 'm_chad');
-      if (chad) {
-        buttons.push(el('button', {
-          class: 'btn', text: '채드에게 먹이기(+5 행운석)',
-          onclick: () => { apply(feedMythicToChad(state, chad.instanceId, instance.instanceId)); ui.selectedInstanceId = null; },
-        }));
-      }
-    }
-
-    return el('div', { class: 'selected-panel' }, [
-      el('button', { class: 'selected-close', text: '✕', onclick: () => { ui.selectedInstanceId = null; render(state); } }),
-      el('div', { class: 'selected-header' }, [
-        heroImage(heroDef, { className: 'selected-image', instance }),
-        el('div', { class: 'selected-title', text: `${heroDisplayLabel(instance, heroDef)} (${TIER_LABEL[heroDef.tier]}) +${instance.enhanceLevel}` }),
-      ]),
-      heroDef.immortalCondition
-        ? el('div', { class: 'immortal-progress', text: `불멸 진행도: ${Math.floor(instance.progress ?? 0)}${heroDef.immortalCondition.target != null ? ' / ' + heroDef.immortalCondition.target : ''}` })
-        : null,
-      extraStatusText(instance, heroDef)
-        ? el('div', { class: 'immortal-progress extra-status-line' }, [
-            instance.heroId === 'm_mama' ? el('img', { class: 'extra-status-icon', src: UI_IMAGES.impIcon, alt: '' }) : null,
-            el('span', { text: extraStatusText(instance, heroDef) }),
-          ])
-        : null,
-      el('div', { class: 'action-buttons' }, buttons),
-    ]);
   }
 
   // 마마(임프 보유량)/인디(보유 보물 등급) 등 진행도 텍스트 외에 추가로 보여줄 상태 한 줄.
