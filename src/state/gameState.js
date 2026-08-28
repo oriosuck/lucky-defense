@@ -58,6 +58,7 @@ export function createGameState(config) {
     immortalPet: config.immortalPet,
     ownedHeroes: config.ownedHeroes ?? [],
     unlockedInstantSummons: [], // 즐겨찾기 등록 + 조합 완료된 신화 heroId 목록 (좌측 즉시소환 버튼)
+    globalUpgrades: { normalRare: 1, hero: 1, legendaryImmortal: 1, summonRate: 1 }, // 강화 버튼: 등급대별 전체 강화 레벨(실제 게임 화면 기준)
     missions: createMissionProgress(),
     eventLog: { deleteEvent: null, incapacitateEvent: null, triggeredRounds: [] },
     counters: {

@@ -29,3 +29,8 @@ export function fieldMaxCapacity(meatLevel) {
 export function defaultRelics() {
   return { vault: 1, moneygun: 1, luckstone: 1, meat: 1, wallet: 1 };
 }
+
+// 라운드 종료 골드 보너스 %: 금고 1레벨 5%, 레벨당 +0.5%p (기획서 6장 확정 수치)
+export function roundClearGoldBonusPct(vaultLevel) {
+  return 5 + (vaultLevel - 1) * 0.5;
+}

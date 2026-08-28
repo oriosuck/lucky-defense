@@ -3,7 +3,10 @@ import { BOSS_IMAGE, BACKGROUND_IMAGE, TAR_STAGE_IMAGES, DRAGON_DRAIN_IMAGE, FRO
 import { missionDefinitions } from '../logic/missions.js';
 import { summonNormal, summonRoulette } from '../logic/summon.js';
 import { synthesize, craftMythic, sellHero, feedMythicToChad, sellGigaChad, countHeroOnField, instantSummonFavorite } from '../logic/synthesis.js';
-import { enhanceHero, moveHero, toggleBreakthrough, ENHANCE_GOLD_COST, ENHANCE_LUCKSTONE_COST } from '../logic/actions.js';
+import {
+  enhanceHero, moveHero, toggleBreakthrough, ENHANCE_GOLD_COST, ENHANCE_LUCKSTONE_COST,
+  GLOBAL_UPGRADE_TRACKS, GLOBAL_UPGRADE_MAX_LEVEL, globalUpgradeCost, upgradeGlobalTrack,
+} from '../logic/actions.js';
 import { checkImmortalPromotion, cannibalizeTar } from '../logic/immortal.js';
 import { fieldOccupantCount } from '../state/gameState.js';
 import { el } from './components/dom.js';
@@ -17,9 +20,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
   const ui = {
     selectedInstanceId: null,
     moveMode: false,
-    mythicPopup: null, // null | 'owned' | 'immortal'
+    mythicPopup: null, // null | { tab: 'mythic'|'immortal', selectedId: string|null }
     missionPopup: false,
     roulettePopup: false,
+    enhancePopup: false,
     monsters: [], // 좌->우 굴을 지나가는 장식용 몬스터 애니메이션 상태
     lastMonsterSpawnAt: null,
   };
@@ -61,6 +65,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (ui.mythicPopup) root.appendChild(renderMythicPopup(state));
     if (ui.missionPopup) root.appendChild(renderMissionPopup(state));
     if (ui.roulettePopup) root.appendChild(renderRoulettePopup(state));
+    if (ui.enhancePopup) root.appendChild(renderEnhancePopup(state));
     if (state.result) root.appendChild(renderResultOverlay(state));
   }
 
@@ -286,6 +291,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const buttons = [];
 
     buttons.push(el('button', { class: 'btn', text: '이동', onclick: () => { ui.moveMode = true; render(state); } }));
+    buttons.push(el('button', {
+      class: 'btn',
+      text: `강화 (🍞${ENHANCE_GOLD_COST} 💧${ENHANCE_LUCKSTONE_COST})`,
+      disabled: state.gold < ENHANCE_GOLD_COST || state.luckstone < ENHANCE_LUCKSTONE_COST,
+      onclick: () => apply(enhanceHero(state, instance.instanceId)),
+    }));
 
     if (heroDef.tier !== 'mythic' && heroDef.tier !== 'immortal') {
       buttons.push(el('button', {
@@ -345,7 +356,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         el('button', {
           class: 'img-btn mythic-btn-img',
           style: `background-image: url(${UI_IMAGES.mythicBtn})`,
-          onclick: () => { ui.mythicPopup = 'owned'; render(state); },
+          onclick: () => { ui.mythicPopup = { tab: 'mythic', selectedId: null }; render(state); },
         }, [el('span', { class: 'hex-badge', text: String(mythicOwnedCount) })]),
         el('button', {
           class: 'img-btn summon-btn-img',
@@ -365,8 +376,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         el('button', {
           class: 'img-btn enhance-btn-img',
           style: `background-image: url(${UI_IMAGES.enhanceBtn})`,
-          disabled: !ui.selectedInstanceId || state.gold < ENHANCE_GOLD_COST || state.luckstone < ENHANCE_LUCKSTONE_COST,
-          onclick: () => apply(enhanceHero(state, ui.selectedInstanceId)),
+          onclick: () => { ui.enhancePopup = true; render(state); },
         }),
       ]),
     ]);
@@ -389,57 +399,136 @@ export function GameScreen({ getState, dispatch, onExit }) {
     );
     return el('div', { class: 'popup-overlay', onclick: (e) => { if (e.target === e.currentTarget) { ui.roulettePopup = false; render(state); } } }, [
       el('div', { class: 'roulette-popup-frame', style: `background-image: url(${UI_IMAGES.roulettePopupBg})` }, [
-        el('div', { class: 'roulette-popup-title', text: String(state.luckstone) }),
-        el('div', { class: 'roulette-popup-status' }, [
-          el('span', { text: `보유 행운석: ${state.luckstone}` }),
-          el('span', { text: `필드 영웅: ${fieldOccupantCount(state)} / ${state.fieldMaxCapacity}` }),
-        ]),
+        // 배경 아트 상단에 보석/인원 아이콘 + "/" 구분자가 이미 그려져 있어서, 그 자리에 숫자만 얹는다.
+        el('span', { class: 'roulette-status-luckstone', text: String(state.luckstone) }),
+        el('span', { class: 'roulette-status-field-cur', text: String(fieldOccupantCount(state)) }),
+        el('span', { class: 'roulette-status-field-max', text: String(state.fieldMaxCapacity) }),
         el('button', { class: 'roulette-popup-close', text: '✕', onclick: () => { ui.roulettePopup = false; render(state); } }),
         el('div', { class: 'roulette-row' }, circles),
       ]),
     ]);
   }
 
+  // 하단 "강화" 버튼: 영웅 선택 여부와 무관하게 항상 열리는 등급대별 전체 강화 팝업(실제 게임 화면 기준).
+  function renderEnhancePopup(state) {
+    const cards = Object.entries(GLOBAL_UPGRADE_TRACKS).map(([key, track]) => {
+      const level = state.globalUpgrades[key];
+      const maxed = level >= GLOBAL_UPGRADE_MAX_LEVEL;
+      const cost = maxed ? null : globalUpgradeCost(key, level);
+      const afford = !maxed && (track.currency === 'gold' ? state.gold >= cost : state.luckstone >= cost);
+      return el('div', { class: 'enhance-track-card' }, [
+        el('div', { class: 'enhance-track-label', text: track.label }),
+        el('div', { class: 'enhance-track-level', text: `Lv.${level}` }),
+        el('button', {
+          class: 'btn enhance-track-buy',
+          disabled: maxed || !afford,
+          text: maxed ? 'MAX' : `${track.currency === 'gold' ? '🍞' : '💧'}${cost}`,
+          onclick: () => apply(upgradeGlobalTrack(state, key)),
+        }),
+      ]);
+    });
+    return el('div', { class: 'popup-overlay popup-overlay-bottom', onclick: (e) => { if (e.target === e.currentTarget) { ui.enhancePopup = false; render(state); } } }, [
+      el('div', { class: 'enhance-popup-box' }, [
+        el('div', { class: 'enhance-popup-header' }, [
+          el('span', { class: 'enhance-popup-currency', text: `🍞 ${Math.floor(state.gold)}` }),
+          el('span', { class: 'enhance-popup-currency', text: `💧 ${state.luckstone}` }),
+          el('button', { class: 'enhance-popup-close', text: '✕', onclick: () => { ui.enhancePopup = false; render(state); } }),
+        ]),
+        el('div', { class: 'enhance-track-row' }, cards),
+      ]),
+    ]);
+  }
+
+  // 신화 재료 확보율(%) - 조합 재료가 없는 영웅(예외 없음, 신화는 전부 조합 전용)은 항상 100.
+  function mythicMaterialsProgress(state, heroDef) {
+    const mats = heroDef.synthMaterials ?? [];
+    if (!mats.length) return 100;
+    let have = 0;
+    let need = 0;
+    for (const m of mats) {
+      have += Math.min(countHeroOnField(state, m.heroId).count, m.count);
+      need += m.count;
+    }
+    return need ? Math.round((have / need) * 100) : 100;
+  }
+
+  // 신화 버튼 팝업: 위쪽 = 선택된 조합 레시피(재료 보유 체크 + 소환 버튼), 아래쪽 = 보유 영웅 그리드(진행률 표시).
+  // 실제 게임 화면 기준. 하단 탭으로 "신화"(조합)와 "불멸"(승급 진행도)을 전환한다.
   function renderMythicPopup(state) {
+    const popupState = ui.mythicPopup;
     const ownedMythicIds = state.ownedHeroes
       .map((h) => h.heroId)
       .filter((id) => HEROES_BY_ID[id]?.tier === 'mythic');
+    const favoriteIds = new Set(state.ownedHeroes.filter((h) => h.favorite).map((h) => h.heroId));
 
-    const tabs = el('div', { class: 'popup-tabs' }, [
-      el('button', { class: `btn ${ui.mythicPopup === 'owned' ? 'active' : ''}`, text: '보유 영웅', onclick: () => { ui.mythicPopup = 'owned'; render(state); } }),
-      el('button', { class: `btn ${ui.mythicPopup === 'immortal' ? 'active' : ''}`, text: '불멸 조건', onclick: () => { ui.mythicPopup = 'immortal'; render(state); } }),
+    const tabs = el('div', { class: 'popup-tabs mythic-popup-tabs' }, [
+      el('button', { class: `btn ${popupState.tab === 'mythic' ? 'active' : ''}`, text: '신화', onclick: () => { popupState.tab = 'mythic'; render(state); } }),
+      el('button', { class: `btn ${popupState.tab === 'immortal' ? 'active' : ''}`, text: '불멸', onclick: () => { popupState.tab = 'immortal'; render(state); } }),
     ]);
 
     let body;
-    if (ui.mythicPopup === 'owned') {
-      body = el('ul', { class: 'mythic-list' }, ownedMythicIds.map((id) => {
-        const heroDef = HEROES_BY_ID[id];
-        const missing = (heroDef.synthMaterials ?? []).filter((m) => countHeroOnField(state, m.heroId).count < m.count);
-        return el('li', {}, [
-          el('img', { class: 'mythic-list-image', src: heroDef.image, alt: heroDef.name }),
-          el('span', { text: `${heroDef.name} ` }),
+    if (popupState.tab === 'mythic') {
+      let selectedId = popupState.selectedId && ownedMythicIds.includes(popupState.selectedId) ? popupState.selectedId : null;
+      if (!selectedId) {
+        selectedId = ownedMythicIds.find((id) => mythicMaterialsProgress(state, HEROES_BY_ID[id]) >= 100) ?? ownedMythicIds[0] ?? null;
+      }
+      const selectedDef = selectedId ? HEROES_BY_ID[selectedId] : null;
+
+      let recipePanel;
+      if (selectedDef) {
+        const mats = selectedDef.synthMaterials ?? [];
+        const missing = mats.filter((m) => countHeroOnField(state, m.heroId).count < m.count);
+        recipePanel = el('div', { class: 'mythic-recipe-panel' }, [
+          el('div', { class: 'mythic-recipe-title', text: selectedDef.name }),
+          el('div', { class: 'mythic-recipe-materials' }, mats.map((m) => {
+            const matDef = HEROES_BY_ID[m.heroId];
+            const owned = countHeroOnField(state, m.heroId).count >= m.count;
+            return el('div', { class: `mythic-recipe-material ${owned ? 'owned' : 'missing'}` }, [
+              el('img', { src: matDef.image, alt: matDef.name }),
+              el('span', { class: 'mythic-recipe-material-check', text: owned ? '✔' : '✕' }),
+            ]);
+          })),
+          el('span', { class: 'mythic-recipe-arrow', text: '→' }),
+          el('img', { class: 'mythic-recipe-result', src: selectedDef.image, alt: selectedDef.name }),
           el('button', {
-            class: 'btn', text: '조합', disabled: missing.length > 0,
-            onclick: () => apply(craftMythic(state, id)),
+            class: 'btn btn-primary mythic-recipe-summon', text: '소환', disabled: missing.length > 0,
+            onclick: () => apply(craftMythic(state, selectedId)),
           }),
-          missing.length ? el('span', { class: 'missing-note', text: ` 부족: ${missing.map((m) => HEROES_BY_ID[m.heroId].name).join(', ')}` }) : null,
+        ]);
+      } else {
+        recipePanel = el('div', { class: 'mythic-recipe-empty', text: '영웅 선택 화면에서 신화 영웅을 먼저 보유로 선택해 주세요.' });
+      }
+
+      const grid = el('div', { class: 'mythic-grid' }, ownedMythicIds.map((id) => {
+        const def = HEROES_BY_ID[id];
+        const pct = mythicMaterialsProgress(state, def);
+        return el('button', {
+          class: `mythic-grid-item ${id === selectedId ? 'selected' : ''}`,
+          onclick: () => { popupState.selectedId = id; render(state); },
+        }, [
+          favoriteIds.has(id) ? el('span', { class: 'mythic-grid-star', text: '★' }) : null,
+          el('img', { src: def.image, alt: def.name }),
+          el('span', { class: 'mythic-grid-progress', text: `진행률 ${pct}%` }),
         ]);
       }));
+
+      body = el('div', { class: 'mythic-popup-body' }, [recipePanel, grid]);
     } else {
       const activeMythics = state.field.flatMap((s) => s.occupants.filter((o) => HEROES_BY_ID[o.heroId]?.tier === 'mythic'));
-      body = el('ul', { class: 'mythic-list' }, activeMythics.map((instance) => {
-        const heroDef = HEROES_BY_ID[instance.heroId];
-        const cond = heroDef.immortalCondition;
-        return el('li', {}, [
-          el('img', { class: 'mythic-list-image', src: heroImage(instance, heroDef), alt: heroDef.name }),
-          el('span', { text: `${cond.name}: ${Math.floor(instance.progress ?? 0)}${cond.target != null ? ' / ' + cond.target : ''}` }),
-        ]);
-      }));
-      if (!activeMythics.length) body = el('div', { text: '필드에 배치된 신화 등급 영웅이 없습니다.' });
+      body = activeMythics.length
+        ? el('ul', { class: 'mythic-list' }, activeMythics.map((instance) => {
+          const heroDef = HEROES_BY_ID[instance.heroId];
+          const cond = heroDef.immortalCondition;
+          return el('li', {}, [
+            el('img', { class: 'mythic-list-image', src: heroImage(instance, heroDef), alt: heroDef.name }),
+            el('span', { text: `${cond.name}: ${Math.floor(instance.progress ?? 0)}${cond.target != null ? ' / ' + cond.target : ''}` }),
+          ]);
+        }))
+        : el('div', { text: '필드에 배치된 신화 등급 영웅이 없습니다.' });
     }
 
     return el('div', { class: 'popup-overlay', onclick: (e) => { if (e.target === e.currentTarget) { ui.mythicPopup = null; render(state); } } }, [
-      el('div', { class: 'popup-box' }, [tabs, body, el('button', { class: 'btn', text: '닫기', onclick: () => { ui.mythicPopup = null; render(state); } })]),
+      el('div', { class: 'popup-box mythic-popup-box' }, [tabs, body, el('button', { class: 'btn', text: '닫기', onclick: () => { ui.mythicPopup = null; render(state); } })]),
     ]);
   }
 

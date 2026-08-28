@@ -1,5 +1,6 @@
 import { waveDuration, TOTAL_WAVES, FIELD_ROWS, FIELD_COLS, fieldOccupantCount } from '../state/gameState.js';
 import { countHeroOnField } from './synthesis.js';
+import { roundClearGoldBonusPct } from '../data/relics.js';
 
 const INCAPACITATE_ROUNDS = { 2: 15, 4: 20, 5: 1, 7: 1, 9: 10 };
 const INCAPACITATE_FILL_SEC = 5;
@@ -10,7 +11,8 @@ const DELETE_TRIGGER_AT_TIME_LEFT = 6;
 const MONSTER_SPAWN_INTERVAL_SEC = 0.8; // 8초에 10마리 등장하는 속도
 const MONSTER_KILL_RATE_PER_SEC = 2; // 필드에 영웅이 1마리라도 있으면 초당 2마리씩 처치
 const MONSTER_KILL_GOLD = 30; // 몬스터 처치 시 보상(마리당, 기획서 6장 확정 수치)
-const ROUND_CLEAR_LUCKSTONE = 5; // 라운드 종료 보상(기획서 6장). 골드 +10+@는 % 미정으로 보류.
+const ROUND_CLEAR_LUCKSTONE = 5; // 라운드 종료 보상: 행운석 +5
+const ROUND_CLEAR_GOLD_BASE = 10; // 라운드 종료 보상: 골드 +10 + 금고 레벨에 따른 % 가산
 
 function randomInt(maxExclusive) {
   return Math.floor(Math.random() * maxExclusive);
@@ -36,6 +38,8 @@ export function tickWave(state, deltaSec) {
     onWaveStart(newState);
   } else if (newState.wave >= 1 && newState.waveTimeLeft <= 0) {
     newState.luckstone += ROUND_CLEAR_LUCKSTONE; // 라운드 종료 보상: 행운석 +5
+    const bonusPct = roundClearGoldBonusPct(newState.relics.vault);
+    newState.gold += ROUND_CLEAR_GOLD_BASE + Math.floor(newState.gold * (bonusPct / 100));
     if (newState.wave >= TOTAL_WAVES) {
       newState.result = 'win';
     } else {
