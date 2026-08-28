@@ -512,16 +512,26 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 담을 수 없어서). z-index를 그리드 행(row) 번호로 매겨 아래쪽(화면 앞쪽) 행 캐릭터가
   // 위쪽(화면 뒷쪽) 행 캐릭터를 가리는 입체감을 낸다(사용자 참고 스크린샷 그대로 -
   // 원근감 있는 배치).
-  // 캐릭터는 칸 바닥선에 발을 맞추는 대신 칸 정중앙을 기준으로 배치한다(사용자 지정 -
-  // "칸의 바닥선을 따라 배치하지 말고 처음부터 가운데를 기준으로 배치해라"). 크기도
-  // 3배로 키워서(사용자 지정) 칸보다 훨씬 커지므로 위아래로 크게 넘치는 게 정상이다
-  // (예전의 "칸 안에 완전히 들어가야 한다"는 제약은 이번 요청으로 뒤집힌 것 - 헷갈리지
-  // 말 것).
+  // 캐릭터의 "맨 밑선"(발)을 칸 바닥선이 아니라 칸 정중앙에 맞춘다(사용자 지정 -
+  // "캐릭터 맨 밑선 기준으로 중앙에다가 정렬"). 박스 전체를 칸 중앙에 놓는 게
+  // 아니라 발끝이 중앙에 오도록 박스를 위로 끌어올리는 방식이라, 몸통/머리는
+  // 칸 위로 넘치고 발은 칸 안쪽(정중앙)에 남는다.
+  //
+  // 3배로 키웠던 걸 사용자가 "너무 크다"고 되돌렸다 - 이번엔 "3마리가 쌓였을 때
+  // 그 발끝(맨 하단)들이 전부 칸 하나의 가로 폭 안에 들어와야 한다"는 조건으로
+  // 크기를 역산했다. stackOffsets(3)의 좌우 오프셋이 ±0.3*tokenWidth이고 각
+  // 캐릭터 폭이 tokenWidth이므로, 3마리의 가로 전체 스팬은
+  // 2*(0.3+0.5)*tokenWidth = 1.6*tokenWidth - 이게 칸 너비(1.0) 안에 들어오려면
+  // tokenWidth <= 0.625여야 한다. 여유를 좀 두고 0.55로 잡았다(스팬 0.88, 칸 폭의
+  // 88%만 사용 - 발끝이 칸 가장자리에 닿을 듯 말 듯하지 않게). 높이는 예전
+  // 비율(0.8/0.44≈1.82)을 그대로 유지해서 0.55*1.82≈1.0으로 잡았다 - 정확히 칸
+  // 높이 1배라 계산이 깔끔하기도 하고, 캐릭터가 서 있을 때 칸 하나 높이만큼
+  // 위로 솟아 있는 정도라 "적당히 크다"는 느낌과도 맞아떨어진다.
   //
   // 캐릭터 크기는 그 칸에 몇 마리가 쌓여있든 항상 고정이다(사용자 지적 - 예전엔
   // 칸 너비를 마리 수만큼 나눠서 1마리일 때와 3마리일 때 크기가 달라졌었음).
-  const HERO_TOKEN_HEIGHT_RATIO = 2.4; // 기존(0.8) 대비 3배(사용자 지정)
-  const HERO_TOKEN_WIDTH_RATIO = 1.32; // 기존(0.44) 대비 3배(사용자 지정)
+  const HERO_TOKEN_HEIGHT_RATIO = 1.0;
+  const HERO_TOKEN_WIDTH_RATIO = 0.55;
   const IMP_TOKEN_SCALE = 0.5; // 마마 임프는 다른 캐릭터의 절반 크기(사용자 지적 - 너무 컸음)
   const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
   const ATTACK_CYCLE_MS = 900; // 공격 모션(위아래 스쿼시-스트레치) 반복 주기
@@ -576,13 +586,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
       const isImpCell = slot.occupants[0].heroId === IMP_HERO_ID;
       const sizeScale = isImpCell ? IMP_TOKEN_SCALE : 1;
       const tokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO * sizeScale;
-      const baseTop = rect.top + rect.height / 2 - tokenHeight / 2; // 칸 바닥선이 아니라 칸 정중앙 기준(사용자 지정)
+      // 박스 하단(=발끝)이 칸 정중앙에 오도록: 박스 전체를 중앙에 놓는 게 아니라
+      // 발 위치 자체를 칸 중앙에 맞추고 몸통은 그 위로 쌓아 올린다(사용자 지정).
+      const baseTop = rect.top + rect.height / 2 - tokenHeight;
       const tokenWidth = rect.width * HERO_TOKEN_WIDTH_RATIO * sizeScale; // 마리 수와 무관하게 항상 고정
-      // 발밑 그림자(.stage-hero-shadow)는 원래 "토큰 박스 하단 = 칸 바닥선"이라는
-      // 전제로 박스 하단 기준 고정 %였는데, 이제 박스가 칸 정중앙 기준으로 커져서
-      // (사용자 지정) 박스 하단이 더 이상 칸 바닥선이 아니다 - 실제 칸 바닥선이
-      // 박스 안 몇 %(하단 기준) 지점에 오는지 역산해서 매번 다시 계산한다.
-      const shadowBottomPct = ((HERO_TOKEN_HEIGHT_RATIO * sizeScale - 1) / (2 * HERO_TOKEN_HEIGHT_RATIO * sizeScale)) * 100;
       const cellCenterX = rect.left + rect.width / 2;
       const n = slot.occupants.length;
       const offsets = stackOffsets(n);
@@ -638,7 +645,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
           class: `stage-hero-token${debuffed ? ' debuffed' : ''}${usingUltimate ? ' ultimate-flash' : ''}`,
           style: `left:${centerX}%; top:${top}%; width:${tokenWidth}%; height:${tokenHeight}%; z-index:${2 + slot.row};${usingUltimate ? ` --ring-delay:-${ultimateElapsedMs % 800}ms;` : ''}`,
         }, [
-          el('div', { class: 'stage-hero-shadow', style: `bottom:${shadowBottomPct}%;` }),
+          el('div', { class: 'stage-hero-shadow' }),
           heroImage(heroDef, { className: 'stage-hero-image', instance: occ, style: imgStyle }),
           occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
         ]));
