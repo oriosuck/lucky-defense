@@ -6,9 +6,45 @@ import {
   placeInstanceAtSlot,
 } from '../state/gameState.js';
 
-// 판매 보상표(임시 밸런스 - 정식 수치 확정 전까지의 플레이스홀더)
-const SELL_GOLD_BY_TIER = { normal: 10 };
-const SELL_LUCKSTONE_BY_TIER = { rare: 1, hero: 2, legendary: 3 };
+// 판매 보상표(기획 확정: 일반 마리당 30코인, 희귀 1행운석, 영웅 2행운석, 전설 4행운석)
+const SELL_GOLD_BY_TIER = { normal: 30 };
+const SELL_LUCKSTONE_BY_TIER = { rare: 1, hero: 2, legendary: 4 };
+
+// 판매 시 받을 보상 미리보기(칸 위 판매 버튼에 표시용) - 실제 지급은 sellHero()가 담당.
+export function sellPreview(heroDef) {
+  if (heroDef.tier === 'normal') return { gold: SELL_GOLD_BY_TIER.normal, luckstone: 0 };
+  return { gold: 0, luckstone: SELL_LUCKSTONE_BY_TIER[heroDef.tier] ?? 0 };
+}
+
+/**
+ * 같은 영웅이 여러 칸에 조각나 있을 때(예: 판매/재료 소모로 3마리 칸이 2마리로 줄고
+ * 다른 칸에 1마리가 남아있는 경우) 한 칸으로 다시 모아준다. 신화/불멸(항상 칸당 1마리,
+ * 스택 개념 없음)은 대상이 아니다. 개체 수가 가장 많은 칸을 우선 채워서 "적게 남은 쪽이
+ * 많이 남은 쪽으로 합쳐지는" 방향으로 동작한다.
+ */
+export function consolidateHeroStacks(state, heroId) {
+  const heroDef = HEROES_BY_ID[heroId];
+  if (!heroDef || heroDef.tier === 'mythic' || heroDef.tier === 'immortal') return;
+  const holders = state.field.filter((s) => s.occupants.some((o) => o.heroId === heroId));
+  if (holders.length <= 1) return; // 이미 한 칸에 모여 있으면 할 일 없음
+
+  holders.sort((a, b) =>
+    b.occupants.filter((o) => o.heroId === heroId).length - a.occupants.filter((o) => o.heroId === heroId).length,
+  );
+  const allInstances = [];
+  for (const slot of holders) {
+    allInstances.push(...slot.occupants.filter((o) => o.heroId === heroId));
+    slot.occupants = slot.occupants.filter((o) => o.heroId !== heroId);
+  }
+  let idx = 0;
+  for (const slot of holders) {
+    while (slot.occupants.length < 3 && idx < allInstances.length) {
+      slot.occupants.push(allInstances[idx]);
+      idx += 1;
+    }
+    if (idx >= allInstances.length) break;
+  }
+}
 const CHAD_FEED_LUCKSTONE = 5;
 const GIGA_CHAD_SELL_LUCKSTONE = 6;
 
@@ -69,11 +105,12 @@ export function craftMythic(state, mythicHeroId) {
     }
   }
 
-  const targetSlot = findAutoPlaceSlot(newState, mythicHeroId);
-  if (!targetSlot) {
-    return { success: false, reason: 'field-full', newState: state };
-  }
-
+  // 재료를 먼저 소모하고(빈 칸이 새로 생길 수 있음 + 조각난 스택은 자동으로 한 칸에 모음),
+  // 그 다음에 신화를 놓을 자리가 있는지 확인한다. 예전엔 순서가 반대라(자리부터 확인)
+  // 필드가 꽉 찬 상태에서도 재료를 없애면 자리가 남는 경우인데 "필드 꽉 참"으로 잘못
+  // 막혔다. 자리가 끝내 없으면 newState를 버리고 원본 state를 그대로 반환하므로
+  // (아래 field-full 분기) 재료 소모도 함께 취소된다 - 실패 시 부작용이 없다.
+  const materialHeroIds = new Set(heroDef.synthMaterials.map((m) => m.heroId));
   for (const mat of heroDef.synthMaterials) {
     let remaining = mat.count;
     for (const slot of newState.field) {
@@ -86,6 +123,14 @@ export function craftMythic(state, mythicHeroId) {
         return true;
       });
     }
+  }
+  for (const heroId of materialHeroIds) {
+    consolidateHeroStacks(newState, heroId);
+  }
+
+  const targetSlot = findAutoPlaceSlot(newState, mythicHeroId);
+  if (!targetSlot) {
+    return { success: false, reason: 'field-full', newState: state };
   }
 
   placeInstanceAtSlot(targetSlot, createHeroInstance(mythicHeroId, { isImmortalPath: true }));
@@ -151,6 +196,10 @@ export function sellHero(state, instanceId) {
     reward.luckstone = SELL_LUCKSTONE_BY_TIER[heroDef.tier] ?? 0;
     newState.luckstone += reward.luckstone;
   }
+
+  // 판매로 스택이 조각났을 수 있으니(예: 3마리 칸이 2마리로 줄고 다른 칸에 1마리가
+  // 남아있던 경우) 같은 영웅끼리 다시 한 칸으로 모아준다.
+  consolidateHeroStacks(newState, found.instance.heroId);
 
   return { success: true, reward, newState };
 }

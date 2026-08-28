@@ -7,6 +7,7 @@ import {
   synthesize,
   craftMythic,
   sellHero,
+  sellPreview,
   feedMythicToChad,
   sellGigaChad,
   countHeroOnField,
@@ -25,7 +26,7 @@ import {
 import { checkImmortalPromotion, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
 import { IMMOBILIZE_GAUGE_FILL_SEC } from '../logic/waveEvents.js';
 import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL, MONSTER_PER_ROUND } from '../data/constants.js';
-import { fieldOccupantCount, waveDuration } from '../state/gameState.js';
+import { fieldOccupantCount, waveDuration, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
 import { el } from './components/dom.js';
 import { heroImage } from './components/heroVisual.js';
 
@@ -142,6 +143,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
       );
     }
     stage.appendChild(renderField(state));
+    const quickActions = renderCellQuickActions(state);
+    if (quickActions) stage.appendChild(quickActions);
     stage.appendChild(renderFavoriteBar(state));
     stage.appendChild(renderStageControls(state));
     stage.appendChild(renderResourceRow(state));
@@ -302,6 +305,55 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return grid;
   }
 
+  function fieldCellRect(row, col) {
+    const cellW = STAGE_LAYOUT.field.width / FIELD_COLS;
+    const cellH = STAGE_LAYOUT.field.height / FIELD_ROWS;
+    return {
+      left: STAGE_LAYOUT.field.left + col * cellW,
+      top: STAGE_LAYOUT.field.top + row * cellH,
+      width: cellW,
+      height: cellH,
+    };
+  }
+
+  // 판매/합성은 선택 패널 팝업이 아니라 선택된 칸 바로 위/아래에 붙는 작은 버튼으로
+  // 뜬다(사용자 지정 UI) - 판매는 칸 위, 합성(3마리 다 찼을 때만)은 칸 아래.
+  function renderCellQuickActions(state) {
+    if (ui.moveMode) return null; // 이동 대상 선택 중엔 다른 칸 클릭을 방해하지 않게 숨김
+    const found = selectedInstance(state);
+    if (!found) return null;
+    const { slot, instance } = found;
+    const heroDef = HEROES_BY_ID[instance.heroId];
+    const rect = fieldCellRect(slot.row, slot.col);
+    const centerX = rect.left + rect.width / 2;
+    const nodes = [];
+
+    if (heroDef.tier !== 'mythic' && heroDef.tier !== 'immortal') {
+      const preview = sellPreview(heroDef);
+      const icon = preview.gold ? UI_IMAGES.goldIcon : UI_IMAGES.luckstoneIcon;
+      const amount = preview.gold || preview.luckstone;
+      nodes.push(el('button', {
+        class: 'cell-quick-btn cell-quick-sell',
+        style: `left:${centerX}%; top:${rect.top}%;`,
+        onclick: () => { apply(sellHero(state, instance.instanceId)); ui.selectedInstanceId = null; },
+      }, [
+        el('span', { text: '판매' }),
+        el('span', { class: 'cell-quick-reward' }, [el('img', { src: icon, alt: '' }), el('span', { text: `+${amount}` })]),
+      ]));
+    }
+
+    if (slot.occupants.length === 3 && heroDef.tier !== 'legendary') {
+      nodes.push(el('button', {
+        class: 'cell-quick-btn cell-quick-synth',
+        style: `left:${centerX}%; top:${rect.top + rect.height}%;`,
+        onclick: () => apply(synthesize(state, slot.row, slot.col)),
+      }, [el('span', { text: '합성' })]));
+    }
+
+    if (!nodes.length) return null;
+    return el('div', { class: 'cell-quick-actions' }, nodes);
+  }
+
   // m_tar(단계별)/m_dragon(드레인 준비) 등, 필드에서 상태에 따라 표시가 달라지던 영웅들을
   // 위한 이름 라벨.
   function heroDisplayLabel(instance, heroDef) {
@@ -398,14 +450,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
       onclick: () => apply(enhanceHero(state, instance.instanceId)),
     }));
 
-    if (heroDef.tier !== 'mythic' && heroDef.tier !== 'immortal') {
-      buttons.push(el('button', {
-        class: 'btn', text: '판매', onclick: () => { apply(sellHero(state, instance.instanceId)); ui.selectedInstanceId = null; },
-      }));
-    }
-    if (slot.occupants.length === 3 && heroDef.tier !== 'legendary') {
-      buttons.push(el('button', { class: 'btn', text: '합성', onclick: () => apply(synthesize(state, slot.row, slot.col)) }));
-    }
+    // 판매/합성은 선택 패널이 아니라 칸 위/아래에 붙는 버튼으로 따로 뜬다
+    // (renderCellQuickActions 참고).
     if (instance.heroId === 'm_mama') {
       buttons.push(el('button', {
         class: `btn ${instance.breakthrough ? 'active' : ''}`, text: '돌파', onclick: () => apply(toggleBreakthrough(state, instance.instanceId)),
@@ -517,8 +563,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
     { tier: 'legendary', slot: 'right', colorClass: 'gold' },
   ];
 
-  const ROULETTE_SPIN_MS = 900; // "1초보다 조금 짧게" 도는 연출(기획서 확정)
-  const ROULETTE_FAIL_FLASH_MS = 900;
+  const ROULETTE_SPIN_MS = 1000; // 룰렛이 도는 시간 - 정확히 1초
+  const ROULETTE_FAIL_FLASH_MS = 500; // 다 돌아간 뒤 해골을 보여주는 시간
 
   function onRouletteWheelClick(r) {
     if (ui.spinningTier) return; // 이미 도는 중이면 무시
