@@ -346,6 +346,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
       onclick: () => { ui.selectedInstanceId = null; render(state); },
     }));
 
+    // 일반~전설은 판매/합성 외에 다른 기능이 없다(이동/강화 버튼 없음). 신화~불멸은
+    // 반대로 일반 판매가 안 되고 채드가 필드에 있을 때만 "먹이기"로 처분할 수 있다 -
+    // 그 자리가 일반 판매 버튼과 같은 위치(above)에 온다.
     if (heroDef.tier !== 'mythic' && heroDef.tier !== 'immortal') {
       const preview = sellPreview(heroDef);
       const icon = preview.gold ? UI_IMAGES.goldIcon : UI_IMAGES.luckstoneIcon;
@@ -357,17 +360,16 @@ export function GameScreen({ getState, dispatch, onExit }) {
         el('span', { text: '판매' }),
         el('span', { class: 'cell-quick-reward' }, [el('img', { src: icon, alt: '' }), el('span', { text: `+${amount}` })]),
       ]));
+    } else if (instance.heroId !== 'm_chad' && instance.heroId !== 'i_giga_chad') {
+      // 기가채드(불멸)는 전용 판매(below의 '판매(+6💧)')가 따로 있어 채드 먹이기 대상에서 제외.
+      const chad = state.field.flatMap((s) => s.occupants).find((o) => o.heroId === 'm_chad');
+      if (chad) {
+        above.push(el('button', {
+          class: 'cell-quick-btn cell-quick-sell', text: '채드 먹이기(+5💧)',
+          onclick: () => { apply(feedMythicToChad(state, chad.instanceId, instance.instanceId)); ui.selectedInstanceId = null; },
+        }));
+      }
     }
-    above.push(el('button', {
-      class: 'cell-quick-btn cell-quick-move', text: '이동',
-      onclick: () => { ui.moveMode = true; render(state); },
-    }));
-    above.push(el('button', {
-      class: 'cell-quick-btn cell-quick-enhance',
-      text: `강화 (${ENHANCE_GOLD_COST}G ${ENHANCE_LUCKSTONE_COST}💎)`,
-      disabled: state.gold < ENHANCE_GOLD_COST || state.luckstone < ENHANCE_LUCKSTONE_COST,
-      onclick: () => apply(enhanceHero(state, instance.instanceId)),
-    }));
 
     if (slot.occupants.length === 3 && heroDef.tier !== 'legendary') {
       below.push(el('button', {
@@ -413,14 +415,21 @@ export function GameScreen({ getState, dispatch, onExit }) {
         onclick: () => { apply(attemptSecondStageEvolution(state, instance.instanceId)); ui.selectedInstanceId = null; },
       }));
     }
-    if (heroDef.tier === 'mythic' && instance.heroId !== 'm_chad') {
-      const chad = state.field.flatMap((s) => s.occupants).find((o) => o.heroId === 'm_chad');
-      if (chad) {
-        below.push(el('button', {
-          class: 'cell-quick-btn cell-quick-extra', text: '채드 먹이기(+5💧)',
-          onclick: () => { apply(feedMythicToChad(state, chad.instanceId, instance.instanceId)); ui.selectedInstanceId = null; },
-        }));
-      }
+    // 이동/강화는 일반 액션이 아니라, 해당 불멸 조건이 그 이벤트를 요구하는 특정
+    // 영웅(탑 베인=이동, 아이언미야옹=강화)에 한해서만 진행도 카운트 용도로 노출한다.
+    if (heroDef.immortalCondition?.eventType === 'move') {
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra', text: '이동',
+        onclick: () => { ui.moveMode = true; render(state); },
+      }));
+    }
+    if (heroDef.immortalCondition?.eventType === 'enhance') {
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra',
+        text: `강화 (${ENHANCE_GOLD_COST}G ${ENHANCE_LUCKSTONE_COST}💎)`,
+        disabled: state.gold < ENHANCE_GOLD_COST || state.luckstone < ENHANCE_LUCKSTONE_COST,
+        onclick: () => apply(enhanceHero(state, instance.instanceId)),
+      }));
     }
 
     // 불멸 진행도/마마 임프 수/타르 단계 등 부가 정보는 큰 카드 대신 작은 배지 한 줄로만

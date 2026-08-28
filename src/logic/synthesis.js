@@ -214,13 +214,18 @@ export function feedMythicToChad(state, chadInstanceId, mythicInstanceId) {
   if (!chad || chad.instance.heroId !== 'm_chad') {
     return { success: false, reason: 'not-chad', newState: state };
   }
-  if (!mythic || HEROES_BY_ID[mythic.instance.heroId]?.tier !== 'mythic') {
+  const fedTier = HEROES_BY_ID[mythic?.instance.heroId]?.tier;
+  if (!mythic || (fedTier !== 'mythic' && fedTier !== 'immortal')) {
     return { success: false, reason: 'not-mythic', newState: state };
   }
 
   mythic.slot.occupants = mythic.slot.occupants.filter((o) => o.instanceId !== mythicInstanceId);
   newState.luckstone += CHAD_FEED_LUCKSTONE;
-  chad.instance.progress = (chad.instance.progress ?? 0) + 1; // 기가채드 조건: 신화 판매 5회 누적
+  // 기가채드 조건 문구가 "신화 영웅 판매(먹이기) 5회"로 명시돼 있어 불멸 등급을
+  // 먹였을 때는 진행도에 반영하지 않는다(행운석 보상만 지급).
+  if (fedTier === 'mythic') {
+    chad.instance.progress = (chad.instance.progress ?? 0) + 1;
+  }
 
   return { success: true, reward: { luckstone: CHAD_FEED_LUCKSTONE }, newState };
 }
