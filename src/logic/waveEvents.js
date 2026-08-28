@@ -70,6 +70,15 @@ function pickRandomSlots(state, count) {
   return shuffled.slice(0, count).map((s) => ({ row: s.row, col: s.col }));
 }
 
+// 디버프는 이동불능(게이지형)과 마찬가지로 한 칸이 아니라 6칸을 한 번에 대상으로
+// 삼는다(사용자 지정). 빈 칸을 물들여봐야 의미가 없으니(디버프는 캐릭터 색조
+// 변경 연출이라) 점유된 칸 중에서만 뽑는다.
+function pickRandomOccupiedSlots(state, count) {
+  const occupied = state.field.filter((s) => s.occupants.length > 0);
+  const shuffled = [...occupied].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count).map((s) => ({ row: s.row, col: s.col }));
+}
+
 /**
  * 라운드 종료 보상 지급 (기술설계서 4장 applyRoundEndReward 의사코드).
  * 0→1라운드만 별도 고정값(FIRST_WAVE_SUBSIDY), 그 외에는 보유골드×10%+6010.
@@ -164,13 +173,13 @@ function onWaveStart(state) {
   }
 
   // 보스 일반공격(디버프) 스케줄 - 이동불능과 별개로, 예정된 라운드마다 발동하고 다음
-  // 예정 라운드를 다시 주사위(1~2)로 굴린다. 대상은 개체 하나가 아니라 칸 하나다
+  // 예정 라운드를 다시 주사위(1~2)로 굴린다. 대상은 개체 하나가 아니라 칸 단위다
   // (사용자 지적 - 한 칸에 3마리가 쌓여 있으면 그 중 1마리만 아니라 칸 전체가 디버프
-  // 대상이어야 한다).
+  // 대상이어야 한다). 칸도 하나가 아니라 이동불능(게이지형)과 똑같이 6칸을 한 번에
+  // 물들인다(사용자 지정).
   if (state.wave === state.bossAttackSchedule.nextAttackRound) {
-    const occupiedSlots = state.field.filter((s) => s.occupants.length > 0);
-    const target = occupiedSlots.length ? occupiedSlots[randomInt(occupiedSlots.length)] : null;
-    state.eventLog.debuffEvent = target ? { row: target.row, col: target.col, timer: DEBUFF_MARK_SEC } : null;
+    const targets = pickRandomOccupiedSlots(state, 6);
+    state.eventLog.debuffEvent = targets.length ? { slots: targets, timer: DEBUFF_MARK_SEC } : null;
     state.bossAttackSchedule.nextAttackRound = state.wave + 1 + randomInt(2);
   }
 

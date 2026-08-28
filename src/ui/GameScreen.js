@@ -586,12 +586,20 @@ export function GameScreen({ getState, dispatch, onExit }) {
       const isImpCell = slot.occupants[0].heroId === IMP_HERO_ID;
       const sizeScale = isImpCell ? IMP_TOKEN_SCALE : 1;
       const tokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO * sizeScale;
-      // 박스 하단(=발끝)이 칸 정중앙에 오도록: 박스 전체를 중앙에 놓는 게 아니라
-      // 발 위치 자체를 칸 중앙에 맞추고 몸통은 그 위로 쌓아 올린다(사용자 지정).
-      const baseTop = rect.top + rect.height / 2 - tokenHeight;
+      const n = slot.occupants.length;
+      // 1~2마리는 발끝(박스 하단)이 칸 정중앙에 오도록(사용자 지정, 이전 라운드).
+      // 3마리(삼각 대열 - 뒤 2마리 + 앞 1마리)는 다르다: 앞 1마리의 발끝만 중앙에
+      // 맞추면 뒤 2마리가 그만큼 더 위로 치우쳐 보인다고 사용자가 지적했다 -
+      // "3마리째가 되면 무리 전체를 중앙정렬해라". stackOffsets(3)의 dy가
+      // 뒤=-0.2, 앞=0이므로 무리 전체 높이는 1.2*tokenHeight(뒤 top ~ 앞 bottom)이고
+      // 그 중심을 칸 중앙에 맞추려면 baseTop을 0.4*tokenHeight만 위로 올리면 된다
+      // (앞 1마리 발끝만 맞추는 기존 공식 대비) - 아래서 무리 중심 = baseTop+0.4H가
+      // 되도록 역산한 값.
+      const baseTop = n === 3
+        ? rect.top + rect.height / 2 - 0.4 * tokenHeight
+        : rect.top + rect.height / 2 - tokenHeight;
       const tokenWidth = rect.width * HERO_TOKEN_WIDTH_RATIO * sizeScale; // 마리 수와 무관하게 항상 고정
       const cellCenterX = rect.left + rect.width / 2;
-      const n = slot.occupants.length;
       const offsets = stackOffsets(n);
       const positions = offsets.map((o) => ({
         centerX: cellCenterX + o.dx * tokenWidth,
@@ -609,10 +617,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
       slot.occupants.forEach((occ, i) => {
         const heroDef = HEROES_BY_ID[occ.heroId];
-        // 디버프는 개체 하나가 아니라 칸 전체에 적용된다(사용자 지적 - 한 칸에 3마리가
-        // 있으면 그 중 1마리만이 아니라 칸에 있는 전원이 대상이어야 한다).
+        // 디버프는 개체 하나가 아니라 칸 전체에 적용되고(사용자 지적 - 한 칸에 3마리가
+        // 있으면 그 중 1마리만이 아니라 칸에 있는 전원이 대상이어야 한다), 칸도 한 번에
+        // 6개까지 동시에 물든다(사용자 지정 - 이동불능 게이지형과 동일).
         const debuffEv = state.eventLog.debuffEvent;
-        const debuffed = debuffEv && debuffEv.row === slot.row && debuffEv.col === slot.col;
+        const debuffed = debuffEv && debuffEv.slots.some((s) => s.row === slot.row && s.col === slot.col);
         // 탑 베인이 방금 궁극기 환산 임계치(이동 왕복 15~20회 랜덤)를 넘겼으면 잠깐
         // 이펙트를 준다(사용자 요청 - immortal.js의 recordImmortalEvent가 남긴
         // 타임스탬프 확인). 게임 루프가 0.2초마다 전체 DOM을 다시 그리는 구조라
