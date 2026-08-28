@@ -26,9 +26,18 @@ body {
   font-family: 'Pretendard', 'Apple SD Gothic Neo', -apple-system, sans-serif;
   background: var(--bg);
   color: var(--text);
+  /* 더블탭 확대 방지(사용자 지적) - 뷰포트 meta의 user-scalable=no와 별개로
+     브라우저가 더블탭 제스처 자체를 확대로 해석하지 않도록 CSS에서도 막는다. */
+  touch-action: manipulation;
 }
 
-#app { max-width: 960px; margin: 0 auto; padding: 12px; }
+/* #app 자체는 패딩을 두지 않는다 - 게임 화면(.game-screen)은 모바일에서 뷰포트를
+   꽉 채워야 하는데(사용자 지적 - "전체화면이 안되고 있어. 너무 작아서 캐릭터가 잘
+   안보여"), #app에 패딩이 있으면 사방 12px씩 깎여서 진짜 풀스크린이 안 됐다.
+   여백이 필요한 화면(시작 화면)은 그 화면 자신의 클래스(.hero-select-screen)에
+   패딩을 준다. */
+#app { max-width: 960px; margin: 0 auto; }
+.hero-select-screen { padding: 12px; }
 
 .btn {
   background: var(--panel-2);
@@ -95,7 +104,7 @@ body {
    좌표를 그대로 쓴다. */
 .game-screen {
   display: flex; flex-direction: column;
-  height: calc(100dvh - 24px);
+  height: 100dvh; /* #app에 더 이상 패딩이 없으니 뺄 값도 없다(위 #app 주석 참고) */
   max-width: 480px;
   margin: 0 auto;
   box-sizing: border-box;
