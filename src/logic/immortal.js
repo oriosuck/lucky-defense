@@ -1,4 +1,4 @@
-import { HEROES_BY_ID } from '../data/heroes.js';
+import { HEROES_BY_ID, SECOND_STAGE_IMMORTAL } from '../data/heroes.js';
 import { createHeroInstance, neighborsOf } from '../state/gameState.js';
 import { countHeroOnField } from './synthesis.js';
 
@@ -243,9 +243,11 @@ const promotionHandlers = {
     return { ok: false, reason: 'ascend-failed-destroyed' };
   },
   m_mama(state, slot, instance, cond) {
-    const cost = instance.breakthrough ? cond.extra.breakthroughCost : cond.extra.normalCost;
-    if ((instance.impStock ?? 0) < cost) return { ok: false, reason: 'not-enough-imps' };
-    instance.impStock -= cost;
+    // 임프 9마리(돌파 시 7마리)가 "동시에 필드에 존재"하면 승급 가능 - 소모가 아니라 존재
+    // 판정이다. 승급 시 promoteInstance가 개체를 통째로 새로 만들어서 impStock은
+    // 자연히 초기화되므로(전부 자동으로 사라짐), 여기서는 조건만 확인한다.
+    const target = instance.breakthrough ? cond.extra.breakthroughCost : cond.extra.normalCost;
+    if ((instance.impStock ?? 0) < target) return { ok: false, reason: 'not-enough-imps' };
     return { ok: true };
   },
   m_ninja(state, slot, instance, cond) {
@@ -327,6 +329,27 @@ export function checkImmortalPromotion(state, instanceId) {
 
   promoteInstance(newState, slot, instanceId, cond.id);
   return { eligible: true, promoted: true, newState };
+}
+
+/**
+ * 불멸 등급에서 한 번 더 시도하는 "N차 변신"(5-3, 현재는 사신개구리 -> 사신개구리변신만
+ * 해당). 수동 버튼으로 즉시 확률 판정 - 성공하면 새 불멸 개체로 교체, 실패하면 원본도
+ * 함께 소멸한다.
+ */
+export function attemptSecondStageEvolution(state, instanceId) {
+  const newState = structuredClone(state);
+  const found = findInstance(newState, instanceId);
+  if (!found) return { success: false, reason: 'not-found', newState: state };
+  const { slot, instance } = found;
+  const def = SECOND_STAGE_IMMORTAL[instance.heroId];
+  if (!def) return { success: false, reason: 'not-eligible', newState: state };
+
+  if (Math.random() < def.successRate) {
+    promoteInstance(newState, slot, instanceId, def.id);
+    return { success: true, evolved: true, newState };
+  }
+  slot.occupants = slot.occupants.filter((o) => o.instanceId !== instanceId);
+  return { success: true, evolved: false, newState };
 }
 
 /**

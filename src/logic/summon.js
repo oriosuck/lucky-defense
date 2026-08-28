@@ -30,6 +30,13 @@ function pickRandomHeroOfTier(tier) {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+// 일반~전설 등급 뽑기 확률표(기획서 6장 확정 수치, 항상 고정 - 강화 버튼의 확률 업그레이드는
+// 연출용 모션만 있고 실제 수치에는 반영되지 않는다). 인디의 "보물 발굴"도 동일 확률표를 쓴다.
+export function rollNormalTier() {
+  const entries = Object.entries(NORMAL_SUMMON_RATES).map(([tier, rate]) => ({ item: tier, weight: rate }));
+  return weightedRandom(entries);
+}
+
 // 대기열에 보관된 룰렛 결과를 필드에 자리가 날 때마다 자동 배치
 function drainPendingQueue(state) {
   const remaining = [];
@@ -62,12 +69,7 @@ export function summonNormal(state) {
   newState.gold -= newState.normalSummonCost;
   newState.normalSummonCost += NORMAL_SUMMON_COST_INCREMENT; // 소환할수록 비용 증가(기획서 6장 확정 수치)
 
-  const bonusPct = newState.summonRateBonusPct ?? 0; // 소환확률 강화 풀업 시 1%p씩 상승
-  const entries = Object.entries(NORMAL_SUMMON_RATES).map(([tier, rate]) => ({
-    item: tier,
-    weight: tier === 'legendary' ? rate + bonusPct : rate,
-  }));
-  const tier = weightedRandom(entries);
+  const tier = rollNormalTier();
   const heroDef = pickRandomHeroOfTier(tier);
 
   const slot = findAutoPlaceSlot(newState, heroDef.id);

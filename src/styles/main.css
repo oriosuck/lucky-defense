@@ -259,7 +259,9 @@ body {
   position: absolute; bottom: -2px; right: -2px;
   color: var(--gold); font-size: 8px; background: #000; border-radius: 4px; padding: 0 2px;
 }
-.immobilize-mark, .immobilize-fill-mark, .delete-mark { position: absolute; top: 1px; right: 1px; font-size: 10px; }
+.immobilize-mark, .immobilize-fill-mark, .delete-mark, .treasure-mark { position: absolute; top: 1px; right: 1px; font-size: 10px; }
+/* 보스 일반공격(디버프) - 실질 효과 없음, 대상 영웅 색상만 보라색으로 표시 */
+.hero-token.debuffed { outline: 2px solid #a259ff; }
 
 /* ---- 상단 우측 컨트롤(일시정지/나가기): 배경 위 작은 아이콘으로 ---- */
 .stage-controls {

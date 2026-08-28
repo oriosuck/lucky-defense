@@ -12,8 +12,16 @@ import {
   craftableMythicCount,
   instantSummonFavorite,
 } from '../logic/synthesis.js';
-import { enhanceHero, moveHero, toggleBreakthrough, ENHANCE_GOLD_COST, ENHANCE_LUCKSTONE_COST } from '../logic/actions.js';
-import { checkImmortalPromotion, cannibalizeTar } from '../logic/immortal.js';
+import {
+  enhanceHero,
+  moveHero,
+  toggleBreakthrough,
+  digTreasure,
+  ENHANCE_GOLD_COST,
+  ENHANCE_LUCKSTONE_COST,
+} from '../logic/actions.js';
+import { checkImmortalPromotion, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
+import { SECOND_STAGE_IMMORTAL } from '../data/heroes.js';
 import { fieldOccupantCount } from '../state/gameState.js';
 import { el } from './components/dom.js';
 import { heroPlaceholder, placeholderBlock } from './components/heroPlaceholder.js';
@@ -121,7 +129,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   function renderBoss(state) {
-    const raid = state.eventLog.raidWindow;
+    const raid = state.bossRaidWindow;
     const raidLabel = raid ? (raid.open ? '레이드 창 열림!' : '몬스터 소탕 대기 중') : null;
     const boss = placeholderBlock('보스', { className: 'stage-boss' });
     boss.style.cssText = `left:${STAGE_LAYOUT.boss.left}%; top:${STAGE_LAYOUT.boss.top}%; width:${STAGE_LAYOUT.boss.width}%; height:${STAGE_LAYOUT.boss.height}%;`;
@@ -221,8 +229,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
       });
       slot.occupants.forEach((occ) => {
         const heroDef = HEROES_BY_ID[occ.heroId];
+        const debuffed = state.eventLog.debuffEvent?.instanceId === occ.instanceId;
         cell.appendChild(
-          el('div', { class: `hero-token tier-${heroDef.tier}${occ.instanceId === ui.selectedInstanceId ? ' selected' : ''}` }, [
+          el('div', {
+            class: `hero-token tier-${heroDef.tier}${occ.instanceId === ui.selectedInstanceId ? ' selected' : ''}${debuffed ? ' debuffed' : ''}`,
+          }, [
             heroPlaceholder(heroDef, { className: 'hero-token-image', showName: false }),
             occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
           ]),
@@ -231,6 +242,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
       if (isImmobilizeFilling(state, slot)) cell.appendChild(el('div', { class: 'immobilize-fill-mark', text: '⏳' }));
       if (isImmobilized(state, slot)) cell.appendChild(el('div', { class: 'immobilize-mark', text: '😵' }));
       if (isDeleteTarget(state, slot)) cell.appendChild(el('div', { class: 'delete-mark', text: '❌' }));
+      if (isTreasureSlot(state, slot)) cell.appendChild(el('div', { class: 'treasure-mark', text: '💰' }));
       grid.appendChild(cell);
     }
     return grid;
@@ -255,6 +267,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
   function isDeleteTarget(state, slot) {
     const ev = state.eventLog.deleteEvent;
     return ev && ev.phase === 'filling' && ev.targetSlots.some((t) => t.row === slot.row && t.col === slot.col);
+  }
+  function isTreasureSlot(state, slot) {
+    const t = state.indyTreasure.slot;
+    return t && t.row === slot.row && t.col === slot.col;
   }
 
   function onSlotClick(state, slot) {
@@ -331,6 +347,19 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (instance.heroId === 'm_tar' && countHeroOnField(state, 'm_tar').count > 1) {
       buttons.push(el('button', { class: 'btn', text: '동족포식', onclick: () => apply(cannibalizeTar(state, instance.instanceId)) }));
     }
+    if (instance.heroId === 'm_indy') {
+      const canDig = state.indyTreasure.slot && state.indyTreasure.slot.row === slot.row && state.indyTreasure.slot.col === slot.col;
+      buttons.push(el('button', {
+        class: 'btn', text: '발굴', disabled: !canDig,
+        onclick: () => apply(digTreasure(state, instance.instanceId)),
+      }));
+    }
+    if (SECOND_STAGE_IMMORTAL[instance.heroId]) {
+      buttons.push(el('button', {
+        class: 'btn', text: `2차 변신 시도(성공 ${Math.round(SECOND_STAGE_IMMORTAL[instance.heroId].successRate * 100)}%, 실패 시 소멸)`,
+        onclick: () => { apply(attemptSecondStageEvolution(state, instance.instanceId)); ui.selectedInstanceId = null; },
+      }));
+    }
     if (heroDef.tier === 'mythic' && instance.heroId !== 'm_chad') {
       const chad = state.field.flatMap((s) => s.occupants).find((o) => o.heroId === 'm_chad');
       if (chad) {
@@ -350,8 +379,21 @@ export function GameScreen({ getState, dispatch, onExit }) {
       heroDef.immortalCondition
         ? el('div', { class: 'immortal-progress', text: `불멸 진행도: ${Math.floor(instance.progress ?? 0)}${heroDef.immortalCondition.target != null ? ' / ' + heroDef.immortalCondition.target : ''}` })
         : null,
+      extraStatusText(instance, heroDef) ? el('div', { class: 'immortal-progress', text: extraStatusText(instance, heroDef) }) : null,
       el('div', { class: 'action-buttons' }, buttons),
     ]);
+  }
+
+  // 마마(임프 보유량)/인디(보유 보물 등급) 등 진행도 텍스트 외에 추가로 보여줄 상태 한 줄.
+  function extraStatusText(instance, heroDef) {
+    if (instance.heroId === 'm_mama') {
+      const target = instance.breakthrough ? heroDef.immortalCondition.extra.breakthroughCost : heroDef.immortalCondition.extra.normalCost;
+      return `임프: ${instance.impStock ?? 0} / ${target}${instance.breakthrough ? ' (돌파)' : ''}`;
+    }
+    if (instance.heroId === 'm_indy') {
+      return `보유 보물: ${instance.indyTreasureTier ? TIER_LABEL[instance.indyTreasureTier] : '없음'}`;
+    }
+    return null;
   }
 
   function renderBottomOverlay(state) {
@@ -445,7 +487,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         const cond = heroDef.immortalCondition;
         return el('li', {}, [
           heroPlaceholder(heroDef, { className: 'mythic-list-image', label: heroDisplayLabel(instance, heroDef) }),
-          el('span', { text: `${cond.name}: ${Math.floor(instance.progress ?? 0)}${cond.target != null ? ' / ' + cond.target : ''}` }),
+          el('span', { text: extraStatusText(instance, heroDef) ?? `${cond.name}: ${Math.floor(instance.progress ?? 0)}${cond.target != null ? ' / ' + cond.target : ''}` }),
         ]);
       }));
       if (!activeMythics.length) body = el('div', { text: '필드에 배치된 신화 등급 영웅이 없습니다.' });

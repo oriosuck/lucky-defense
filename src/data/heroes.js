@@ -19,12 +19,13 @@ export const TIER_LABEL = {
   immortal: '불멸',
 };
 
-// 등급별 소환 확률(유물 1레벨 기준) - 일반 소환 버튼
+// 등급별 소환 확률 - 일반 소환 버튼. 강화 버튼에 확률 업그레이드 연출은 있지만
+// 실제 수치는 항상 이 값으로 고정(항상 풀업된 상태를 전제로 한 최종 확정 수치, 기획서 6장).
 export const NORMAL_SUMMON_RATES = {
-  normal: 0.5,
-  rare: 0.3,
-  hero: 0.15,
-  legendary: 0.05,
+  normal: 0.5357,
+  rare: 0.3324,
+  hero: 0.1098,
+  legendary: 0.022,
 };
 
 // 룰렛 성공 확률
@@ -241,6 +242,10 @@ export const IMMORTAL_CONDITIONS = {
     id: 'i_knight_lancelot', name: '기사 랜슬롯', type: 'real-event', target: 3,
     eventType: 'consumeMaxEnhancedLancelot',
   },
+  m_orc_shaman: {
+    id: 'i_orc_leader', name: '오크 지도자', type: 'time-based', target: 100,
+    tickIntervalSec: 7, incrementPerTick: 1,
+  },
 };
 
 const MYTHIC_HEROES = MYTHIC_RAW.map(([id, name, mats]) => ({
@@ -269,7 +274,29 @@ const IMMORTAL_HEROES = Object.entries(IMMORTAL_CONDITIONS).map(([mythicId, cond
   };
 });
 
-export const HEROES = [...BASE_HEROES, ...MYTHIC_HEROES, ...IMMORTAL_HEROES];
+// 불멸 등급에서 한 번 더 변신하는 특수 케이스(5-3: "N차 변신"). 신화->불멸을 처리하는
+// IMMORTAL_CONDITIONS 제네릭 엔진과 달리 수동 시도 1회로 성공/실패(원본도 함께 소멸)가
+// 갈리는 방식이라 별도 테이블로 관리한다 (src/logic/immortal.js의 attemptSecondStageEvolution 참고).
+export const SECOND_STAGE_IMMORTAL = {
+  i_death_frog: { id: 'i_death_frog_evolved', name: '사신개구리변신', successRate: 0.5 },
+};
+
+const SECOND_STAGE_IMMORTAL_HEROES = Object.entries(SECOND_STAGE_IMMORTAL).map(([baseImmortalId, def]) => {
+  const base = IMMORTAL_HEROES.find((h) => h.id === baseImmortalId);
+  return {
+    id: def.id,
+    name: def.name,
+    tier: 'immortal',
+    summonSource: ['immortalPromotion'],
+    synthMaterials: null,
+    immortalCondition: null,
+    baseHeroId: baseImmortalId,
+    baseHeroName: base?.name ?? null,
+    image: imagePath(def.id),
+  };
+});
+
+export const HEROES = [...BASE_HEROES, ...MYTHIC_HEROES, ...IMMORTAL_HEROES, ...SECOND_STAGE_IMMORTAL_HEROES];
 
 export const HEROES_BY_ID = Object.fromEntries(HEROES.map((h) => [h.id, h]));
 
