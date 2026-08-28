@@ -22,7 +22,7 @@ import {
   ENHANCE_GOLD_COST,
   ENHANCE_LUCKSTONE_COST,
 } from '../logic/actions.js';
-import { checkImmortalPromotion, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
+import { checkImmortalPromotion, isImmortalPromotionReady, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
 import { IMMOBILIZE_GAUGE_FILL_SEC } from '../logic/waveEvents.js';
 import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 import { fieldOccupantCount, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
@@ -83,11 +83,22 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   function render(state) {
     updateMonsterAnimation(state);
+    // 0.2초마다 전체 DOM을 갈아엎다 보니 신화 팝업의 등급 그리드(.mythic-grid,
+    // overflow-y:auto)도 매번 새 엘리먼트로 다시 생겨서 scrollTop이 계속 0으로
+    // 리셋됐다 - 사용자가 스크롤을 내려도 다음 렌더에서 바로 맨 위로 튕겨 보이니
+    // "스크롤이 안 된다"로 보였다. 재생성 직전 스크롤 위치를 저장했다가 재생성 직후
+    // 그대로 복원한다(같은 클래스의 새 노드에 값만 옮겨 붙이는 방식).
+    const prevScrollEl = root.querySelector('.mythic-grid');
+    const prevScrollTop = prevScrollEl ? prevScrollEl.scrollTop : null;
     root.innerHTML = '';
     const stage = renderStage(state);
     const stageWrap = el('div', { class: 'game-stage-wrap' }, [stage]);
     root.appendChild(stageWrap);
     sizeStageToFit(stageWrap, stage);
+    if (prevScrollTop != null) {
+      const newScrollEl = root.querySelector('.mythic-grid');
+      if (newScrollEl) newScrollEl.scrollTop = prevScrollTop;
+    }
   }
 
   window.addEventListener('resize', () => {
@@ -122,12 +133,17 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (!cellEl || ui.popup) return;
     const row = Number(cellEl.dataset.row);
     const col = Number(cellEl.dataset.col);
-    const slot = getState().field.find((s) => s.row === row && s.col === col);
+    const state = getState();
+    const slot = state.field.find((s) => s.row === row && s.col === col);
     if (!slot || slot.occupants.length === 0) return;
     dragState = {
       instanceId: slot.occupants[0].instanceId,
       fromRow: row, fromCol: col,
       startX: e.clientX, startY: e.clientY, moved: false,
+      // 이동불능(속박) 상태인 칸은 탭 선택은 그대로 되지만 실제 드래그 이동은
+      // endDrag에서 막는다(보스 이동불능 이벤트 지속 시간 동안 캐릭터를 움직일 수
+      // 있던 버그 리포트 반영).
+      immobilized: isImmobilized(state, slot),
     };
     cellEl.classList.add('dragging-source');
   });
@@ -151,15 +167,17 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const sourceEl = root.querySelector('.dragging-source');
     if (sourceEl) sourceEl.classList.remove('dragging-source');
     setDragHover(null);
-    const { instanceId, fromRow, fromCol, moved } = dragState;
+    const { instanceId, fromRow, fromCol, moved, immobilized } = dragState;
     dragState = null;
     if (!moved) {
       // 이동량이 거의 없으면 드래그가 아니라 탭 - 기존 선택 토글 동작을 그대로 수행.
+      // (이동불능이어도 정보 확인용 선택은 막지 않는다 - 실제 이동만 아래에서 막음)
       const state = getState();
       const slot = state.field.find((s) => s.row === fromRow && s.col === fromCol);
       if (slot) onSlotClick(state, slot);
       return;
     }
+    if (immobilized) return; // 이동불능 상태에선 드래그 이동 자체가 성립하지 않는다
     const target = document.elementFromPoint(e.clientX, e.clientY);
     const cellEl = target?.closest('.field-slot');
     if (!cellEl) return;
@@ -314,35 +332,69 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   const FAVORITE_BAR_MAX = 5;
 
-  // 좌측 세로 아이콘 목록: "필드에 있는 신화"가 아니라 "지금 조합 가능한 신화"를 최대
-  // 5개까지, 즐겨찾기 우선 정렬로 보여준다(기획서 명시 사항 - 조합 재료가 갖춰진
-  // 영웅을 알려주는 자리이지, 이미 필드에 뽑아둔 영웅을 다시 보여주는 자리가 아니다).
-  // 이미 한 번 조합해서 무료 즉시소환이 풀린 영웅(unlockedInstantSummons)도 그대로
-  // 포함한다 - 이쪽은 재료 없이 클릭만으로 즉시 소환되고, 아직 안 풀린 조합 가능
-  // 영웅은 클릭 시 실제 조합(재료 소모)이 일어난다.
-  function craftedShowcaseHeroIds(state) {
+  // 좌측 세로 아이콘 목록. 두 종류를 함께 보여준다:
+  // 1) 승급 가능한 불멸 - 조건을 채운 신화 개체를 칸 클릭 후 아래 "승급 시도" 버튼이
+  //    아니라 신화 조합과 똑같은 방식으로 왼쪽 아이콘에 노출한다(사용자 지정 규칙 -
+  //    "불멸이 먼저, 신화가 밑으로"). instance별 판정이라 heroId가 아니라 instanceId
+  //    기준으로 찾는다.
+  // 2) 지금 조합 가능한 신화("필드에 있는 신화"가 아니라 재료가 갖춰진 신화 - 기획서
+  //    명시 사항) + 이미 한 번 조합해서 무료 즉시소환이 풀린 신화.
+  // 정렬은 불멸 승급 후보를 항상 앞에 두고, 그 안에서/신화 목록 안에서는 각각
+  // 즐겨찾기 우선.
+  function favoriteBarItems(state) {
     const favoriteIds = new Set(state.heroSettings.filter((h) => h.favorite).map((h) => h.heroId));
-    const ids = heroesByTier('mythic')
+
+    const promoteItems = [];
+    for (const slot of state.field) {
+      for (const occ of slot.occupants) {
+        const heroDef = HEROES_BY_ID[occ.heroId];
+        if (heroDef?.tier === 'mythic' && heroDef.immortalCondition && isImmortalPromotionReady(state, occ.instanceId)) {
+          promoteItems.push({ kind: 'promote', instanceId: occ.instanceId, heroId: occ.heroId });
+        }
+      }
+    }
+    promoteItems.sort((a, b) => Number(favoriteIds.has(b.heroId)) - Number(favoriteIds.has(a.heroId)));
+
+    const craftIds = heroesByTier('mythic')
       .filter((heroDef) => state.unlockedInstantSummons.includes(heroDef.id) || craftMaterialsReady(state, heroDef))
       .map((heroDef) => heroDef.id);
-    ids.sort((a, b) => Number(favoriteIds.has(b)) - Number(favoriteIds.has(a)));
-    return ids.slice(0, FAVORITE_BAR_MAX);
+    craftIds.sort((a, b) => Number(favoriteIds.has(b)) - Number(favoriteIds.has(a)));
+    const craftItems = craftIds.map((heroId) => ({
+      kind: state.unlockedInstantSummons.includes(heroId) ? 'unlocked' : 'craft',
+      heroId,
+    }));
+
+    return [...promoteItems, ...craftItems].slice(0, FAVORITE_BAR_MAX);
   }
 
   function renderFavoriteBar(state) {
-    const heroIds = craftedShowcaseHeroIds(state);
+    const items = favoriteBarItems(state);
     return el(
       'div',
       { class: 'favorite-bar' },
-      heroIds.map((heroId) => {
-        const unlocked = state.unlockedInstantSummons.includes(heroId);
-        const heroDef = HEROES_BY_ID[heroId];
+      items.map((item) => {
+        const heroDef = HEROES_BY_ID[item.heroId];
+        if (item.kind === 'promote') {
+          return el(
+            'button',
+            {
+              class: 'favorite-icon favorite-icon-promote',
+              title: heroDef?.name,
+              onclick: () => apply(checkImmortalPromotion(state, item.instanceId)),
+            },
+            [
+              heroImage(heroDef, { className: 'favorite-icon-image' }),
+              el('span', { class: 'favorite-icon-label', text: '승급 가능!' }),
+            ],
+          );
+        }
+        const unlocked = item.kind === 'unlocked';
         return el(
           'button',
           {
             class: 'favorite-icon',
             title: heroDef?.name,
-            onclick: () => apply(unlocked ? instantSummonFavorite(state, heroId) : craftMythic(state, heroId)),
+            onclick: () => apply(unlocked ? instantSummonFavorite(state, item.heroId) : craftMythic(state, item.heroId)),
           },
           [
             heroImage(heroDef, { className: 'favorite-icon-image' }),
@@ -416,6 +468,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (!found) return null;
     const { slot, instance } = found;
     const heroDef = HEROES_BY_ID[instance.heroId];
+    if (heroDef.tier === 'imp') return null; // 마마가 만든 임프는 조작 대상이 아니다
     const rect = fieldCellRect(slot.row, slot.col);
     const centerX = rect.left + rect.width / 2;
 
@@ -458,12 +511,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
         onclick: () => apply(toggleBreakthrough(state, instance.instanceId)),
       }));
     }
-    if (heroDef.tier === 'mythic' && heroDef.immortalCondition) {
-      below.push(el('button', {
-        class: 'cell-quick-btn cell-quick-extra', text: '승급 시도',
-        onclick: () => apply(checkImmortalPromotion(state, instance.instanceId)),
-      }));
-    }
+    // 승급 시도는 더 이상 칸 아래 버튼이 아니라, 조건 충족 시 좌측 즉시소환 아이콘 바에
+    // "승급 가능!"으로 노출된다(renderFavoriteBar/favoriteBarItems 참고 - 사용자 지정
+    // 규칙: 불멸이 먼저, 신화가 밑으로).
     if (instance.heroId === 'i_giga_chad') {
       below.push(el('button', {
         class: 'cell-quick-btn cell-quick-extra', text: '판매(+6💧)',

@@ -305,6 +305,16 @@ export const HEROES = [...BASE_HEROES, ...MYTHIC_HEROES, ...IMMORTAL_HEROES, ...
 
 export const HEROES_BY_ID = Object.fromEntries(HEROES.map((h) => [h.id, h]));
 
+// 그랜드 마마(m_mama)가 주기적으로 만들어내는 임프. 소환/선택 화면에 노출되면 안 되므로
+// HEROES 배열엔 넣지 않고 HEROES_BY_ID에만 직접 등록한다(필드 렌더링은 대부분
+// HEROES_BY_ID[occ.heroId] 조회로 동작해서 이렇게만 해도 기존 렌더링 경로를 그대로 탄다).
+// tier를 'imp'로 둬서 판매/신화·불멸 전용 로직(모두 'mythic'/'immortal' 등급만 특별
+// 취급)에 걸리지 않게 했다 - canPlaceInSlot 등 일반 로직에서는 "mythic/immortal이
+// 아니면 스택 가능"으로 처리돼서 자동으로 한 칸에 3마리씩 쌓인다. 이미지는
+// heroVisual.js의 resolveHeroImage()에서 UI_IMAGES.impIcon으로 특수 처리한다.
+export const IMP_HERO_ID = 'x_imp';
+HEROES_BY_ID[IMP_HERO_ID] = { id: IMP_HERO_ID, name: '임프', tier: 'imp', image: null };
+
 export function heroesByTier(tier) {
   return HEROES.filter((h) => h.tier === tier);
 }

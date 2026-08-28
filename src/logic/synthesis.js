@@ -70,6 +70,9 @@ export function synthesize(state, row, col) {
 
   slot.occupants = [];
   slot.occupants.push(createHeroInstance(resultDef.id));
+  // 조합 결과가 이미 다른 칸에 있던 영웅이면(예: 산적 1마리가 다른 칸에 남아있는 상태에서
+  // 조합으로 산적이 또 나온 경우) 자동으로 한 칸에 모은다 - 판매 때와 동일한 스택 정리.
+  consolidateHeroStacks(newState, resultDef.id);
 
   return { success: true, resultHero: resultDef, newState };
 }

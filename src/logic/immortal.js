@@ -1,5 +1,5 @@
-import { HEROES_BY_ID, SECOND_STAGE_IMMORTAL } from '../data/heroes.js';
-import { createHeroInstance, neighborsOf } from '../state/gameState.js';
+import { HEROES_BY_ID, SECOND_STAGE_IMMORTAL, IMP_HERO_ID } from '../data/heroes.js';
+import { createHeroInstance, neighborsOf, findAutoPlaceSlot, placeInstanceAtSlot } from '../state/gameState.js';
 import { countHeroOnField } from './synthesis.js';
 
 // ---- 공통 유틸 ----
@@ -244,10 +244,14 @@ const promotionHandlers = {
   },
   m_mama(state, slot, instance, cond) {
     // 임프 9마리(돌파 시 7마리)가 "동시에 필드에 존재"하면 승급 가능 - 소모가 아니라 존재
-    // 판정이다. 승급 시 promoteInstance가 개체를 통째로 새로 만들어서 impStock은
-    // 자연히 초기화되므로(전부 자동으로 사라짐), 여기서는 조건만 확인한다.
+    // 판정이다. 이제 임프가 실제 필드 토큰(x_imp)으로 존재하므로, impStock(=지금까지
+    // 실제로 배치에 성공한 임프 수, tickMamaImps 참고)이 목표치 이상이면 조건 충족.
     const target = instance.breakthrough ? cond.extra.breakthroughCost : cond.extra.normalCost;
     if ((instance.impStock ?? 0) < target) return { ok: false, reason: 'not-enough-imps' };
+    // 승급 시 필드의 임프는 전부 자동 소멸(수동 소모 없음, 기획서 확정 사항).
+    for (const s of state.field) {
+      s.occupants = s.occupants.filter((o) => o.heroId !== IMP_HERO_ID);
+    }
     return { ok: true };
   },
   m_ninja(state, slot, instance, cond) {
@@ -332,6 +336,51 @@ export function checkImmortalPromotion(state, instanceId) {
 }
 
 /**
+ * checkImmortalPromotion을 실제로 실행하지 않고 "지금 승급 버튼을 눌러도 되는 상태인지"만
+ * 읽기 전용으로 판정한다 - 왼쪽 즉시소환 아이콘 바에 "승급 가능한 불멸"을 신화보다 먼저
+ * 보여주기 위해 필요하다(사용자 지정 - 승급은 칸 아래 버튼이 아니라 신화처럼 왼쪽
+ * 아이콘으로 노출). promotionHandlers를 그대로 호출하면 부작용(재료 소모, 사신개구리
+ * 승천 실패 시 소멸 등)이 실제로 일어나므로 절대 재사용하면 안 되고, 각 핸들러의
+ * 조건 판정 부분만 순수하게 다시 구현했다 - 위 promotionHandlers를 고치면 여기도
+ * 같이 봐야 한다.
+ */
+export function isImmortalPromotionReady(state, instanceId) {
+  const found = findInstance(state, instanceId);
+  if (!found) return false;
+  const { slot, instance } = found;
+  const heroDef = HEROES_BY_ID[instance.heroId];
+  const cond = heroDef?.immortalCondition;
+  if (!cond) return false;
+
+  const eligible = cond.target == null ? true : isEligible(state, slot, instance, cond) || instance.immortalEligible;
+  if (!eligible) return false;
+
+  switch (instance.heroId) {
+    case 'm_mama': {
+      const target = instance.breakthrough ? cond.extra.breakthroughCost : cond.extra.normalCost;
+      return (instance.impStock ?? 0) >= target;
+    }
+    case 'm_ninja':
+      return countHeroOnField(state, 'm_ninja').instances.length >= cond.extra.consumeCount;
+    case 'm_chona':
+      return countHeroOnField(state, cond.extra.consumeHeroId).instances.length >= cond.extra.consumeCount;
+    case 'm_gigi':
+      return countHeroOnField(state, 'm_gigi').instances.length >= cond.extra.consumeCount;
+    case 'm_tar':
+      return !cond.extra.requireStage3AtPromotion || (instance.tarStage ?? 1) >= 3;
+    case 'm_lancelot': {
+      const { instances } = countHeroOnField(state, 'm_lancelot');
+      const maxEnhanced = instances.filter((ref) => (ref.instance.enhanceLevel ?? 0) >= (cond.extra.maxEnhance ?? 10));
+      return maxEnhanced.length >= cond.target;
+    }
+    default:
+      // 핸들러가 없는(제네릭 폴백) 대부분의 조건과 사신개구리(m_frog_prince, 자원
+      // 게이팅 없이 언제든 확률 시도 가능)는 eligible이면 그대로 준비된 것으로 본다.
+      return true;
+  }
+}
+
+/**
  * 불멸 등급에서 한 번 더 시도하는 "N차 변신"(5-3, 현재는 사신개구리 -> 사신개구리변신만
  * 해당). 수동 버튼으로 즉시 확률 판정 - 성공하면 새 불멸 개체로 교체, 실패하면 원본도
  * 함께 소멸한다.
@@ -377,13 +426,18 @@ export function cannibalizeTar(state, eaterInstanceId) {
 }
 
 // ---- 마마 전용: 임프 생성/소모, 돌파 토글 ----
-const IMMORTAL_MAMA = { impIntervalSec: 3, breakthroughIntervalSec: 2, postRound8IntervalSec: 5, stopRound: 10 };
+// 간격은 사용자 요청으로 기존 값의 2.5배 느리게(체감 속도가 너무 빠르다는 피드백).
+const IMMORTAL_MAMA = { impIntervalSec: 7.5, breakthroughIntervalSec: 5, postRound8IntervalSec: 12.5, stopRound: 10 };
+// 마마 승급에 필요한 최대 임프 수(돌파 안 한 경우 9마리) - 실제 필드 토큰으로 무한정
+// 쌓이지 않도록 이 값에서 생성을 멈춘다(어차피 그 이상은 승급 조건에 필요 없음).
+const MAX_IMP_STOCK = 9;
 
 export function tickMamaImps(state, deltaSec) {
   const newState = structuredClone(state);
   if (newState.wave > IMMORTAL_MAMA.stopRound) return newState;
   forEachMythicInstance(newState, (slot, instance, cond) => {
     if (instance.heroId !== 'm_mama') return;
+    if ((instance.impStock ?? 0) >= MAX_IMP_STOCK) return;
     const interval = instance.breakthrough
       ? IMMORTAL_MAMA.breakthroughIntervalSec
       : newState.wave > 8
@@ -392,8 +446,14 @@ export function tickMamaImps(state, deltaSec) {
     if (!instance.immortalTick) instance.immortalTick = { elapsed: 0, nextTick: interval };
     const t = instance.immortalTick;
     t.elapsed += deltaSec;
-    while (t.elapsed >= interval) {
+    while (t.elapsed >= interval && (instance.impStock ?? 0) < MAX_IMP_STOCK) {
       t.elapsed -= interval;
+      // 임프도 캐릭터처럼 실제로 필드 칸에 꺼내진다(사용자 요청) - 빈 칸이 없으면
+      // 이번 틱은 그냥 건너뛴다(impStock도 증가시키지 않음 - 실제로 존재하는
+      // 임프 수와 어긋나면 안 되므로).
+      const impSlot = findAutoPlaceSlot(newState, IMP_HERO_ID);
+      if (!impSlot) break;
+      placeInstanceAtSlot(impSlot, createHeroInstance(IMP_HERO_ID));
       instance.impStock = (instance.impStock ?? 0) + 1;
     }
   });

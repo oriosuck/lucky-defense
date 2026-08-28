@@ -9,7 +9,7 @@ const SELECTABLE_TIERS = ['mythic'];
 
 function createLocalState() {
   return {
-    gameType: null, // 'no-delete' | 'delete'
+    gameType: 'delete', // 'no-delete' | 'delete' - 기본값은 삭제 있는 버전(사용자 지정)
     immortalPet: true,
     settings: new Map(), // heroId -> { immortal, favorite } (신화 등급만 사용)
   };
