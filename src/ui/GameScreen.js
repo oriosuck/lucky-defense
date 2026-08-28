@@ -509,16 +509,19 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   // 필드 캐릭터는 칸 안에 눕혀 넣는 flex 자식이 아니라, 칸 좌표를 기준으로 절대배치되는
   // 별도 오버레이 레이어로 그린다(.field-slot이 overflow:hidden이라 칸보다 큰 이미지를
-  // 담을 수 없어서). 이미지 발밑을 칸 하단(바닥선)에 맞춰서 서 있는 것처럼 보이게 하며,
-  // z-index를 그리드 행(row) 번호로 매겨 아래쪽(화면 앞쪽) 행 캐릭터가 위쪽(화면 뒷쪽)
-  // 행 캐릭터를 가리는 입체감을 낸다(사용자 참고 스크린샷 그대로 - 원근감 있는 배치).
-  // 단, 캐릭터는 항상 칸 안에 완전히 들어가 있어야 한다(사용자 지적 - 예전엔 칸 높이의
-  // 1.75배로 키워서 위로 삐져나오게 했었는데, 이제는 칸 높이 이내로만 그린다).
+  // 담을 수 없어서). z-index를 그리드 행(row) 번호로 매겨 아래쪽(화면 앞쪽) 행 캐릭터가
+  // 위쪽(화면 뒷쪽) 행 캐릭터를 가리는 입체감을 낸다(사용자 참고 스크린샷 그대로 -
+  // 원근감 있는 배치).
+  // 캐릭터는 칸 바닥선에 발을 맞추는 대신 칸 정중앙을 기준으로 배치한다(사용자 지정 -
+  // "칸의 바닥선을 따라 배치하지 말고 처음부터 가운데를 기준으로 배치해라"). 크기도
+  // 3배로 키워서(사용자 지정) 칸보다 훨씬 커지므로 위아래로 크게 넘치는 게 정상이다
+  // (예전의 "칸 안에 완전히 들어가야 한다"는 제약은 이번 요청으로 뒤집힌 것 - 헷갈리지
+  // 말 것).
   //
   // 캐릭터 크기는 그 칸에 몇 마리가 쌓여있든 항상 고정이다(사용자 지적 - 예전엔
   // 칸 너비를 마리 수만큼 나눠서 1마리일 때와 3마리일 때 크기가 달라졌었음).
-  const HERO_TOKEN_HEIGHT_RATIO = 0.8; // 칸 높이 이내로 완전히 들어가도록(사용자 지적 - 칸 밖으로 나가면 안 됨)
-  const HERO_TOKEN_WIDTH_RATIO = 0.44; // 칸 너비 대비 고정 폭 - 대열을 조밀하게 좁힘(사용자 지적)
+  const HERO_TOKEN_HEIGHT_RATIO = 2.4; // 기존(0.8) 대비 3배(사용자 지정)
+  const HERO_TOKEN_WIDTH_RATIO = 1.32; // 기존(0.44) 대비 3배(사용자 지정)
   const IMP_TOKEN_SCALE = 0.5; // 마마 임프는 다른 캐릭터의 절반 크기(사용자 지적 - 너무 컸음)
   const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
   const ATTACK_CYCLE_MS = 900; // 공격 모션(위아래 스쿼시-스트레치) 반복 주기
@@ -546,18 +549,18 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return h % mod;
   }
 
-  // 선택/합성가능 표시는 칸을 감싸는 사각 테두리가 아니라(사용자 지적 - "누가
+  // "합성 가능" 표시는 칸을 감싸는 사각 테두리가 아니라(사용자 지적 - "누가
   // 네모로 하랬냐"), 캐릭터 이미지의 실제 알파 채널(실루엣)을 따라가는 흰색
   // 외곽선이어야 한다. drop-shadow를 여러 방향으로 얇게 겹쳐 쌓으면 투명 배경은
   // 그대로 투명하게 두고 그림이 있는 픽셀 가장자리에만 색이 번져서 실루엣
   // 외곽선처럼 보인다.
   // 함정: CSS `filter: drop-shadow(A) drop-shadow(B) ...`는 각 항이 원본이 아니라
-  // "이전까지 누적된 결과물"에 다시 적용된다(체이닝) - 그래서 8방향을 그대로 다
-  // 겹치면 오프셋들이 서로 누적돼 실제 시각적 크기가 OUTLINE_OFFSET_PX 하나의
-  // 몇 배로 부풀어 보인다(사용자 지적 - "흰색 테두리가 너무 커서 가시성이
-  // 떨어져"). 오프셋 자체를 확 줄이고(2px→0.6px) 4방향(상하좌우)만 남겨서
-  // 누적되는 항 수도 줄였다 - 결과적으로 실제 렌더 크기가 절반보다 훨씬 작아진다.
-  const OUTLINE_OFFSET_PX = 0.6;
+  // "이전까지 누적된 결과물"에 다시 적용된다(체이닝) - 8방향을 그대로 다 겹치면
+  // 오프셋들이 서로 누적돼 실제 시각적 크기가 훨씬 크게 부풀어 보인다. 지난 라운드에
+  // 이걸 0.6px/4방향까지 줄였더니 이번엔 반대로 아예 안 보인다는 지적을 받았다 -
+  // 1.5px로 다시 키워서 눈에 띄면서도 예전(2px/8방향)처럼 뭉개지지 않는 지점을
+  // 찾았다(Playwright 스크린샷으로 직접 눈으로 확인하며 맞춤).
+  const OUTLINE_OFFSET_PX = 1.5;
   function outlineFilter() {
     const offsets = [
       [OUTLINE_OFFSET_PX, 0], [-OUTLINE_OFFSET_PX, 0], [0, OUTLINE_OFFSET_PX], [0, -OUTLINE_OFFSET_PX],
@@ -573,8 +576,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
       const isImpCell = slot.occupants[0].heroId === IMP_HERO_ID;
       const sizeScale = isImpCell ? IMP_TOKEN_SCALE : 1;
       const tokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO * sizeScale;
-      const baseTop = rect.top + rect.height - tokenHeight; // 하단이 칸 바닥선에 오도록
+      const baseTop = rect.top + rect.height / 2 - tokenHeight / 2; // 칸 바닥선이 아니라 칸 정중앙 기준(사용자 지정)
       const tokenWidth = rect.width * HERO_TOKEN_WIDTH_RATIO * sizeScale; // 마리 수와 무관하게 항상 고정
+      // 발밑 그림자(.stage-hero-shadow)는 원래 "토큰 박스 하단 = 칸 바닥선"이라는
+      // 전제로 박스 하단 기준 고정 %였는데, 이제 박스가 칸 정중앙 기준으로 커져서
+      // (사용자 지정) 박스 하단이 더 이상 칸 바닥선이 아니다 - 실제 칸 바닥선이
+      // 박스 안 몇 %(하단 기준) 지점에 오는지 역산해서 매번 다시 계산한다.
+      const shadowBottomPct = ((HERO_TOKEN_HEIGHT_RATIO * sizeScale - 1) / (2 * HERO_TOKEN_HEIGHT_RATIO * sizeScale)) * 100;
       const cellCenterX = rect.left + rect.width / 2;
       const n = slot.occupants.length;
       const offsets = stackOffsets(n);
@@ -583,14 +591,14 @@ export function GameScreen({ getState, dispatch, onExit }) {
         top: baseTop + o.dy * tokenHeight,
       }));
 
-      const selected = ui.selectedSlot && ui.selectedSlot.row === slot.row && ui.selectedSlot.col === slot.col;
-      // 3마리가 다 차면(합성 가능한 등급 - 일반~영웅만, 전설 이상은 스택 개념이 없거나
-      // 합성 대상이 아님) 선택 여부와 무관하게 흰 외곽선으로 "합성 가능"을 항상
-      // 표시한다. 개체마다 실루엣 외곽선이 각각 그려지므로 몇 마리든 outlined 플래그
-      // 하나로 충분하다(칸을 감싸는 사각 박스 대신).
+      // 흰 외곽선은 선택 여부와 무관하게 3마리가 다 찬 칸에만 뜬다(합성 가능한
+      // 등급 - 일반~영웅만, 전설 이상은 스택 개념이 없거나 합성 대상이 아님).
+      // 사용자가 명시적으로 정정한 규칙 - "흰색 테두리는 내가 3마리 있을때만
+      // 하라 했다. 1~2마리일 때 칸 클릭해도 뜨면 안 된다" - 그래서 선택
+      // 여부(`selected`)는 이 판정에서 아예 빼야 한다.
       const firstHeroDef = HEROES_BY_ID[slot.occupants[0].heroId];
       const readyToCombine = n === 3 && ['normal', 'rare', 'hero'].includes(firstHeroDef?.tier);
-      const outlined = selected || readyToCombine;
+      const outlined = readyToCombine;
 
       slot.occupants.forEach((occ, i) => {
         const heroDef = HEROES_BY_ID[occ.heroId];
@@ -610,9 +618,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
         const { centerX, top } = positions[i];
 
         // filter는 CSS 클래스를 여러 개 동시에 걸어도 서로 값을 덮어쓸 뿐 합쳐지지
-        // 않는다(마지막에 매치된 규칙만 적용됨) - 선택 외곽선/디버프/궁극기 발광이
-        // 동시에 필요할 수 있어서 상태에 맞는 filter 문자열을 직접 합성해 인라인
-        // style로 넣는다.
+        // 않는다(마지막에 매치된 규칙만 적용됨) - 합성가능 외곽선/디버프/궁극기
+        // 발광이 동시에 필요할 수 있어서 상태에 맞는 filter 문자열을 직접 합성해
+        // 인라인 style로 넣는다.
         const filterParts = ['drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5))'];
         if (usingUltimate) filterParts.push('drop-shadow(0 0 10px #ffd54a)', 'drop-shadow(0 0 18px #ff9d2f)');
         if (debuffed) filterParts.push('sepia(1)', 'hue-rotate(220deg)', 'saturate(3)');
@@ -630,7 +638,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
           class: `stage-hero-token${debuffed ? ' debuffed' : ''}${usingUltimate ? ' ultimate-flash' : ''}`,
           style: `left:${centerX}%; top:${top}%; width:${tokenWidth}%; height:${tokenHeight}%; z-index:${2 + slot.row};${usingUltimate ? ` --ring-delay:-${ultimateElapsedMs % 800}ms;` : ''}`,
         }, [
-          el('div', { class: 'stage-hero-shadow' }),
+          el('div', { class: 'stage-hero-shadow', style: `bottom:${shadowBottomPct}%;` }),
           heroImage(heroDef, { className: 'stage-hero-image', instance: occ, style: imgStyle }),
           occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
         ]));
