@@ -9,6 +9,8 @@ const DELETE_TRIGGER_AT_TIME_LEFT = 6;
 
 const MONSTER_SPAWN_INTERVAL_SEC = 0.8; // 8초에 10마리 등장하는 속도
 const MONSTER_KILL_RATE_PER_SEC = 2; // 필드에 영웅이 1마리라도 있으면 초당 2마리씩 처치
+const MONSTER_KILL_GOLD = 30; // 몬스터 처치 시 보상(마리당, 기획서 6장 확정 수치)
+const ROUND_CLEAR_LUCKSTONE = 5; // 라운드 종료 보상(기획서 6장). 골드 +10+@는 % 미정으로 보류.
 
 function randomInt(maxExclusive) {
   return Math.floor(Math.random() * maxExclusive);
@@ -33,6 +35,7 @@ export function tickWave(state, deltaSec) {
     newState.waveTimeLeft += waveDuration(1);
     onWaveStart(newState);
   } else if (newState.wave >= 1 && newState.waveTimeLeft <= 0) {
+    newState.luckstone += ROUND_CLEAR_LUCKSTONE; // 라운드 종료 보상: 행운석 +5
     if (newState.wave >= TOTAL_WAVES) {
       newState.result = 'win';
     } else {
@@ -50,7 +53,10 @@ export function tickWave(state, deltaSec) {
       newState.monsterCount += 1;
     }
     if (fieldOccupantCount(newState) > 0) {
+      const beforeKillCount = Math.floor(newState.monsterCount);
       newState.monsterCount = Math.max(0, newState.monsterCount - MONSTER_KILL_RATE_PER_SEC * deltaSec);
+      const killed = beforeKillCount - Math.floor(newState.monsterCount);
+      if (killed > 0) newState.gold += killed * MONSTER_KILL_GOLD; // 몬스터 처치 시 골드 +30(마리당)
     }
     if (newState.monsterCount >= newState.monsterMax) {
       newState.result = 'lose';
