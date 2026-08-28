@@ -9,6 +9,8 @@ import {
 // 판매 보상표(기획 확정: 일반 마리당 120코인, 희귀 1행운석, 영웅 2행운석, 전설 4행운석)
 const SELL_GOLD_BY_TIER = { normal: 120 };
 const SELL_LUCKSTONE_BY_TIER = { rare: 1, hero: 2, legendary: 4 };
+// 일반~전설 판매 시 6% 확률로 행운석 1개 추가 지급(사용자 추가 - 등급 공통 시스템)
+const SELL_BONUS_LUCKSTONE_CHANCE = 0.06;
 
 // 판매 시 받을 보상 미리보기(칸 위 판매 버튼에 표시용) - 실제 지급은 sellHero()가 담당.
 export function sellPreview(heroDef) {
@@ -207,6 +209,13 @@ export function sellHero(state, instanceId) {
   } else {
     reward.luckstone = SELL_LUCKSTONE_BY_TIER[heroDef.tier] ?? 0;
     newState.luckstone += reward.luckstone;
+  }
+
+  // 일반~전설 판매 공통: 6% 확률로 행운석 1개 추가 지급(사용자 추가 사항).
+  if (Math.random() < SELL_BONUS_LUCKSTONE_CHANCE) {
+    reward.luckstone += 1;
+    reward.bonus = true;
+    newState.luckstone += 1;
   }
 
   // 판매로 스택이 조각났을 수 있으니(예: 3마리 칸이 2마리로 줄고 다른 칸에 1마리가
