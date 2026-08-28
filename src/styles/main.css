@@ -142,10 +142,15 @@ body {
   background-image: url('/ui/monster_count_bg.png');
   background-size: 100% 100%; background-repeat: no-repeat;
   aspect-ratio: 862 / 184;
-  display: flex; align-items: center; justify-content: center;
-  padding-left: 20%;
 }
-.monster-count-text { color: #f5e6c8; font-weight: 700; font-size: clamp(13px, 3.8vw, 17px); }
+/* 텍스트를 flex+padding으로 어림잡아 중앙에 두면 해골 메달 쪽으로 살짝 치우쳐 보였다 -
+   이미지를 실측(해골 메달 0.9~20%, 남은 어두운 바 20.5~98.5%)해서 바 부분의 정확한
+   구간만 잘라 그 안에서 text-align:center로 정렬한다. */
+.monster-count-text {
+  position: absolute; left: 21%; right: 2%; top: 0; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  color: #f5e6c8; font-weight: 700; font-size: clamp(13px, 3.8vw, 17px);
+}
 
 /* 즐겨찾기 즉시소환 아이콘: 전장 왼쪽 위에서부터 세로로 배경 위에 얹는다 */
 .favorite-bar {
@@ -247,6 +252,31 @@ body {
 }
 .hero-token-image { width: 100%; height: 100%; object-fit: contain; display: block; }
 .hero-token.selected { outline: 2px solid var(--gold); border-radius: 4px; }
+
+/* 판매/합성 버튼: 선택 패널(모달) 안이 아니라 선택된 칸 바로 위/아래에 붙는다.
+   래퍼는 클릭을 막지 않게 pointer-events:none, 버튼 자체만 auto로 되돌린다. */
+.cell-quick-actions { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.cell-quick-btn {
+  position: absolute; pointer-events: auto;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  border-radius: 8px; padding: 3px 7px;
+  color: #fff; font-weight: 800; font-size: 9px;
+  cursor: pointer; white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+.cell-quick-sell {
+  transform: translate(-50%, calc(-100% - 3px));
+  background: linear-gradient(180deg, #e0483f, #b22e26);
+  border: 2px solid #7a1a15;
+}
+.cell-quick-synth {
+  transform: translate(-50%, 3px);
+  background: linear-gradient(180deg, #f5c542, #d99e1f);
+  border: 2px solid #7a4d10;
+  color: #3a2205;
+}
+.cell-quick-reward { display: flex; align-items: center; gap: 2px; font-size: 9px; }
+.cell-quick-reward img { width: 10px; height: 10px; object-fit: contain; }
 .enhance-badge {
   position: absolute; bottom: -2px; right: -2px;
   color: var(--gold); font-size: 8px; background: #000; border-radius: 4px; padding: 0 2px;
@@ -456,22 +486,22 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
   color: #fff; font-weight: 800; font-size: clamp(11px, 3.2vw, 15px);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
-/* 룰렛 스핀 연출(기획서: "1초보다 조금 짧게 룰렛이 도는 연출") */
-.roulette-wheel-btn.spinning .roulette-wheel-circle { animation: roulette-spin 0.9s cubic-bezier(0.2, 0.8, 0.3, 1); }
+/* 룰렛이 도는 시간은 정확히 1초 */
+.roulette-wheel-btn.spinning .roulette-wheel-circle { animation: roulette-spin 1s cubic-bezier(0.2, 0.8, 0.3, 1); }
 @keyframes roulette-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(1080deg); }
 }
-/* 해골은 룰렛 실패했을 때만 잠깐 띄운다 - 몬스터/다른 용도로 쓰면 안 됨 */
+/* 해골은 룰렛이 다 돌아간 뒤 실패했을 때만 0.5초 잠깐 띄운다 - 몬스터/다른 용도로 쓰면
+   안 됨. 예전엔 scale+opacity로 "짠!" 팝인 애니메이션이 있었는데, 게임 루프가 그
+   0.5초 사이에도 몇 번씩 전체 DOM을 다시 그리는 구조라(main.js RENDER_INTERVAL_SEC)
+   그때마다 이 엘리먼트가 새로 생성돼서 애니메이션이 처음부터 반복 재생되며 여러 번
+   깜빡이는 것처럼 보였다(어지럽다는 피드백의 원인) - 그냥 정적으로 보여주기만 하고
+   애니메이션은 없앴다. */
 .roulette-fail-skull {
   position: absolute; inset: 0; margin: auto;
   width: 55%; height: 55%; object-fit: contain;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
-  animation: roulette-fail-pop 0.25s ease-out;
-}
-@keyframes roulette-fail-pop {
-  from { transform: scale(0.4); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
 }
 .roulette-item-cost {
   display: flex; align-items: center; gap: 3px;
