@@ -18,11 +18,13 @@ import {
   moveHero,
   toggleBreakthrough,
   digTreasure,
+  upgradeGlobalEnhance,
   ENHANCE_GOLD_COST,
   ENHANCE_LUCKSTONE_COST,
 } from '../logic/actions.js';
 import { checkImmortalPromotion, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
 import { IMMOBILIZE_GAUGE_FILL_SEC } from '../logic/waveEvents.js';
+import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST } from '../data/constants.js';
 import { fieldOccupantCount } from '../state/gameState.js';
 import { el } from './components/dom.js';
 import { heroImage } from './components/heroVisual.js';
@@ -39,6 +41,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
     popup: null, // null | 'mythic' | 'roulette' | 'enhance' | 'mission'
     mythicTab: 'mythic', // 'mythic' | 'immortal'
     mythicSelectedId: null,
+    spinningTier: null, // 룰렛 스핀 연출 중인 등급
+    rouletteFailTier: null, // 방금 실패해서 해골을 잠깐 보여줄 등급
     monsters: [], // 좌->우 굴을 지나가는 장식용 몬스터 애니메이션 상태
     lastMonsterSpawnAt: null,
   };
@@ -89,6 +93,15 @@ export function GameScreen({ getState, dispatch, onExit }) {
   window.addEventListener('resize', () => {
     if (root.isConnected) render(getState());
   });
+
+  // 게임 루프가 0.2초마다 전체 DOM을 다시 그리는데, 그 사이에 클릭(mousedown~mouseup)이
+  // 걸리면 누르고 있던 버튼이 통째로 교체돼서 클릭이 씹히는 문제가 있었다(매번 두 번씩
+  // 눌러야 겨우 눌리던 버그의 원인). 포인터가 눌려있는 동안에는 주기적 재렌더링을 건너뛰고,
+  // 클릭 핸들러 안에서 직접 호출하는 render()는 그대로 즉시 반영되게 둔다.
+  let pointerDown = false;
+  root.addEventListener('pointerdown', () => { pointerDown = true; });
+  window.addEventListener('pointerup', () => { pointerDown = false; });
+  window.addEventListener('pointercancel', () => { pointerDown = false; });
 
   const MONSTER_SPAWN_INTERVAL_MS = 800; // 장식용 애니메이션 등장 간격(연출용, 실제 몬스터 수와는 별개)
   const MONSTER_TRAVEL_MS = 2600;
@@ -326,8 +339,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
       el('button', {
         class: 'mission-toggle-btn',
         title: '미션',
+        text: '☰',
         onclick: () => openPopup('mission', state),
-      }, [el('img', { src: UI_IMAGES.skullIcon, alt: '미션' })]),
+      }),
     ]);
   }
 
@@ -349,6 +363,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const buttons = [];
 
     buttons.push(el('button', { class: 'btn', text: '이동', onclick: () => { ui.moveMode = true; render(state); } }));
+    buttons.push(el('button', {
+      class: 'btn', text: `강화 (${ENHANCE_GOLD_COST}G ${ENHANCE_LUCKSTONE_COST}💎)`,
+      disabled: state.gold < ENHANCE_GOLD_COST || state.luckstone < ENHANCE_LUCKSTONE_COST,
+      onclick: () => apply(enhanceHero(state, instance.instanceId)),
+    }));
 
     if (heroDef.tier !== 'mythic' && heroDef.tier !== 'immortal') {
       buttons.push(el('button', {
@@ -467,17 +486,44 @@ export function GameScreen({ getState, dispatch, onExit }) {
     { tier: 'legendary', slot: 'right', img: UI_IMAGES.rouletteLegendary },
   ];
 
+  const ROULETTE_SPIN_MS = 900; // "1초보다 조금 짧게" 도는 연출(기획서 확정)
+  const ROULETTE_FAIL_FLASH_MS = 900;
+
+  function onRouletteWheelClick(r) {
+    if (ui.spinningTier) return; // 이미 도는 중이면 무시
+    const cost = ROULETTE_COST[r.slot];
+    if (getState().luckstone < cost) return;
+    ui.spinningTier = r.tier;
+    render(getState());
+    setTimeout(() => {
+      const fresh = getState();
+      const result = summonRoulette(fresh, r.tier, r.slot);
+      ui.spinningTier = null;
+      if (!result.success && result.reason === 'roulette-fail') {
+        ui.rouletteFailTier = r.tier;
+        setTimeout(() => {
+          ui.rouletteFailTier = null;
+          if (root.isConnected) render(getState());
+        }, ROULETTE_FAIL_FLASH_MS);
+      }
+      apply(result);
+    }, ROULETTE_SPIN_MS);
+  }
+
   function renderRoulettePopup(state) {
     const items = ROULETTE_TIERS.map((r) => {
       const cost = ROULETTE_COST[r.slot];
+      const spinning = ui.spinningTier === r.tier;
+      const failed = ui.rouletteFailTier === r.tier;
       return el('div', { class: 'roulette-item' }, [
         el('span', { class: 'roulette-pct', text: `${Math.round(ROULETTE_SUCCESS_RATE[r.tier] * 100)}%` }),
         el('button', {
-          class: 'roulette-wheel-btn',
-          disabled: state.luckstone < cost,
-          onclick: () => apply(summonRoulette(state, r.tier, r.slot)),
+          class: `roulette-wheel-btn${spinning ? ' spinning' : ''}`,
+          disabled: state.luckstone < cost || Boolean(ui.spinningTier),
+          onclick: () => onRouletteWheelClick(r),
         }, [
           el('img', { src: r.img, alt: TIER_LABEL[r.tier] }),
+          failed ? el('img', { class: 'roulette-fail-skull', src: UI_IMAGES.skullIcon, alt: '실패' }) : null,
           el('span', { class: 'roulette-item-cost' }, [el('img', { src: UI_IMAGES.luckstoneIcon, alt: '' }), el('span', { text: String(cost) })]),
         ]),
       ]);
@@ -492,36 +538,35 @@ export function GameScreen({ getState, dispatch, onExit }) {
     ]);
   }
 
-  // 강화 팝업 4칸. "일반 강화"만 실제 메커니즘(enhanceHero, instance.enhanceLevel)과 연결되어
-  // 있다. "확률 강화"는 기획서 확정대로 항상 맥스라 상태만 보여준다(눌러도 변화 없음).
-  // "영웅/전설 강화"는 대응하는 실제 게임 상태가 없어 잠금(준비 중)으로 노출한다
-  // (CLAUDE.md에 근거 정리해둠).
+  // 강화 팝업 4칸(일반~희귀/영웅/전설~불멸/소환 확률) - 특정 선택 영웅이 아니라 계정
+  // 전체에 적용되는 전역 트랙(GameState.globalEnhance, actions.js의 upgradeGlobalEnhance).
+  // 데미지 계산이 범위 밖이라 레벨을 올려도 실질 효과는 없지만(소환 확률도 항상 고정),
+  // 골드/보석은 실제로 차감되고 레벨도 실제로 오른다.
+  const GLOBAL_ENHANCE_ICON = {
+    common: UI_IMAGES.enhanceCommon,
+    hero: UI_IMAGES.enhanceHero,
+    legendary: UI_IMAGES.enhanceLegendary,
+    rate: UI_IMAGES.enhanceRate,
+  };
+
   function renderEnhancePopup(state) {
-    const found = selectedInstance(state);
-    const canEnhanceCommon = found && state.gold >= ENHANCE_GOLD_COST && state.luckstone >= ENHANCE_LUCKSTONE_COST;
-    const cols = [
-      el('button', {
-        class: 'enhance-col', disabled: !canEnhanceCommon,
-        onclick: () => { if (found) apply(enhanceHero(state, found.instance.instanceId)); },
+    const cols = GLOBAL_ENHANCE_TRACKS.map((track) => {
+      const cost = GLOBAL_ENHANCE_COST[track];
+      const level = state.globalEnhance[track] + 1;
+      const canAfford = (!cost.gold || state.gold >= cost.gold) && (!cost.luckstone || state.luckstone >= cost.luckstone);
+      return el('button', {
+        class: 'enhance-col', disabled: !canAfford,
+        onclick: () => apply(upgradeGlobalEnhance(state, track)),
       }, [
-        el('img', { class: 'enhance-col-icon', src: UI_IMAGES.enhanceCommon, alt: '일반 강화' }),
-        el('span', { class: 'enhance-col-lv', text: found ? `+${found.instance.enhanceLevel}` : '영웅 선택' }),
-        el('span', { class: 'enhance-col-cost' }, [el('img', { src: UI_IMAGES.goldIcon, alt: '' }), el('span', { text: String(ENHANCE_GOLD_COST) })]),
-      ]),
-      el('button', { class: 'enhance-col', disabled: true }, [
-        el('img', { class: 'enhance-col-icon', src: UI_IMAGES.enhanceRate, alt: '확률 강화' }),
-        el('span', { class: 'enhance-col-lv', text: 'MAX' }),
-        el('span', { class: 'enhance-col-locked-label', text: '항상 최대 고정' }),
-      ]),
-      el('button', { class: 'enhance-col', disabled: true }, [
-        el('img', { class: 'enhance-col-icon', src: UI_IMAGES.enhanceEpic, alt: '영웅 강화' }),
-        el('span', { class: 'enhance-col-locked-label', text: '준비 중' }),
-      ]),
-      el('button', { class: 'enhance-col', disabled: true }, [
-        el('img', { class: 'enhance-col-icon', src: UI_IMAGES.enhanceLegend, alt: '전설 강화' }),
-        el('span', { class: 'enhance-col-locked-label', text: '준비 중' }),
-      ]),
-    ];
+        el('img', { class: 'enhance-col-icon', src: GLOBAL_ENHANCE_ICON[track], alt: GLOBAL_ENHANCE_LABEL[track] }),
+        el('span', { class: 'enhance-col-name', text: GLOBAL_ENHANCE_LABEL[track] }),
+        el('span', { class: 'enhance-col-lv', text: `Lv.${level}` }),
+        el('span', { class: 'enhance-col-cost' }, [
+          el('img', { src: cost.gold ? UI_IMAGES.goldIcon : UI_IMAGES.luckstoneIcon, alt: '' }),
+          el('span', { text: String(cost.gold ?? cost.luckstone) }),
+        ]),
+      ]);
+    });
     return el('div', { class: 'game-popup' }, [
       el('div', { class: 'popup-topbar' }, [
         el('span', { class: 'popup-stat' }, [el('img', { src: UI_IMAGES.goldIcon, alt: '' }), el('span', { text: String(Math.floor(state.gold)) })]),
@@ -645,6 +690,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
   return {
     root,
     update(state) {
+      if (pointerDown) return; // 클릭 도중엔 건너뛰고, 다음 tick에 반영
       render(state);
     },
   };

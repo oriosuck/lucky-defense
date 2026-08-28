@@ -112,12 +112,16 @@ body {
   background-repeat: no-repeat;
 }
 
-/* ---- 상단 라운드/시간 배지 ---- */
+/* ---- 상단 라운드/시간 배지 ----
+   이미지(top_badge_bg.png)는 1000x1000 캔버스 안에 여백을 두고 그려져 있어서, 그 여백까지
+   포함한 채로 background-size:100% 100%를 쓰면 배지 모양이 눌리거나 늘어나 보였다.
+   public/ui/* 이미지는 전부 실제 그림 영역(bbox)만 남기고 다시 크롭해뒀으니, 여기 aspect-ratio는
+   그 크롭된 파일의 실제 가로세로 비율과 반드시 맞춰야 한다(다른 이미지로 갈아끼울 때도 동일). */
 .top-badge {
   position: absolute; left: 23.3%; top: 2.2%; width: 53.3%; z-index: 3;
   background-image: url('/ui/top_badge_bg.png');
   background-size: 100% 100%; background-repeat: no-repeat;
-  aspect-ratio: 951 / 515;
+  aspect-ratio: 963 / 527;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding-top: 10%;
   color: #fff; text-align: center;
@@ -125,14 +129,16 @@ body {
 .top-badge-label { font-size: clamp(8px, 2.4vw, 11px); font-weight: 700; opacity: 0.85; }
 .top-badge-value { font-size: clamp(14px, 4.6vw, 22px); font-weight: 800; color: var(--gem); }
 
-/* ---- 몬스터 카운트 바 ---- */
+/* ---- 몬스터 카운트 바 ----
+   해골+바 이미지(11번)는 룰렛 실패 전용이라 여기 쓰면 안 된다(사용자 매핑표 기준) - 배경
+   이미지 없이 단순 패널로만 표시한다. */
 .monster-row {
-  position: absolute; left: 22%; top: 14%; width: 56%; z-index: 3;
-  background-image: url('/ui/monster_bar.png');
-  background-size: 100% 100%; background-repeat: no-repeat;
-  aspect-ratio: 850 / 172;
-  display: flex; align-items: center; justify-content: flex-end;
-  padding-right: 8%;
+  position: absolute; left: 27%; top: 13.5%; width: 46%; z-index: 3;
+  background: rgba(20, 16, 26, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  padding: 1.5% 4%;
+  display: flex; align-items: center; justify-content: center;
 }
 .monster-count-text { color: #f5e6c8; font-weight: 700; font-size: clamp(9px, 2.6vw, 12px); }
 
@@ -281,7 +287,7 @@ body {
 }
 .resource-bar {
   width: 100%;
-  aspect-ratio: 963 / 136;
+  aspect-ratio: 975 / 148;
   background-image: url('/ui/resource_bar.png');
   background-size: 100% 100%; background-repeat: no-repeat;
   position: relative;
@@ -302,7 +308,16 @@ body {
 }
 .speed-toggle-btn, .mission-toggle-btn {
   width: 46%; aspect-ratio: 1;
-  border: none; background: transparent; padding: 0; cursor: pointer;
+  border: none; cursor: pointer;
+}
+.speed-toggle-btn { background: transparent; padding: 0; }
+.mission-toggle-btn {
+  background: rgba(20, 16, 26, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  font-size: clamp(12px, 3.4vw, 18px);
+  display: flex; align-items: center; justify-content: center;
 }
 .speed-toggle-btn img, .mission-toggle-btn img { width: 100%; height: 100%; object-fit: contain; }
 
@@ -402,6 +417,23 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
 }
 .roulette-wheel-btn img { width: 100%; height: 100%; object-fit: contain; }
 .roulette-wheel-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* 룰렛 스핀 연출(기획서: "1초보다 조금 짧게 룰렛이 도는 연출") */
+.roulette-wheel-btn.spinning img { animation: roulette-spin 0.9s cubic-bezier(0.2, 0.8, 0.3, 1); }
+@keyframes roulette-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(1080deg); }
+}
+/* 해골은 룰렛 실패했을 때만 잠깐 띄운다 - 몬스터/다른 용도로 쓰면 안 됨 */
+.roulette-fail-skull {
+  position: absolute; inset: 0; margin: auto;
+  width: 55%; height: 55%; object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+  animation: roulette-fail-pop 0.25s ease-out;
+}
+@keyframes roulette-fail-pop {
+  from { transform: scale(0.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
 .roulette-item-cost {
   position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 3px;
@@ -409,18 +441,19 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
 }
 .roulette-item-cost img { width: 12px; height: 12px; }
 
-/* ---- 강화 팝업 ---- */
+/* ---- 강화 팝업(전역 4트랙: 일반~희귀/영웅/전설~불멸/소환 확률) ---- */
 .enhance-cols { display: flex; justify-content: space-between; gap: 6px; }
 .enhance-col {
   flex: 1;
   background: rgba(0, 0, 0, 0.18);
   border-radius: 12px;
   padding: 6% 2%;
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
   border: none; color: #fff; cursor: pointer;
 }
 .enhance-col:disabled { opacity: 0.55; cursor: not-allowed; }
 .enhance-col-icon { width: 40px; height: 40px; object-fit: contain; }
+.enhance-col-name { font-size: clamp(9px, 2.4vw, 11px); font-weight: 700; color: var(--muted); text-align: center; }
 .enhance-col-lv { font-size: clamp(10px, 2.8vw, 13px); font-weight: 700; }
 .enhance-col-cost {
   display: flex; align-items: center; gap: 3px;
@@ -428,7 +461,6 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
   padding: 2% 8%; border-radius: 8px;
 }
 .enhance-col-cost img { width: 11px; height: 11px; }
-.enhance-col-locked-label { font-size: 10px; color: var(--muted); font-weight: 700; }
 
 /* ---- 신화 팝업 (78% 높이, 신화/불멸 탭 전환) ---- */
 .mythic-popup {
