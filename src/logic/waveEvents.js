@@ -29,6 +29,14 @@ const RAID_BASE_DELAY_SEC = 4;
 const RAID_MISSING_PENALTY_SEC = 5;
 const RAID_KEY_HERO_IDS = ['m_mama', 'm_bane', 'm_roka'];
 
+// ---- 보스 일반공격(디버프) - 이동불능과 별개, 1~2 주사위 간격으로 반복 발동 ----
+// 실질 효과 없음(공격속도/공격력 감소 미반영), 대상 영웅 색상만 표시. 지속시간은 기획서에
+// 명시되어 있지 않아 짧은 플래시로 처리한다.
+const DEBUFF_MARK_SEC = 3;
+
+// ---- 인디 "보물 발굴" (5-4) ----
+const INDY_TREASURE_INTERVAL_SEC = 30;
+
 // 몬스터 처치 속도 - 데미지 계산이 시뮬레이션 범위 밖이라 임시로 둔 플레이스홀더 수치
 const MONSTER_KILL_RATE_PER_SEC = 2; // 필드에 영웅이 1마리라도 있으면 초당 2마리씩 처치
 
@@ -99,7 +107,7 @@ function onWaveStart(state) {
   // 매 라운드 40마리씩 신규 등장(누적 유지)
   state.monsterCount = Math.min(state.monsterMax, state.monsterCount + MONSTER_PER_ROUND);
 
-  if (state.eventLog.immobilizeRounds.includes(state.wave)) {
+  if (state.bossAttackSchedule.immobilizeRounds.includes(state.wave)) {
     const duration = waveDuration(state.wave);
     const type = Math.random() < 0.5 ? 'instant' : 'gauge';
     state.eventLog.immobilizeEvent = {
@@ -114,6 +122,15 @@ function onWaveStart(state) {
     state.eventLog.immobilizeEvent = null;
   }
 
+  // 보스 일반공격(디버프) 스케줄 - 이동불능과 별개로, 예정된 라운드마다 발동하고 다음
+  // 예정 라운드를 다시 주사위(1~2)로 굴린다.
+  if (state.wave === state.bossAttackSchedule.nextAttackRound) {
+    const occupants = state.field.flatMap((s) => s.occupants);
+    const target = occupants.length ? occupants[randomInt(occupants.length)] : null;
+    state.eventLog.debuffEvent = target ? { instanceId: target.instanceId, timer: DEBUFF_MARK_SEC } : null;
+    state.bossAttackSchedule.nextAttackRound = state.wave + 1 + randomInt(2);
+  }
+
   // "삭제 없는 버전"에서는 이 이벤트 자체를 만들지 않는다.
   if (state.gameType === 'delete' && DELETE_ROUNDS.includes(state.wave)) {
     state.eventLog.deleteEvent = { round: state.wave, phase: 'idle', targetSlots: [] };
@@ -121,7 +138,7 @@ function onWaveStart(state) {
     state.eventLog.deleteEvent = null;
   }
 
-  state.eventLog.raidWindow = RAID_ROUNDS.includes(state.wave) ? { open: false, delayRemaining: null } : null;
+  state.bossRaidWindow = RAID_ROUNDS.includes(state.wave) ? { open: false, delayRemaining: null } : null;
 }
 
 /** 이동불능 공격(즉시형: 즉시 속박 5초 / 게이지형: 6칸 5초 채워진 뒤 10초간 이동불가) */
@@ -197,10 +214,10 @@ export function handleDeleteEvent(state) {
  * 기본 지연 4초, 마마/베인/로카 중 필드에 없는 영웅이 있을 때마다 +5초.
  */
 export function tickBossRaidWindow(state, deltaSec) {
-  const rw = state.eventLog.raidWindow;
+  const rw = state.bossRaidWindow;
   if (!rw || rw.open || state.result) return state;
   const newState = structuredClone(state);
-  const r = newState.eventLog.raidWindow;
+  const r = newState.bossRaidWindow;
 
   if (Math.floor(newState.monsterCount) > 0) {
     r.delayRemaining = null; // 몬스터가 다시 쌓이면 카운트다운 리셋
@@ -216,6 +233,30 @@ export function tickBossRaidWindow(state, deltaSec) {
       r.open = true;
       r.delayRemaining = 0;
     }
+  }
+  return newState;
+}
+
+/** 보스 일반공격(디버프) 표시 - 실질 효과 없이 짧게 표시만 하고 사라진다. */
+export function tickDebuffTimer(state, deltaSec) {
+  const ev = state.eventLog.debuffEvent;
+  if (!ev) return state;
+  const newState = structuredClone(state);
+  newState.eventLog.debuffEvent.timer -= deltaSec;
+  if (newState.eventLog.debuffEvent.timer <= 0) newState.eventLog.debuffEvent = null;
+  return newState;
+}
+
+/** 인디 "보물 발굴"(5-4): 30초마다 필드 임의의 칸에 새 보물이 등장한다. */
+export function tickIndyTreasure(state, deltaSec) {
+  if (state.result) return state;
+  const newState = structuredClone(state);
+  const t = newState.indyTreasure;
+  t.timer -= deltaSec;
+  if (t.timer <= 0) {
+    t.timer += INDY_TREASURE_INTERVAL_SEC;
+    const slot = newState.field[randomInt(newState.field.length)];
+    t.slot = { row: slot.row, col: slot.col };
   }
   return newState;
 }
