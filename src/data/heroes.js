@@ -176,8 +176,10 @@ export const IMMORTAL_CONDITIONS = {
     tickIntervalSec: 1, incrementPerTick: 60,
   },
   m_bane: {
+    // 궁극기 이펙트(연출용, 실질 데미지 없음)는 고정 11회가 아니라 왕복 이동
+    // 15~20회(매번 랜덤) 사이마다 한 번씩 터진다(사용자 재확인 사항).
     id: 'i_top_bane', name: '탑 베인', type: 'real-event', target: 132,
-    eventType: 'move', extra: { moveToUltimateRatio: 11 },
+    eventType: 'move', extra: { ultimateThresholdMin: 15, ultimateThresholdMax: 20 },
   },
   m_roka: {
     id: 'i_captain_roka', name: '캡틴 로카', type: 'time-based', target: 160,

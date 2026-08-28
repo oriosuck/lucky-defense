@@ -280,9 +280,20 @@ export function tickDebuffTimer(state, deltaSec) {
   return newState;
 }
 
-/** 인디 "보물 발굴"(5-4): 30초마다 필드 임의의 칸에 새 보물이 등장한다. */
+/**
+ * 인디 "보물 발굴"(5-4): 30초마다 필드 임의의 칸에 새 보물이 등장한다. 인디가 아직
+ * 필드에 없으면 등장 자체가 말이 안 되므로(사용자 지적 - "인디도 없는데 돈주머니가
+ * 뜨는 건 불가") 인디가 있을 때만 타이머를 돌리고, 없으면 남아있던 보물 표시도 지운다.
+ */
 export function tickIndyTreasure(state, deltaSec) {
   if (state.result) return state;
+  const hasIndy = state.field.some((s) => s.occupants.some((o) => o.heroId === 'm_indy'));
+  if (!hasIndy) {
+    if (!state.indyTreasure.slot) return state;
+    const newState = structuredClone(state);
+    newState.indyTreasure.slot = null;
+    return newState;
+  }
   const newState = structuredClone(state);
   const t = newState.indyTreasure;
   t.timer -= deltaSec;

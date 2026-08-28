@@ -12,11 +12,12 @@ export function resolveHeroImage(heroDef, instance) {
   return heroDef.image;
 }
 
-export function heroImage(heroDef, { className = '', instance = null, src = null } = {}) {
+export function heroImage(heroDef, { className = '', instance = null, src = null, style = null } = {}) {
   const img = el('img', {
     class: `hero-image ${className}`.trim(),
     src: src ?? resolveHeroImage(heroDef, instance),
     alt: heroDef.name,
+    ...(style ? { style } : {}),
   });
   // <img>는 기본적으로 브라우저 네이티브 드래그(HTML5 Drag and Drop)가 켜져 있어서,
   // 필드 칸 드래그 이동 제스처(GameScreen.js의 pointermove 핸들러)를 마우스다운 직후
