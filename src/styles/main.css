@@ -481,9 +481,12 @@ body {
 }
 
 /* ---- 상단 우측 컨트롤(일시정지/나가기) ---- */
+/* 일시정지/나가기 버튼을 더 붙여서 한 쌍처럼 보이게 한다(사용자 지적 - 서로 떨어져
+   보였음). 시간 박스(.top-badge)는 왼쪽에 별도로 떠 있어서 여기 gap을 좁히는 방향
+   (오른쪽 버튼끼리 더 가까워짐)은 시간 박스를 침범하지 않는다. */
 .stage-controls {
   position: absolute; right: 2%; top: 1.5%; z-index: 5;
-  display: flex; gap: 2vw;
+  display: flex; gap: 0.8vw;
 }
 /* .stage-controls가 position:absolute + right/top만 있고 width/height가 없어서
    auto(콘텐츠 기준) 크기다 - 자식의 height:%는 "컨테이닝 블록의 높이가 확정값일 때"만
