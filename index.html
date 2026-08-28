@@ -2,7 +2,9 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 모바일 웹에서 더블탭하면 브라우저가 확대해버리는 문제(사용자 지적) 방지 -
+         maximum-scale=1/user-scalable=no로 뷰포트 자체의 확대를 막는다. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>길드레이드 연습게임</title>
     <link rel="stylesheet" href="/src/styles/main.css" />
   </head>

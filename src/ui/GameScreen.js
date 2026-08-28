@@ -540,13 +540,18 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 뒤 2마리 + 앞 1마리의 삼각형 대열로 배치한다(사용자 참고 이미지). 인덱스 순서가
   // 뒤→앞이라 나중에 그려지는 앞쪽 캐릭터가 자연히 뒤쪽 위에 겹쳐 보인다(같은 칸
   // 안에서는 z-index를 따로 안 써도 DOM에 그려지는 순서만으로 앞/뒤가 갈림).
+  // 3마리 배치 규칙(사용자 정정 - "위에 있는 2마리는 밑선을 가운데에 맞추고 그
+  // 아래에 한 마리를 추가하는 걸로 가자. 지금은 정렬이 흐트러져 보여"): 뒤 2마리의
+  // 발끝(dy:0)이 다른 마리 수와 똑같이 칸 중앙에 오도록 맞추고, 앞 1마리는 그
+  // 기준선보다 아래(dy:양수)에 별도로 추가한다 - 뒤 2마리끼리는 같은 높이로
+  // 나란히 정렬되고, 앞 1마리만 그 아래 걸쳐 보인다.
   function stackOffsets(n) {
     if (n <= 1) return [{ dx: 0, dy: 0 }];
     if (n === 2) return [{ dx: -0.22, dy: 0 }, { dx: 0.22, dy: 0 }];
     return [
-      { dx: -0.3, dy: -0.2 }, // 뒤-왼쪽
-      { dx: 0.3, dy: -0.2 }, // 뒤-오른쪽
-      { dx: 0, dy: 0 }, // 앞-중앙
+      { dx: -0.3, dy: 0 }, // 뒤-왼쪽(밑선이 칸 중앙)
+      { dx: 0.3, dy: 0 }, // 뒤-오른쪽(밑선이 칸 중앙)
+      { dx: 0, dy: 0.2 }, // 앞-중앙(그 아래 추가)
     ];
   }
 
@@ -587,17 +592,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
       const sizeScale = isImpCell ? IMP_TOKEN_SCALE : 1;
       const tokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO * sizeScale;
       const n = slot.occupants.length;
-      // 1~2마리는 발끝(박스 하단)이 칸 정중앙에 오도록(사용자 지정, 이전 라운드).
-      // 3마리(삼각 대열 - 뒤 2마리 + 앞 1마리)는 다르다: 앞 1마리의 발끝만 중앙에
-      // 맞추면 뒤 2마리가 그만큼 더 위로 치우쳐 보인다고 사용자가 지적했다 -
-      // "3마리째가 되면 무리 전체를 중앙정렬해라". stackOffsets(3)의 dy가
-      // 뒤=-0.2, 앞=0이므로 무리 전체 높이는 1.2*tokenHeight(뒤 top ~ 앞 bottom)이고
-      // 그 중심을 칸 중앙에 맞추려면 baseTop을 0.4*tokenHeight만 위로 올리면 된다
-      // (앞 1마리 발끝만 맞추는 기존 공식 대비) - 아래서 무리 중심 = baseTop+0.4H가
-      // 되도록 역산한 값.
-      const baseTop = n === 3
-        ? rect.top + rect.height / 2 - 0.4 * tokenHeight
-        : rect.top + rect.height / 2 - tokenHeight;
+      // 발끝(박스 하단)이 칸 정중앙에 오도록(사용자 지정) - 마리 수와 무관하게
+      // 항상 같은 기준선을 쓴다. 3마리일 때 뒤 2마리의 발끝이 바로 이 기준선에
+      // 오고, 앞 1마리만 stackOffsets의 dy로 그 아래에 별도로 걸린다(사용자 정정 -
+      // "위에 있는 2마리는 밑선을 가운데에 맞추고 그 아래에 한 마리를 추가").
+      const baseTop = rect.top + rect.height / 2 - tokenHeight;
       const tokenWidth = rect.width * HERO_TOKEN_WIDTH_RATIO * sizeScale; // 마리 수와 무관하게 항상 고정
       const cellCenterX = rect.left + rect.width / 2;
       const offsets = stackOffsets(n);
