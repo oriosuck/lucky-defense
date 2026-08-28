@@ -11,7 +11,6 @@ import {
   sellGigaChad,
   countHeroOnField,
   craftableMythicCount,
-  instantSummonFavorite,
 } from '../logic/synthesis.js';
 import {
   enhanceHero,
@@ -354,8 +353,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
   //    아니라 신화 조합과 똑같은 방식으로 왼쪽 아이콘에 노출한다(사용자 지정 규칙 -
   //    "불멸이 먼저, 신화가 밑으로"). instance별 판정이라 heroId가 아니라 instanceId
   //    기준으로 찾는다.
-  // 2) 지금 조합 가능한 신화("필드에 있는 신화"가 아니라 재료가 갖춰진 신화 - 기획서
-  //    명시 사항) + 이미 한 번 조합해서 무료 즉시소환이 풀린 신화.
+  // 2) 지금 조합 가능한 신화(재료가 필드에 다 갖춰진 신화). 신화 소환은 항상 "재료를
+  //    먼저 없애고 신화를 추가"하는 방식이라 무료 재소환 같은 예외가 없다(사용자
+  //    지적 - 예전엔 즐겨찾기 등록 + 한 번 조합한 신화는 재료 없이 무한 재소환되는
+  //    "즉시소환" 버튼이 따로 있었는데, "재료도 안 없어지고 소환만 되는 중"이라는
+  //    지적을 받고 그 예외를 완전히 없앴다. `unlockedInstantSummons`/
+  //    `instantSummonFavorite`도 함께 삭제 - 항상 craftMythic() 하나로 통일).
   // 정렬은 불멸 승급 후보를 항상 앞에 두고, 그 안에서/신화 목록 안에서는 각각
   // 즐겨찾기 우선.
   function favoriteBarItems(state) {
@@ -373,13 +376,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
     promoteItems.sort((a, b) => Number(favoriteIds.has(b.heroId)) - Number(favoriteIds.has(a.heroId)));
 
     const craftIds = heroesByTier('mythic')
-      .filter((heroDef) => state.unlockedInstantSummons.includes(heroDef.id) || craftMaterialsReady(state, heroDef))
+      .filter((heroDef) => craftMaterialsReady(state, heroDef))
       .map((heroDef) => heroDef.id);
     craftIds.sort((a, b) => Number(favoriteIds.has(b)) - Number(favoriteIds.has(a)));
-    const craftItems = craftIds.map((heroId) => ({
-      kind: state.unlockedInstantSummons.includes(heroId) ? 'unlocked' : 'craft',
-      heroId,
-    }));
+    const craftItems = craftIds.map((heroId) => ({ kind: 'craft', heroId }));
 
     return [...promoteItems, ...craftItems].slice(0, FAVORITE_BAR_MAX);
   }
@@ -412,18 +412,17 @@ export function GameScreen({ getState, dispatch, onExit }) {
             ],
           );
         }
-        const unlocked = item.kind === 'unlocked';
         return el(
           'button',
           {
             class: 'favorite-icon',
             title: heroDef?.name,
-            onclick: () => apply(unlocked ? instantSummonFavorite(state, item.heroId) : craftMythic(state, item.heroId)),
+            onclick: () => apply(craftMythic(state, item.heroId)),
           },
           [
             heroImage(heroDef, { className: 'favorite-icon-image' }),
             starBadge(item.heroId),
-            el('span', { class: 'favorite-icon-label', text: unlocked ? '즉시 소환!' : '조합 가능' }),
+            el('span', { class: 'favorite-icon-label', text: '조합 가능' }),
           ],
         );
       }),
@@ -650,7 +649,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         const imgStyle = `filter:${filterParts.join(' ')}; animation-delay:-${attackPhase}ms;`;
 
         layer.appendChild(el('div', {
-          class: `stage-hero-token${debuffed ? ' debuffed' : ''}${usingUltimate ? ' ultimate-flash' : ''}`,
+          class: `stage-hero-token${usingUltimate ? ' ultimate-flash' : ''}`,
           style: `left:${centerX}%; top:${top}%; width:${tokenWidth}%; height:${tokenHeight}%; z-index:${2 + slot.row};${usingUltimate ? ` --ring-delay:-${ultimateElapsedMs % 800}ms;` : ''}`,
         }, [
           el('div', { class: 'stage-hero-shadow' }),
