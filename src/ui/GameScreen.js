@@ -480,10 +480,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
     }, [el('img', { src: UI_IMAGES.enhanceBtn, alt: '강화' })]);
   }
 
+  // 각 등급 룰렛 이미지(원형 배지 + 가격 칸)의 실제 가로세로 비율. 셋이 서로 달라서
+  // 공용 CSS aspect-ratio로 못 묶고 버튼마다 인라인으로 정확히 맞춰준다(letterbox 방지).
   const ROULETTE_TIERS = [
-    { tier: 'rare', slot: 'left', img: UI_IMAGES.rouletteRare },
-    { tier: 'hero', slot: 'left', img: UI_IMAGES.rouletteHero },
-    { tier: 'legendary', slot: 'right', img: UI_IMAGES.rouletteLegendary },
+    { tier: 'rare', slot: 'left', img: UI_IMAGES.rouletteRare, ratio: 650 / 918 },
+    { tier: 'hero', slot: 'left', img: UI_IMAGES.rouletteHero, ratio: 603 / 942 },
+    { tier: 'legendary', slot: 'right', img: UI_IMAGES.rouletteLegendary, ratio: 783 / 950 },
   ];
 
   const ROULETTE_SPIN_MS = 900; // "1초보다 조금 짧게" 도는 연출(기획서 확정)
@@ -519,6 +521,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         el('span', { class: 'roulette-pct', text: `${Math.round(ROULETTE_SUCCESS_RATE[r.tier] * 100)}%` }),
         el('button', {
           class: `roulette-wheel-btn${spinning ? ' spinning' : ''}`,
+          style: `aspect-ratio:${r.ratio};`,
           disabled: state.luckstone < cost || Boolean(ui.spinningTier),
           onclick: () => onRouletteWheelClick(r),
         }, [

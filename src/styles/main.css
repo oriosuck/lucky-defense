@@ -113,32 +113,37 @@ body {
 }
 
 /* ---- 상단 라운드/시간 배지 ----
-   이미지(top_badge_bg.png)는 1000x1000 캔버스 안에 여백을 두고 그려져 있어서, 그 여백까지
-   포함한 채로 background-size:100% 100%를 쓰면 배지 모양이 눌리거나 늘어나 보였다.
-   public/ui/* 이미지는 전부 실제 그림 영역(bbox)만 남기고 다시 크롭해뒀으니, 여기 aspect-ratio는
-   그 크롭된 파일의 실제 가로세로 비율과 반드시 맞춰야 한다(다른 이미지로 갈아끼울 때도 동일). */
+   목업(게임화면_목업.html)의 .top-badge는 이미지가 아니라 순수 CSS 박스다(배경색+테두리).
+   저번 라운드에 여기 커튼 프레임 이미지(보석/인원/X 아이콘이 그림에 박혀있는 "룰렛 배경.png")를
+   잘못 얹었었는데, 그게 "팝업 전용 요소가 게임 화면에 항상 떠 있다"는 버그의 정체였다 -
+   그 이미지는 애초에 목업 어디에도 안 쓰이는 자산이라 지워야 맞다. 다시 순수 CSS로 되돌림. */
 .top-badge {
   position: absolute; left: 23.3%; top: 2.2%; width: 53.3%; z-index: 3;
-  background-image: url('/ui/top_badge_bg.png');
-  background-size: 100% 100%; background-repeat: no-repeat;
-  aspect-ratio: 963 / 527;
+  background: #4a3529;
+  border: 3px solid #2e2016;
+  border-radius: 14px;
+  padding: 4% 0 5%;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding-top: 10%;
   color: #fff; text-align: center;
 }
-.top-badge-label { font-size: clamp(8px, 2.4vw, 11px); font-weight: 700; opacity: 0.85; }
-.top-badge-value { font-size: clamp(14px, 4.6vw, 22px); font-weight: 800; color: var(--gem); }
+.top-badge-label {
+  font-size: clamp(8px, 2.4vw, 11px); font-weight: 700;
+  background: rgba(0, 0, 0, 0.25); display: inline-block;
+  padding: 2px 10px; border-radius: 8px; margin-bottom: 4px;
+}
+.top-badge-value { font-size: clamp(14px, 4.6vw, 22px); font-weight: 800; color: #fff; }
 
 /* ---- 몬스터 카운트 바 ----
-   배경은 monster_count_bg.png(12번) - 사용자가 실제 게임 스크린샷으로 정정해준 이미지.
-   위로 튀어나온 어두운 탭 부분에 숫자가 들어가도록 padding-top을 크게 준다. */
+   배경은 monster_count_bg.png("몬스터 카운트 바.png") - 왼쪽에 해골 메달, 오른쪽으로 어두운
+   바가 이어지는 모양(목업의 .skull+.text 구조와 대응). 메달 폭만큼 padding-left를 줘서
+   텍스트가 메달과 안 겹치게 한다. */
 .monster-row {
-  position: absolute; left: 27%; top: 11%; width: 46%; z-index: 3;
+  position: absolute; left: 22%; top: 13.79%; width: 56%; z-index: 3;
   background-image: url('/ui/monster_count_bg.png');
   background-size: 100% 100%; background-repeat: no-repeat;
-  aspect-ratio: 972 / 398;
+  aspect-ratio: 862 / 184;
   display: flex; align-items: center; justify-content: center;
-  padding-top: 12%;
+  padding-left: 20%;
 }
 .monster-count-text { color: #f5e6c8; font-weight: 700; font-size: clamp(9px, 2.6vw, 12px); }
 
@@ -196,43 +201,46 @@ body {
   100% { left: 85.03%; top: 44.3%; opacity: 0; }
 }
 
+/* 전장 그리드는 배경 원화에 이미 돌판 프레임이 그려져 있어서(assets.js STAGE_LAYOUT.field
+   참고) 배경/패딩을 넣지 않는다 - 목업의 .field-grid도 셀 테두리선만 있고 채우기 색은 없다.
+   저번엔 이 배경(rgba 반투명 채우기)이 겹겹이 쌓여서(그리드+칸마다) 돌판 프레임이 안 보이고
+   그냥 불투명한 회색 박스처럼 보였던 게 "배경이 다르게 나온다"는 착시의 원인이었다. */
 .field-grid.stage-field {
   position: absolute;
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   grid-template-rows: repeat(4, 1fr);
-  gap: 3px;
-  background: rgba(12, 12, 20, 0.4);
-  padding: 4px;
-  border-radius: 8px;
+  gap: 2px;
 }
 .field-slot {
   position: relative;
-  background: rgba(30, 30, 42, 0.55);
-  border: 1px solid rgba(58, 58, 82, 0.7);
-  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 1px;
   cursor: pointer;
-  padding: 1px;
   overflow: hidden;
 }
-.field-slot.empty { opacity: 0.7; }
+.field-slot.empty { opacity: 0.85; }
 .field-slot.move-target { outline: 2px dashed var(--accent); }
+/* 영웅 토큰은 셀 크기에 대한 상대(%) 크기로 둬야 뷰포트가 좁아져 셀이 작아질 때도
+   같이 줄어든다 - 예전엔 24px/17px 고정값이라 셀이 그보다 작아지는 뷰포트에서
+   토큰이 셀 테두리 밖으로 삐져나왔다(문제 3의 원인). */
 .hero-token {
   position: relative;
+  width: 55%; aspect-ratio: 1;
   border-radius: 3px;
   animation: token-pop 0.12s ease-out;
 }
+.field-slot.count-2 .hero-token, .field-slot.count-3 .hero-token { width: 32%; }
 @keyframes token-pop {
   from { transform: scale(0.4); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
-.hero-token-image { width: 24px; height: 24px; }
-.field-slot.count-2 .hero-token-image, .field-slot.count-3 .hero-token-image { width: 17px; height: 17px; }
+.hero-token-image { width: 100%; height: 100%; object-fit: contain; display: block; }
 .hero-token.selected { outline: 2px solid var(--gold); border-radius: 4px; }
 .enhance-badge {
   position: absolute; bottom: -2px; right: -2px;
@@ -280,9 +288,10 @@ body {
 }
 .stage-control-btn.active { border-color: var(--gold); color: var(--gold); }
 
-/* ---- 재화 바 + 배속/미션(☰) ---- */
+/* ---- 재화 바 + 배속/미션(☰) ----
+   목업의 .stat-row는 top:578px/812=71.18%. */
 .stage-resource-row {
-  position: absolute; left: 8%; top: 70%; width: 62%; z-index: 3;
+  position: absolute; left: 8%; top: 71%; width: 62%; z-index: 3;
   display: flex; align-items: center;
 }
 .resource-bar {
@@ -303,7 +312,7 @@ body {
 .resource-pop { left: 66%; }
 
 .stage-side-controls {
-  position: absolute; right: 4%; top: 70%; width: 20%; z-index: 3;
+  position: absolute; right: 4%; top: 70.7%; width: 20%; z-index: 3;
   display: flex; justify-content: space-between; align-items: center;
 }
 .speed-toggle-btn, .mission-toggle-btn {
@@ -344,7 +353,7 @@ body {
 
 /* ---- 하단 버튼 행: 신화 / 소환 / 룰렛 ---- */
 .action-row {
-  position: absolute; left: 4.3%; right: 4.3%; top: 77%; height: 11.3%; z-index: 3;
+  position: absolute; left: 4.3%; right: 4.3%; top: 77.1%; height: 11.3%; z-index: 3;
   display: flex; align-items: flex-end; gap: 3%;
 }
 .side-btn {
@@ -371,9 +380,14 @@ body {
 }
 button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; cursor: not-allowed; }
 
-/* ---- 강화 버튼(하단, 팝업을 연다) ---- */
+/* ---- 강화 버튼(하단, 팝업을 연다) ----
+   목업의 .enhance-btn 폭(155px/375=41.3%)은 우연히 action-row의 소환 버튼 렌더 폭과
+   거의 같다(양옆 side-btn 84px x2 + gap을 제외한 나머지). 예전엔 height를 %로 고정해서
+   실제 이미지 비율과 안 맞아 letterbox되어 버튼이 얇게 보였다 - height 대신
+   aspect-ratio(864/247, enhance_btn.png 실제 크기)로 정확히 맞춘다. */
 .enhance-open-btn {
-  position: absolute; left: 29.3%; width: 41.3%; top: 90%; height: 5.7%; z-index: 3;
+  position: absolute; left: 29.3%; width: 41.3%; top: 89.9%; z-index: 3;
+  aspect-ratio: 864 / 247;
   border: none; background: transparent; padding: 0; cursor: pointer;
 }
 .enhance-open-btn img { width: 100%; height: 100%; object-fit: contain; }
@@ -411,8 +425,11 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
 .roulette-row { display: flex; justify-content: space-between; gap: 8px; }
 .roulette-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .roulette-pct { color: #fff; font-size: clamp(10px, 3vw, 13px); font-weight: 800; }
+/* 룰렛 휠 이미지는 원형 배지 아래에 가격 칸까지 이어붙은 세로로 긴 형태라(등급별로 비율이
+   조금씩 다름) 정사각형 aspect-ratio를 강제하지 않는다 - GameScreen.js가 이미지별 실제
+   비율을 인라인 style로 넣어준다(letterbox 방지). */
 .roulette-wheel-btn {
-  width: 100%; aspect-ratio: 1; border: none; background: transparent; padding: 0; cursor: pointer;
+  width: 100%; border: none; background: transparent; padding: 0; cursor: pointer;
   position: relative;
 }
 .roulette-wheel-btn img { width: 100%; height: 100%; object-fit: contain; }

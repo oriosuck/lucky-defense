@@ -6,10 +6,15 @@ export const BACKGROUND_IMAGE = `${BASE}bg/background.jpg`;
 // background.jpg 원본 크기(688x1508)에서 실측한 좌표를 %로 변환한 값.
 // 검은 테두리로 표시돼 있던 돌판 프레임은 가로세로 비율이 6x4 칸과 정확히
 // 맞아떨어져서(512x278px) 전장 그리드 자리였다 - 보스는 그 위 빈 하늘 공간에 배치한다.
+// field는 배경 원화에 그려진 돌판 프레임과 정확히 겹쳐야 해서 계속 실측값을 쓴다.
+// boss는 배경에 그려진 요소가 아니라 위에 얹는 스프라이트라 목업(375x812)의 px 좌표를
+// 그대로 %로 환산해서 썼다(left:77.5/375, top:150/812, width:220/375) - height는 고정값
+// 대신 boss.png 실제 비율(851x700)로 자동 계산해서 이미지가 눌리지 않게 했다
+// (width% * stageWidth/stageHeight / imgRatio = 58.67 * (688/1508) / 1.2157 ≈ 22.02).
 export const BACKGROUND_ASPECT_RATIO = '688 / 1508';
 export const STAGE_LAYOUT = {
   field: { left: 12.5, top: 43.63, width: 74.42, height: 18.44 },
-  boss: { left: 18, top: 9, width: 64, height: 36 },
+  boss: { left: 20.67, top: 18.47, width: 58.67, height: 22.02 },
   leftHole: { x: 14.97, y: 44.23 },
   rightHole: { x: 85.03, y: 44.3 },
 };
@@ -44,43 +49,46 @@ export const ACE_BATMAN_TRANSFORM_IMAGES = {
   batter: `${BASE}heroes/i_ace_batman_batter.webp`,
 };
 
-// 사용자가 제공한 UI 버튼/배지/아이콘 아트 (public/ui/). 전부 사용자가 준 "이미지 매핑표
-// (UI/배경)"의 파일 번호를 그대로 따른 것 - 번호 자체를 추측하지 말고 이 매핑표가 바뀌면
-// 여기만 고치면 된다.
-// resourceBar/topBadgeBg는 JS에서 안 쓰고 main.css에서 background-image로 직접 참조한다
-// (alt 텍스트가 필요 없는 순수 배경이라 굳이 <img>로 만들 필요가 없었음) - 그래도 파일 목록
-// 전체를 한 곳에서 확인할 수 있도록 이 객체에도 같이 남겨둔다.
-// monsterCountBg(12번)는 원래 "커튼 프레임/구 룰렛 팝업 배경"으로 추정해서 미사용 처리했었는데,
-// 사용자가 실제 게임 스크린샷으로 몬스터 카운트 바 배경이 이 이미지라고 직접 정정해줬다
-// (모양이 위쪽에 탭이 튀어나온 명패 형태 - 목업 HTML의 몬스터 카운트 자리는 순수 CSS/이모지
-// 플레이스홀더였을 뿐이라 실제 아트는 이 표를 따로 확인해야 했다. `.monster-row` 참고).
+// 사용자가 제공한 UI 버튼/배지/아이콘 아트 (public/ui/). 이번 라운드에서 사용자가
+// 숫자 파일명 대신 한글 이름으로 다시 붙인 zip을 줘서(예: "몬스터 카운트 바.png"),
+// 이전처럼 파일을 눈으로 열어 모양을 추측할 필요 없이 파일명을 그대로 신뢰해서 매핑했다.
+//
+// 헷갈렸던 것 재정리:
+// - "룰렛 배경.png"(커튼 프레임 + 보석/인원/X 아이콘이 그림 안에 박혀있는 이미지)는
+//   이름과 달리 실제 목업 HTML 어디에도 쓰이지 않는 자산이었다(목업의 .popup은 전부
+//   순수 CSS 그라데이션 배경이지 이 이미지를 참조하지 않음) - 저번 라운드에 이걸
+//   상시 노출되는 top-badge 배경으로 잘못 썼던 게 "팝업 전용 요소가 항상 떠 있다"는
+//   버그의 원인이었다. top-badge는 목업 그대로 이미지 없는 순수 CSS 박스로 되돌렸고,
+//   이 이미지는 어디에도 매핑하지 않는다(public/ui에도 안 남겨둠 - 필요해지면 zip에서
+//   다시 꺼내 쓸 것).
+// - "카운트 이미지.png"(위쪽에 탭이 튀어나온 명패 모양, 스켈레톤 없음)도 이번 zip에
+//   있었지만 목업 어디에도 대응하는 자리가 없어서(몬스터 카운트는 "몬스터 카운트
+//   바.png"라는 이름의 스켈레톤+바 이미지가 따로 있고, 목업의 `.skull`+`.text` 구조와도
+//   이쪽이 훨씬 잘 맞음) 매핑하지 않았다.
 export const UI_IMAGES = {
-  summonBtn: `${BASE}ui/summon_btn.png`, // 19
-  mythicBtn: `${BASE}ui/mythic_btn.png`, // 21
-  rouletteBtn: `${BASE}ui/roulette_btn.png`, // 20
-  enhanceBtn: `${BASE}ui/enhance_btn.png`, // 18
-  rouletteRare: `${BASE}ui/roulette_rare.png`, // 23
-  rouletteHero: `${BASE}ui/roulette_hero.png`, // 24
-  rouletteLegendary: `${BASE}ui/roulette_legendary.png`, // 22
-  resourceBar: `${BASE}ui/resource_bar.png`, // 17
-  topBadgeBg: `${BASE}ui/top_badge_bg.png`, // 14
-  monsterCountBg: `${BASE}ui/monster_count_bg.png`, // 12, 몬스터 카운트 바 배경
-  // 해골(13)은 룰렛 실패 표시 전용 - 몬스터 표시에는 절대 쓰지 않는다.
-  skullIcon: `${BASE}ui/skull_icon.png`, // 13
-  speedOn: `${BASE}ui/speed_on.png`, // 16
-  speedOff: `${BASE}ui/speed_off.png`, // 15
-  // 몬스터(4)와 임프(2)는 서로 다른 이미지다 - 헷갈려서 한 번 바꿔 넣었다가 정정함.
-  monsterIcon: `${BASE}ui/monster.png`, // 4
-  impIcon: `${BASE}ui/imp.png`, // 2, 마마 전용 소환체
-  immobilizeIcon: `${BASE}ui/immobilize_icon.png`, // 3, 이동불능(즉시형) 표시
-  goldIcon: `${BASE}ui/gold_icon.png`, // 6
-  luckstoneIcon: `${BASE}ui/luckstone_icon.png`, // 5
+  summonBtn: `${BASE}ui/summon_btn.png`,
+  mythicBtn: `${BASE}ui/mythic_btn.png`,
+  rouletteBtn: `${BASE}ui/roulette_btn.png`,
+  enhanceBtn: `${BASE}ui/enhance_btn.png`,
+  rouletteRare: `${BASE}ui/roulette_rare.png`,
+  rouletteHero: `${BASE}ui/roulette_hero.png`,
+  rouletteLegendary: `${BASE}ui/roulette_legendary.png`,
+  resourceBar: `${BASE}ui/resource_bar.png`, // "재화 및 맵 카운트 바.png" - 상시 노출되는 하단 stat-row
+  skullIcon: `${BASE}ui/skull_icon.png`, // "룰렛 실패.png" - 룰렛 실패 표시 전용, 몬스터 표시엔 안 씀
+  speedOn: `${BASE}ui/speed_on.png`,
+  speedOff: `${BASE}ui/speed_off.png`,
+  monsterIcon: `${BASE}ui/monster.png`, // "몬스터.png"(동글동글 웃는 얼굴)
+  impIcon: `${BASE}ui/imp.png`, // "임프.png"(각진 몸통+왕관, 마마 전용 소환체) - 몬스터와 다른 이미지
+  immobilizeIcon: `${BASE}ui/immobilize_icon.png`, // "속박.png"
+  goldIcon: `${BASE}ui/gold_icon.png`, // "코인.png"
+  luckstoneIcon: `${BASE}ui/luckstone_icon.png`, // "행운석.png"
+  monsterCountBg: `${BASE}ui/monster_count_bg.png`, // "몬스터 카운트 바.png" - 스켈레톤 메달+바
   // 강화 팝업 4열(일반~희귀/영웅/전설~불멸/소환 확률) 아이콘. 전부 GameState.globalEnhance의
   // 실제 전역 트랙과 연결된 진짜 버튼이다(actions.js의 upgradeGlobalEnhance) - 데미지 계산이
   // 범위 밖이라 레벨을 올려도 실질 효과는 없지만(소환 확률도 항상 고정), 골드/보석을 실제로
   // 쓰고 레벨이 실제로 오르는 진행형 시스템으로 구현했다. 특정 선택 영웅과는 무관.
-  enhanceCommon: `${BASE}ui/enhance_common.png`, // 10 (일반~희귀)
-  enhanceHero: `${BASE}ui/enhance_epic.png`, // 9 (영웅)
-  enhanceLegendary: `${BASE}ui/enhance_legend.png`, // 8 (전설~불멸)
-  enhanceRate: `${BASE}ui/enhance_rate.png`, // 7 (소환 확률)
+  enhanceCommon: `${BASE}ui/enhance_common.png`, // "강화_일반희귀.png"
+  enhanceHero: `${BASE}ui/enhance_hero.png`, // "강화_영웅.png"
+  enhanceLegendary: `${BASE}ui/enhance_legendary.png`, // "강화_신화~불멸.png"
+  enhanceRate: `${BASE}ui/enhance_rate.png`, // "강화_소환확률.png"
 };
