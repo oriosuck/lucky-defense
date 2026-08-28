@@ -50,8 +50,10 @@ export const ACE_BATMAN_TRANSFORM_IMAGES = {
 // resourceBar/topBadgeBg는 JS에서 안 쓰고 main.css에서 background-image로 직접 참조한다
 // (alt 텍스트가 필요 없는 순수 배경이라 굳이 <img>로 만들 필요가 없었음) - 그래도 파일 목록
 // 전체를 한 곳에서 확인할 수 있도록 이 객체에도 같이 남겨둔다.
-// popupTopBarBg(12번, 구 룰렛 팝업 커튼 프레임)는 새 목업이 하단 시트를 플랫 배경으로
-// 바꾸면서 안 쓰게 됐다 - 나중에 다시 필요해지면 여기서 바로 꺼내 쓸 수 있게 매핑만 남겨둠.
+// monsterCountBg(12번)는 원래 "커튼 프레임/구 룰렛 팝업 배경"으로 추정해서 미사용 처리했었는데,
+// 사용자가 실제 게임 스크린샷으로 몬스터 카운트 바 배경이 이 이미지라고 직접 정정해줬다
+// (모양이 위쪽에 탭이 튀어나온 명패 형태 - 목업 HTML의 몬스터 카운트 자리는 순수 CSS/이모지
+// 플레이스홀더였을 뿐이라 실제 아트는 이 표를 따로 확인해야 했다. `.monster-row` 참고).
 export const UI_IMAGES = {
   summonBtn: `${BASE}ui/summon_btn.png`, // 19
   mythicBtn: `${BASE}ui/mythic_btn.png`, // 21
@@ -62,7 +64,7 @@ export const UI_IMAGES = {
   rouletteLegendary: `${BASE}ui/roulette_legendary.png`, // 22
   resourceBar: `${BASE}ui/resource_bar.png`, // 17
   topBadgeBg: `${BASE}ui/top_badge_bg.png`, // 14
-  popupTopBarBg: `${BASE}ui/popup_topbar_bg.png`, // 12, 미사용
+  monsterCountBg: `${BASE}ui/monster_count_bg.png`, // 12, 몬스터 카운트 바 배경
   // 해골(13)은 룰렛 실패 표시 전용 - 몬스터 표시에는 절대 쓰지 않는다.
   skullIcon: `${BASE}ui/skull_icon.png`, // 13
   speedOn: `${BASE}ui/speed_on.png`, // 16

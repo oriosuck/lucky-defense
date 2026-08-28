@@ -130,15 +130,15 @@ body {
 .top-badge-value { font-size: clamp(14px, 4.6vw, 22px); font-weight: 800; color: var(--gem); }
 
 /* ---- 몬스터 카운트 바 ----
-   해골+바 이미지(11번)는 룰렛 실패 전용이라 여기 쓰면 안 된다(사용자 매핑표 기준) - 배경
-   이미지 없이 단순 패널로만 표시한다. */
+   배경은 monster_count_bg.png(12번) - 사용자가 실제 게임 스크린샷으로 정정해준 이미지.
+   위로 튀어나온 어두운 탭 부분에 숫자가 들어가도록 padding-top을 크게 준다. */
 .monster-row {
-  position: absolute; left: 27%; top: 13.5%; width: 46%; z-index: 3;
-  background: rgba(20, 16, 26, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 999px;
-  padding: 1.5% 4%;
+  position: absolute; left: 27%; top: 11%; width: 46%; z-index: 3;
+  background-image: url('/ui/monster_count_bg.png');
+  background-size: 100% 100%; background-repeat: no-repeat;
+  aspect-ratio: 972 / 398;
   display: flex; align-items: center; justify-content: center;
+  padding-top: 12%;
 }
 .monster-count-text { color: #f5e6c8; font-weight: 700; font-size: clamp(9px, 2.6vw, 12px); }
 
