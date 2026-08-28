@@ -1,26 +1,22 @@
 import { TIER_LABEL, heroesByTier } from '../data/heroes.js';
-import { RELIC_KEYS, RELIC_LABEL, RELIC_LEVEL_MIN, RELIC_LEVEL_MAX, isValidRelicLevel } from '../data/relics.js';
 import { savePreset, listPresets, loadPreset, deletePreset, PRESET_NAME_MAX_LENGTH } from '../state/presetStore.js';
 import { el } from './components/dom.js';
+import { heroPlaceholder } from './components/heroPlaceholder.js';
 
-// 일반~전설은 항상 소환 풀에 포함되므로 사전 선택이 필요 없다. 홈 화면에서는
-// 이번 판에 등장시킬 신화 등급만 고른다.
+// 일반~전설은 항상 소환 풀에 포함되고 모든 영웅이 기본 보유 상태이므로 사전 선택이 필요 없다.
+// 홈 화면에서는 이번 판에서 불멸로 취급할지/즐겨찾기할지를 신화 등급 카드에서만 고른다.
 const SELECTABLE_TIERS = ['mythic'];
 
 function createLocalState() {
   return {
     gameType: null, // 'no-delete' | 'delete'
     immortalPet: true,
-    relics: { vault: null, moneygun: null, luckstone: null, meat: null, wallet: null },
-    owned: new Map(), // heroId -> { owned, immortal, favorite }
+    settings: new Map(), // heroId -> { immortal, favorite } (신화 등급만 사용)
   };
 }
 
 function isStartReady(s) {
-  if (!s.gameType) return false;
-  if (RELIC_KEYS.some((k) => !isValidRelicLevel(s.relics[k]))) return false;
-  const ownedCount = [...s.owned.values()].filter((v) => v.owned).length;
-  return ownedCount >= 1;
+  return s.gameType != null;
 }
 
 export function HeroSelectScreen({ onStart }) {
@@ -32,37 +28,28 @@ export function HeroSelectScreen({ onStart }) {
     root.appendChild(render());
   }
 
-  function toggleOwned(heroId) {
-    const cur = local.owned.get(heroId) ?? { owned: false, immortal: false, favorite: false };
-    local.owned.set(heroId, { ...cur, owned: !cur.owned });
-    update();
-  }
-
   function toggleImmortal(heroId) {
-    const cur = local.owned.get(heroId);
-    if (!cur?.owned) return;
-    local.owned.set(heroId, { ...cur, immortal: !cur.immortal });
+    const cur = local.settings.get(heroId) ?? { immortal: false, favorite: false };
+    local.settings.set(heroId, { ...cur, immortal: !cur.immortal });
     update();
   }
 
   function toggleFavorite(heroId) {
-    const cur = local.owned.get(heroId);
-    if (!cur?.owned) return;
-    local.owned.set(heroId, { ...cur, favorite: !cur.favorite });
+    const cur = local.settings.get(heroId) ?? { immortal: false, favorite: false };
+    local.settings.set(heroId, { ...cur, favorite: !cur.favorite });
     update();
   }
 
-  function collectOwnedHeroes() {
-    return [...local.owned.entries()]
-      .filter(([, v]) => v.owned)
+  function collectHeroSettings() {
+    return [...local.settings.entries()]
+      .filter(([, v]) => v.immortal || v.favorite)
       .map(([heroId, v]) => ({ heroId, immortal: v.immortal, favorite: v.favorite }));
   }
 
   function applyPreset(preset) {
     local.gameType = preset.gameType;
     local.immortalPet = preset.immortalPet;
-    local.relics = { ...preset.relics };
-    local.owned = new Map(preset.ownedHeroes.map((h) => [h.heroId, { owned: true, immortal: h.immortal, favorite: h.favorite }]));
+    local.settings = new Map((preset.heroSettings ?? []).map((h) => [h.heroId, { immortal: h.immortal, favorite: h.favorite }]));
     update();
   }
 
@@ -77,8 +64,7 @@ export function HeroSelectScreen({ onStart }) {
         const result = savePreset(nameInput.value, {
           gameType: local.gameType,
           immortalPet: local.immortalPet,
-          relics: local.relics,
-          ownedHeroes: collectOwnedHeroes(),
+          heroSettings: collectHeroSettings(),
         });
         status.textContent = result.ok
           ? '저장됨'
@@ -111,46 +97,23 @@ export function HeroSelectScreen({ onStart }) {
     return el('div', { class: 'preset-bar' }, [nameInput, saveBtn, loadSelect, deleteBtn, status]);
   }
 
-  function renderRelicSelects() {
-    return el(
-      'div',
-      { class: 'relic-selects' },
-      RELIC_KEYS.map((key) => {
-        const options = [el('option', { value: '', text: '레벨 선택' })];
-        for (let lvl = RELIC_LEVEL_MIN; lvl <= RELIC_LEVEL_MAX; lvl += 1) {
-          options.push(el('option', { value: String(lvl), text: `Lv.${lvl}`, selected: local.relics[key] === lvl }));
-        }
-        const select = el('select', {}, options);
-        select.value = local.relics[key] ?? '';
-        select.addEventListener('change', () => {
-          local.relics[key] = select.value ? Number(select.value) : null;
-          update();
-        });
-        return el('label', { class: 'relic-select' }, [el('span', { text: RELIC_LABEL[key] }), select]);
-      }),
-    );
-  }
-
   function renderHeroCard(heroDef) {
-    const state = local.owned.get(heroDef.id) ?? { owned: false, immortal: false, favorite: false };
-    return el('div', { class: `hero-card ${state.owned ? 'owned' : 'locked'}` }, [
-      !state.owned ? el('span', { class: 'lock-icon', text: '🔒' }) : null,
+    const state = local.settings.get(heroDef.id) ?? { immortal: false, favorite: false };
+    return el('div', { class: 'hero-card' }, [
       el('button', { class: 'favorite-toggle', text: state.favorite ? '★' : '☆', onclick: (e) => { e.stopPropagation(); toggleFavorite(heroDef.id); } }),
-      el('div', { class: 'hero-card-body', onclick: () => toggleOwned(heroDef.id) }, [
-        el('img', { class: 'hero-card-image', src: heroDef.image, alt: heroDef.name }),
+      el('div', { class: 'hero-card-body' }, [
+        heroPlaceholder(heroDef, { className: 'hero-card-image' }),
         el('div', { class: 'hero-name', text: heroDef.name }),
         el('div', { class: 'hero-tier', text: TIER_LABEL[heroDef.tier] }),
       ]),
-      heroDef.tier === 'mythic'
-        ? el('label', { class: 'immortal-check' }, [
-            el('input', {
-              type: 'checkbox',
-              checked: state.immortal,
-              onchange: () => toggleImmortal(heroDef.id),
-            }),
-            el('span', { text: '불멸' }),
-          ])
-        : null,
+      el('label', { class: 'immortal-check' }, [
+        el('input', {
+          type: 'checkbox',
+          checked: state.immortal,
+          onchange: () => toggleImmortal(heroDef.id),
+        }),
+        el('span', { text: '불멸' }),
+      ]),
     ]);
   }
 
@@ -164,8 +127,7 @@ export function HeroSelectScreen({ onStart }) {
         onStart({
           gameType: local.gameType,
           immortalPet: local.immortalPet,
-          relics: local.relics,
-          ownedHeroes: collectOwnedHeroes(),
+          heroSettings: collectHeroSettings(),
         });
       },
     });
@@ -193,9 +155,9 @@ export function HeroSelectScreen({ onStart }) {
     return el('div', { class: 'hero-select-inner' }, [
       el('div', { class: 'top-bar' }, [startBtn]),
       el('section', { class: 'options' }, [
-        el('div', { class: 'radio-group', text: '' }, gameTypeRadios),
+        el('div', { class: 'radio-group' }, gameTypeRadios),
         el('div', { class: 'radio-group' }, petRadios),
-        renderRelicSelects(),
+        el('p', { class: 'options-note', text: '모든 유물은 항상 최대 레벨(11)로 고정되어 있습니다. 신화 등급을 제외한 모든 영웅은 기본으로 보유한 상태로 시작합니다.' }),
       ]),
       el('section', { class: 'hero-grid' }, SELECTABLE_TIERS.flatMap((tier) => heroesByTier(tier).map(renderHeroCard))),
       renderPresetBar(),

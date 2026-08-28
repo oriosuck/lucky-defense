@@ -43,7 +43,7 @@ export function listPresets() {
 
 /**
  * @param {string} name
- * @param {object} data  {gameType, immortalPet, relics, ownedHeroes}
+ * @param {object} data  {gameType, immortalPet, heroSettings}
  * @returns {{ok:boolean, reason?:string}}
  */
 export function savePreset(name, data) {
