@@ -24,7 +24,7 @@ import {
 } from '../logic/actions.js';
 import { checkImmortalPromotion, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
 import { IMMOBILIZE_GAUGE_FILL_SEC } from '../logic/waveEvents.js';
-import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST, MONSTER_PER_ROUND } from '../data/constants.js';
+import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL, MONSTER_PER_ROUND } from '../data/constants.js';
 import { fieldOccupantCount, waveDuration } from '../state/gameState.js';
 import { el } from './components/dom.js';
 import { heroImage } from './components/heroVisual.js';
@@ -44,7 +44,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
     spinningTier: null, // 룰렛 스핀 연출 중인 등급
     rouletteFailTier: null, // 방금 실패해서 해골을 잠깐 보여줄 등급
     monsters: [], // 좌->우 굴을 지나가는 장식용 몬스터 애니메이션 상태
-    lastMonsterSpawnAt: null,
+    monsterSpawnWave: null, // 아래 두 필드가 몇 라운드 기준인지(라운드 바뀌면 리셋)
+    monsterSpawnedCount: 0, // 이번 라운드에 지금까지 스폰한 장식용 몬스터 수
   };
 
   function apply(result) {
@@ -103,20 +104,24 @@ export function GameScreen({ getState, dispatch, onExit }) {
   window.addEventListener('pointerup', () => { pointerDown = false; });
   window.addEventListener('pointercancel', () => { pointerDown = false; });
 
-  const MONSTER_SPAWN_INTERVAL_MS = 800; // 장식용 애니메이션 등장 간격(연출용, 실제 몬스터 수와는 별개)
   const MONSTER_TRAVEL_MS = 2600;
 
+  // 장식용 몬스터 애니메이션 등장 수를 몬스터 카운트 바에 표시되는 값
+  // (roundMonsterSpawnProgress)과 1:1로 맞춘다 - 예전엔 800ms 고정 간격으로 따로
+  // 스폰해서 "카운트되는 수"와 "실제 맵에 보이는 몬스터 수"가 서로 안 맞았다(문제 4).
   function updateMonsterAnimation(state) {
     const now = Date.now();
-    if (ui.lastMonsterSpawnAt == null) ui.lastMonsterSpawnAt = now;
+    if (ui.monsterSpawnWave !== state.wave) {
+      ui.monsterSpawnWave = state.wave;
+      ui.monsterSpawnedCount = 0;
+    }
     const active = state.wave >= 1 && !state.result && !state.paused;
     if (active) {
-      while (now - ui.lastMonsterSpawnAt >= MONSTER_SPAWN_INTERVAL_MS) {
-        ui.lastMonsterSpawnAt += MONSTER_SPAWN_INTERVAL_MS;
-        ui.monsters.push({ id: `mon_${now}_${Math.random()}`, bornAt: ui.lastMonsterSpawnAt });
+      const target = roundMonsterSpawnProgress(state);
+      while (ui.monsterSpawnedCount < target) {
+        ui.monsterSpawnedCount += 1;
+        ui.monsters.push({ id: `mon_${now}_${Math.random()}`, bornAt: now });
       }
-    } else {
-      ui.lastMonsterSpawnAt = now;
     }
     ui.monsters = ui.monsters.filter((m) => now - m.bornAt < MONSTER_TRAVEL_MS);
   }
@@ -504,12 +509,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
     }, [el('img', { src: UI_IMAGES.enhanceBtn, alt: '강화' })]);
   }
 
-  // 각 등급 룰렛 이미지(원형 배지 + 가격 칸)의 실제 가로세로 비율. 셋이 서로 달라서
-  // 공용 CSS aspect-ratio로 못 묶고 버튼마다 인라인으로 정확히 맞춰준다(letterbox 방지).
+  // 룰렛 휠은 이미지 대신 목업처럼 CSS로 직접 그린 원 + 등급 라벨 텍스트로 표시한다
+  // (문제: 이미지마다 실제 비율이 달라 화면에서 크기가 들쭉날쭉해 보였음).
   const ROULETTE_TIERS = [
-    { tier: 'rare', slot: 'left', img: UI_IMAGES.rouletteRare, ratio: 650 / 918 },
-    { tier: 'hero', slot: 'left', img: UI_IMAGES.rouletteHero, ratio: 603 / 942 },
-    { tier: 'legendary', slot: 'right', img: UI_IMAGES.rouletteLegendary, ratio: 783 / 950 },
+    { tier: 'rare', slot: 'left', colorClass: 'blue' },
+    { tier: 'hero', slot: 'left', colorClass: 'purple' },
+    { tier: 'legendary', slot: 'right', colorClass: 'gold' },
   ];
 
   const ROULETTE_SPIN_MS = 900; // "1초보다 조금 짧게" 도는 연출(기획서 확정)
@@ -545,14 +550,15 @@ export function GameScreen({ getState, dispatch, onExit }) {
         el('span', { class: 'roulette-pct', text: `${Math.round(ROULETTE_SUCCESS_RATE[r.tier] * 100)}%` }),
         el('button', {
           class: `roulette-wheel-btn${spinning ? ' spinning' : ''}`,
-          style: `aspect-ratio:${r.ratio};`,
           disabled: state.luckstone < cost || Boolean(ui.spinningTier),
           onclick: () => onRouletteWheelClick(r),
         }, [
-          el('img', { src: r.img, alt: TIER_LABEL[r.tier] }),
+          el('div', { class: `roulette-wheel-circle ${r.colorClass}` }, [
+            el('span', { class: 'roulette-wheel-label', text: TIER_LABEL[r.tier] }),
+          ]),
           failed ? el('img', { class: 'roulette-fail-skull', src: UI_IMAGES.skullIcon, alt: '실패' }) : null,
-          el('span', { class: 'roulette-item-cost' }, [el('img', { src: UI_IMAGES.luckstoneIcon, alt: '' }), el('span', { text: String(cost) })]),
         ]),
+        el('span', { class: 'roulette-item-cost' }, [el('img', { src: UI_IMAGES.luckstoneIcon, alt: '' }), el('span', { text: String(cost) })]),
       ]);
     });
     return el('div', { class: 'game-popup' }, [
@@ -580,7 +586,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const cols = GLOBAL_ENHANCE_TRACKS.map((track) => {
       const cost = GLOBAL_ENHANCE_COST[track];
       const level = state.globalEnhance[track] + 1;
-      const canAfford = (!cost.gold || state.gold >= cost.gold) && (!cost.luckstone || state.luckstone >= cost.luckstone);
+      const maxLevel = GLOBAL_ENHANCE_MAX_LEVEL[track];
+      const atMax = maxLevel != null && level >= maxLevel;
+      const canAfford = !atMax && (!cost.gold || state.gold >= cost.gold) && (!cost.luckstone || state.luckstone >= cost.luckstone);
       return el('button', {
         class: 'enhance-col', disabled: !canAfford,
         onclick: () => apply(upgradeGlobalEnhance(state, track)),
@@ -588,10 +596,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
         el('img', { class: 'enhance-col-icon', src: GLOBAL_ENHANCE_ICON[track], alt: GLOBAL_ENHANCE_LABEL[track] }),
         el('span', { class: 'enhance-col-name', text: GLOBAL_ENHANCE_LABEL[track] }),
         el('span', { class: 'enhance-col-lv', text: `Lv.${level}` }),
-        el('span', { class: 'enhance-col-cost' }, [
-          el('img', { src: cost.gold ? UI_IMAGES.goldIcon : UI_IMAGES.luckstoneIcon, alt: '' }),
-          el('span', { text: String(cost.gold ?? cost.luckstone) }),
-        ]),
+        atMax
+          ? el('span', { class: 'enhance-col-cost', text: 'MAX' })
+          : el('span', { class: 'enhance-col-cost' }, [
+              el('img', { src: cost.gold ? UI_IMAGES.goldIcon : UI_IMAGES.luckstoneIcon, alt: '' }),
+              el('span', { text: String(cost.gold ?? cost.luckstone) }),
+            ]),
       ]);
     });
     return el('div', { class: 'game-popup' }, [

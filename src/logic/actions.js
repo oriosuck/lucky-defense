@@ -2,7 +2,7 @@ import { findInstance, canPlaceInSlot, findSlot } from '../state/gameState.js';
 import { recordImmortalEvent } from './immortal.js';
 import { rollNormalTier } from './summon.js';
 import { TIERS } from '../data/heroes.js';
-import { GLOBAL_ENHANCE_COST } from '../data/constants.js';
+import { GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 
 export const ENHANCE_GOLD_COST = 30;
 export const ENHANCE_LUCKSTONE_COST = 1;
@@ -89,6 +89,10 @@ export function digTreasure(state, instanceId) {
 export function upgradeGlobalEnhance(state, track) {
   const cost = GLOBAL_ENHANCE_COST[track];
   if (!cost) return { success: false, reason: 'invalid-track', newState: state };
+  const maxLevel = GLOBAL_ENHANCE_MAX_LEVEL[track];
+  if (maxLevel != null && state.globalEnhance[track] + 1 >= maxLevel) {
+    return { success: false, reason: 'max-level', newState: state };
+  }
   const newState = structuredClone(state);
   if (cost.gold && newState.gold < cost.gold) return { success: false, reason: 'not-enough-gold', newState: state };
   if (cost.luckstone && newState.luckstone < cost.luckstone) return { success: false, reason: 'not-enough-luckstone', newState: state };
