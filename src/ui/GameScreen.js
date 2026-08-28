@@ -1,4 +1,4 @@
-import { HEROES_BY_ID, TIER_LABEL, heroesByTier, SECOND_STAGE_IMMORTAL } from '../data/heroes.js';
+import { HEROES_BY_ID, TIER_LABEL, heroesByTier, SECOND_STAGE_IMMORTAL, IMP_HERO_ID } from '../data/heroes.js';
 import { STAGE_LAYOUT, BOSS_IMAGE, UI_IMAGES } from '../data/assets.js';
 import { missionDefinitions } from '../logic/missions.js';
 import { summonNormal, summonRoulette } from '../logic/summon.js';
@@ -508,33 +508,59 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // (사용자 참고 스크린샷 그대로 - 원근감 있는 배치).
   //
   // 캐릭터 크기는 그 칸에 몇 마리가 쌓여있든 항상 고정이다(사용자 지적 - 예전엔
-  // 칸 너비를 마리 수만큼 나눠서 1마리일 때와 3마리일 때 크기가 달라졌었음). 대신
-  // 여러 마리는 서로 살짝 겹치며 한 칸 폭 안에 쑤셔넣듯 배치한다.
+  // 칸 너비를 마리 수만큼 나눠서 1마리일 때와 3마리일 때 크기가 달라졌었음).
   const HERO_TOKEN_HEIGHT_RATIO = 1.75; // 칸 높이 대비 1.5~2배 사이
   const HERO_TOKEN_WIDTH_RATIO = 0.7; // 칸 너비 대비 고정 폭(기존보다 30% 축소)
-  const HERO_TOKEN_STACK_STEP_RATIO = 0.42; // 겹쳐 쌓을 때 마리당 가로 간격(토큰 폭 대비)
+  const IMP_TOKEN_SCALE = 0.5; // 마마 임프는 다른 캐릭터의 절반 크기(사용자 지적 - 너무 컸음)
   const ULTIMATE_FLASH_MS = 1200; // 베인 궁 이펙트 지속 시간
+
+  // 한 칸에 쌓인 마리 수별 배치 오프셋(토큰 폭/높이 대비 비율). 3마리는 일렬이 아니라
+  // 뒤 2마리 + 앞 1마리의 삼각형 대열로 배치한다(사용자 참고 이미지). 인덱스 순서가
+  // 뒤→앞이라 나중에 그려지는 앞쪽 캐릭터가 자연히 뒤쪽 위에 겹쳐 보인다(같은 칸
+  // 안에서는 z-index를 따로 안 써도 DOM에 그려지는 순서만으로 앞/뒤가 갈림).
+  function stackOffsets(n) {
+    if (n <= 1) return [{ dx: 0, dy: 0 }];
+    if (n === 2) return [{ dx: -0.32, dy: 0 }, { dx: 0.32, dy: 0 }];
+    return [
+      { dx: -0.5, dy: -0.32 }, // 뒤-왼쪽
+      { dx: 0.5, dy: -0.32 }, // 뒤-오른쪽
+      { dx: 0, dy: 0.22 }, // 앞-중앙
+    ];
+  }
 
   function renderHeroTokenLayer(state) {
     const layer = el('div', { class: 'stage-hero-layer' });
     for (const slot of state.field) {
       if (slot.occupants.length === 0) continue;
       const rect = fieldCellRect(slot.row, slot.col);
-      const tokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO;
-      const tokenTop = rect.top + rect.height - tokenHeight; // 하단이 칸 바닥선에 오도록
-      const tokenWidth = rect.width * HERO_TOKEN_WIDTH_RATIO; // 마리 수와 무관하게 항상 고정
-      const step = tokenWidth * HERO_TOKEN_STACK_STEP_RATIO;
+      const isImpCell = slot.occupants[0].heroId === IMP_HERO_ID;
+      const sizeScale = isImpCell ? IMP_TOKEN_SCALE : 1;
+      const tokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO * sizeScale;
+      const baseTop = rect.top + rect.height - tokenHeight; // 하단이 칸 바닥선에 오도록
+      const tokenWidth = rect.width * HERO_TOKEN_WIDTH_RATIO * sizeScale; // 마리 수와 무관하게 항상 고정
       const cellCenterX = rect.left + rect.width / 2;
       const n = slot.occupants.length;
-      const selected = ui.selectedSlot && ui.selectedSlot.row === slot.row && ui.selectedSlot.col === slot.col;
+      const offsets = stackOffsets(n);
+      const positions = offsets.map((o) => ({
+        centerX: cellCenterX + o.dx * tokenWidth,
+        top: baseTop + o.dy * tokenHeight,
+      }));
 
-      // 선택 시 개체마다 따로 테두리를 그리는 게 아니라, 쌓인 무리 전체를 감싸는
-      // 흰 테두리 하나만 그린다(사용자 참고 이미지 그대로).
-      if (selected) {
-        const clusterWidth = tokenWidth + (n - 1) * step;
+      const selected = ui.selectedSlot && ui.selectedSlot.row === slot.row && ui.selectedSlot.col === slot.col;
+      // 3마리가 다 차면(합성 가능한 등급 - 일반~영웅만, 전설 이상은 스택 개념이 없거나
+      // 합성 대상이 아님) 선택 여부와 무관하게 흰 테두리로 "합성 가능"을 항상 표시한다.
+      // 선택했을 때도 개체마다 따로 테두리를 그리지 않고 무리 전체를 감싸는 테두리
+      // 하나만 그린다(사용자 참고 이미지 그대로).
+      const firstHeroDef = HEROES_BY_ID[slot.occupants[0].heroId];
+      const readyToCombine = n === 3 && ['normal', 'rare', 'hero'].includes(firstHeroDef?.tier);
+      if (selected || readyToCombine) {
+        const left = Math.min(...positions.map((p) => p.centerX)) - tokenWidth / 2;
+        const right = Math.max(...positions.map((p) => p.centerX)) + tokenWidth / 2;
+        const top = Math.min(...positions.map((p) => p.top));
+        const bottom = Math.max(...positions.map((p) => p.top)) + tokenHeight;
         layer.appendChild(el('div', {
           class: 'stage-hero-selection-halo',
-          style: `left:${cellCenterX}%; top:${tokenTop}%; width:${clusterWidth}%; height:${tokenHeight}%; z-index:${1 + slot.row};`,
+          style: `left:${(left + right) / 2}%; top:${top}%; width:${right - left}%; height:${bottom - top}%; z-index:${1 + slot.row};`,
         }));
       }
 
@@ -549,10 +575,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
         // animation-delay를 매 렌더 다시 계산해서 넣는다.
         const ultimateElapsedMs = occ.ultimateFlashAt ? Date.now() - occ.ultimateFlashAt : Infinity;
         const usingUltimate = occ.heroId === 'm_bane' && ultimateElapsedMs < ULTIMATE_FLASH_MS;
-        const centerX = cellCenterX + (i - (n - 1) / 2) * step;
+        const { centerX, top } = positions[i];
         layer.appendChild(el('div', {
           class: `stage-hero-token${debuffed ? ' debuffed' : ''}${usingUltimate ? ' ultimate-flash' : ''}`,
-          style: `left:${centerX}%; top:${tokenTop}%; width:${tokenWidth}%; height:${tokenHeight}%; z-index:${2 + slot.row};${usingUltimate ? ` --ring-delay:-${ultimateElapsedMs % 800}ms;` : ''}`,
+          style: `left:${centerX}%; top:${top}%; width:${tokenWidth}%; height:${tokenHeight}%; z-index:${2 + slot.row};${usingUltimate ? ` --ring-delay:-${ultimateElapsedMs % 800}ms;` : ''}`,
         }, [
           el('div', { class: 'stage-hero-shadow' }),
           heroImage(heroDef, { className: 'stage-hero-image', instance: occ }),
@@ -665,17 +691,20 @@ export function GameScreen({ getState, dispatch, onExit }) {
     }
 
     // 불멸 진행도/마마 임프 수/타르 단계 등 부가 정보는 큰 카드 대신 작은 배지 한 줄로만
-    // 보여준다.
-    const statusText = extraStatusText(instance, heroDef);
-    const displayLabel = heroDisplayLabel(instance, heroDef);
-    const statusParts = [];
-    if (displayLabel !== heroDef.name) statusParts.push(displayLabel);
-    if (heroDef.immortalCondition) {
-      statusParts.push(`불멸 ${Math.floor(instance.progress ?? 0)}${heroDef.immortalCondition.target != null ? '/' + heroDef.immortalCondition.target : ''}`);
-    }
-    if (statusText) statusParts.push(statusText);
-    if (statusParts.length) {
-      above.unshift(el('div', { class: 'cell-status-badge', text: statusParts.join(' · ') }));
+    // 보여준다. 단, 마마는 임프가 이제 필드에 실제 캐릭터로 보이니 텍스트 배지가
+    // 중복 정보라 사용자 요청으로 아예 안 띄운다.
+    if (instance.heroId !== 'm_mama') {
+      const statusText = extraStatusText(instance, heroDef);
+      const displayLabel = heroDisplayLabel(instance, heroDef);
+      const statusParts = [];
+      if (displayLabel !== heroDef.name) statusParts.push(displayLabel);
+      if (heroDef.immortalCondition) {
+        statusParts.push(`불멸 ${Math.floor(instance.progress ?? 0)}${heroDef.immortalCondition.target != null ? '/' + heroDef.immortalCondition.target : ''}`);
+      }
+      if (statusText) statusParts.push(statusText);
+      if (statusParts.length) {
+        above.unshift(el('div', { class: 'cell-status-badge', text: statusParts.join(' · ') }));
+      }
     }
 
     const aboveWrap = el('div', {
