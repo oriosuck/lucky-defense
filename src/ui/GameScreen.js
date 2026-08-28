@@ -25,8 +25,8 @@ import {
 } from '../logic/actions.js';
 import { checkImmortalPromotion, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
 import { IMMOBILIZE_GAUGE_FILL_SEC } from '../logic/waveEvents.js';
-import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL, MONSTER_PER_ROUND } from '../data/constants.js';
-import { fieldOccupantCount, waveDuration, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
+import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
+import { fieldOccupantCount, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
 import { el } from './components/dom.js';
 import { heroImage } from './components/heroVisual.js';
 
@@ -107,24 +107,21 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   const MONSTER_TRAVEL_MS = 2600;
 
-  // 장식용 몬스터 애니메이션 등장 수를 몬스터 카운트 바에 표시되는 값
-  // (roundMonsterSpawnProgress)과 1:1로 맞춘다 - 예전엔 800ms 고정 간격으로 따로
-  // 스폰해서 "카운트되는 수"와 "실제 맵에 보이는 몬스터 수"가 서로 안 맞았다(문제 4).
+  // 장식용 몬스터 스프라이트 개수를 몬스터 카운트 바에 표시되는 값(state.monsterCount)과
+  // 항상 정확히 같게 유지한다 - 예전엔 몬스터가 한 바퀴(MONSTER_TRAVEL_MS) 돌고 나면
+  // 사라지는 "1회성 애니메이션"이라 화면에 몇 마리가 보이든 카운트 숫자와 무관하게
+  // 항상 비슷한 수(약 4마리)만 떠 있었다 - 이제는 스프라이트가 사라지지 않고 계속
+  // 경로를 무한 반복하며, 개수 자체가 카운트를 그대로 따라간다(카운트가 늘면 새
+  // 스프라이트 추가, 줄면 제거).
   function updateMonsterAnimation(state) {
-    const now = Date.now();
-    if (ui.monsterSpawnWave !== state.wave) {
-      ui.monsterSpawnWave = state.wave;
-      ui.monsterSpawnedCount = 0;
+    const active = state.wave >= 1 && !state.result;
+    const target = active ? Math.floor(state.monsterCount) : 0;
+    while (ui.monsters.length < target) {
+      // 전부 같은 타이밍에 나오면 한 덩어리로 뭉쳐 보이므로, 경로 한 바퀴(MONSTER_TRAVEL_MS)
+      // 안에서 랜덤한 시점부터 시작하도록 흩뿌린다.
+      ui.monsters.push({ id: `mon_${Date.now()}_${Math.random()}`, delayMs: Math.random() * MONSTER_TRAVEL_MS });
     }
-    const active = state.wave >= 1 && !state.result && !state.paused;
-    if (active) {
-      const target = roundMonsterSpawnProgress(state);
-      while (ui.monsterSpawnedCount < target) {
-        ui.monsterSpawnedCount += 1;
-        ui.monsters.push({ id: `mon_${now}_${Math.random()}`, bornAt: now });
-      }
-    }
-    ui.monsters = ui.monsters.filter((m) => now - m.bornAt < MONSTER_TRAVEL_MS);
+    if (ui.monsters.length > target) ui.monsters.length = target;
   }
 
   function renderStage(state) {
@@ -132,13 +129,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
     stage.appendChild(renderTopBadge(state));
     stage.appendChild(renderMonsterRow(state));
     stage.appendChild(renderBoss(state));
-    const now = Date.now();
+    const holeEffects = renderHoleEffects(state);
+    if (holeEffects) stage.appendChild(holeEffects);
     for (const m of ui.monsters) {
-      const elapsed = Math.max(0, now - m.bornAt);
       stage.appendChild(
         el('div', {
           class: 'stage-monster',
-          style: `top:${STAGE_LAYOUT.leftHole.y}%; left:${STAGE_LAYOUT.leftHole.x}%; animation: monster-travel ${MONSTER_TRAVEL_MS}ms linear forwards; animation-delay: -${elapsed}ms;`,
+          style: `top:${STAGE_LAYOUT.leftHole.y}%; left:${STAGE_LAYOUT.leftHole.x}%; animation: monster-travel ${MONSTER_TRAVEL_MS}ms linear infinite; animation-delay: -${m.delayMs}ms;`,
         }, [el('img', { src: UI_IMAGES.monsterIcon, alt: '몬스터' })]),
       );
     }
@@ -175,20 +172,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
     ]);
   }
 
-  // 라운드당 총 40마리가 시간에 따라 한 마리씩 등장하는 진행도(0→40)를 표시한다.
-  // 필드 누적 몬스터 수(state.monsterCount/monsterMax, 도달 시 패배)와는 별개의 값 -
-  // 그쪽은 처치로 줄어들 수 있는 내부 판정용이라 화면에 그대로 보여주면 "40에서
-  // 0으로 줄어드는 것처럼 보인다"는 오해를 사서, 라운드 진행도만 따로 계산해서 보여준다.
-  function roundMonsterSpawnProgress(state) {
-    if (state.wave < 1) return 0;
-    const duration = waveDuration(state.wave);
-    const elapsed = duration - state.waveTimeLeft;
-    return Math.max(0, Math.min(MONSTER_PER_ROUND, Math.floor((elapsed / duration) * MONSTER_PER_ROUND)));
-  }
-
+  // 몬스터 카운트는 필드 누적치(state.monsterCount, 최대 state.monsterMax=110)를
+  // 그대로 보여준다 - 라운드당 40마리(MONSTER_PER_ROUND)는 매 라운드 이 누적치에
+  // 트리클로 더해지는 "증가분"일 뿐, 화면에 표시되는 최대값과는 다른 개념이다
+  // (waveEvents.js의 tickWave 참고). 헷갈려서 한 번 40을 최대값으로 잘못 표시했었다.
   function renderMonsterRow(state) {
     return el('div', { class: 'monster-row' }, [
-      el('span', { class: 'monster-count-text', text: `${roundMonsterSpawnProgress(state)} / ${MONSTER_PER_ROUND}` }),
+      el('span', { class: 'monster-count-text', text: `${Math.floor(state.monsterCount)} / ${state.monsterMax}` }),
     ]);
   }
 
@@ -201,6 +191,27 @@ export function GameScreen({ getState, dispatch, onExit }) {
     }, [el('img', { class: 'stage-boss-img', src: BOSS_IMAGE, alt: '보스' })]);
     if (raidLabel) boss.appendChild(el('span', { class: `raid-window-badge ${raid.open ? 'open' : ''}`, text: raidLabel }));
     return boss;
+  }
+
+  // 좌우 굴에 보라색 소용돌이(몬스터 등장 지점 강조)를 항상 띄우고, 라운드 종료
+  // 5초 전부터는 왼쪽 굴 위에 카운트다운 배지를 추가로 띄운다.
+  function renderHoleEffects(state) {
+    if (state.wave < 1 || state.result) return null;
+    const nodes = [
+      el('div', { class: 'hole-vortex', style: `left:${STAGE_LAYOUT.leftHole.x}%; top:${STAGE_LAYOUT.leftHole.y}%;` }),
+      el('div', { class: 'hole-vortex', style: `left:${STAGE_LAYOUT.rightHole.x}%; top:${STAGE_LAYOUT.rightHole.y}%;` }),
+    ];
+    const secLeft = Math.ceil(state.waveTimeLeft);
+    if (secLeft >= 1 && secLeft <= 5) {
+      nodes.push(el('div', {
+        class: 'hole-countdown',
+        style: `left:${STAGE_LAYOUT.leftHole.x}%; top:${STAGE_LAYOUT.leftHole.y}%;`,
+      }, [
+        el('span', { class: 'hole-countdown-icon', text: '⏱️' }),
+        el('span', { class: 'hole-countdown-num', text: String(secLeft) }),
+      ]));
+    }
+    return el('div', { class: 'hole-effects' }, nodes);
   }
 
   function renderStageControls(state) {
@@ -563,7 +574,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     { tier: 'legendary', slot: 'right', colorClass: 'gold' },
   ];
 
-  const ROULETTE_SPIN_MS = 1000; // 룰렛이 도는 시간 - 정확히 1초
+  const ROULETTE_SPIN_MS = 280; // 룰렛이 도는 시간 - 정확히 0.28초
   const ROULETTE_FAIL_FLASH_MS = 500; // 다 돌아간 뒤 해골을 보여주는 시간
 
   function onRouletteWheelClick(r) {

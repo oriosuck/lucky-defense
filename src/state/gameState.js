@@ -53,7 +53,8 @@ export function createGameState(config) {
     wave: 0,
     waveTimeLeft: 5, // 진입 5초 후 1웨이브 시작
     monsterCount: 0,
-    monsterMax: MONSTER_MAX,
+    monsterMax: MONSTER_MAX, // 필드 누적 몬스터 최대치(110) - 라운드당 40마리(MONSTER_PER_ROUND)와는 별개 개념
+    roundMonsterSpawnedSoFar: 0, // 이번 라운드에 지금까지 트리클로 등장시킨 수(0~40), 라운드 시작마다 리셋
     gold: STARTING_GOLD,
     luckstone: 0,
     normalSummonCost: NORMAL_SUMMON_INITIAL_COST,
