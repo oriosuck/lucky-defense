@@ -194,22 +194,69 @@ body {
   pointer-events: none;
 }
 .stage-monster img { width: 100%; height: 100%; object-fit: contain; }
-/* 좌우 굴은 전장 박스 바로 위 모서리(y≈44.2%, 전장 top=43.63%)에 있어서, 굴을 빠져나오는
-   구간과 다시 들어가는 구간은 전장의 첫 줄(row1: 43.63~48.24%)과 y가 겹친다. 예전엔 그
-   구간에서도 opacity:1이라 몬스터가 캐릭터 칸을 침범하며 지나가는 것처럼 보였다(문제 5) -
-   전장 아래(top:65%, 전장 bottom=62.07%)로 완전히 내려온 뒤에만 보이게 하고, 굴 근처를
-   지나는 구간(전장과 y가 겹치는 구간)은 계속 투명 상태로 순간이동시킨다.
+/* 전장 박스(left:12.5%~86.92%, top:43.63%~62.07%) 바깥쪽 왼쪽/아래/오른쪽 세 변을
+   둘러서 이동한다(사용자가 준 참고 이미지의 빨간 경로 그대로) - 굴(y≈44.2%)에서 나온
+   직후 곧바로 바깥쪽(x:7%, 전장 왼쪽 밖)으로 빠져서 아래(top:65%, 전장 아래 밖)로
+   내려가고, 전장 아래를 가로질러 반대쪽(x:93%, 전장 오른쪽 밖)으로 갔다가 다시
+   위(반대쪽 굴)로 올라간다. 굴 근처(전장과 y가 겹치는 아주 짧은 구간)만 계속 투명
+   상태로 순간이동시켜서 전장 진입/이탈 지점에서도 캐릭터 칸을 가로지르지 않는다.
    좌표는 src/data/assets.js의 STAGE_LAYOUT과 맞춰져 있음 */
 @keyframes monster-travel {
   0% { left: 14.97%; top: 44.23%; opacity: 0; }
-  10% { left: 14.97%; top: 65%; opacity: 0; }
-  16% { opacity: 1; }
-  25% { left: 14.97%; top: 65%; }
-  75% { left: 85.03%; top: 65%; }
-  84% { opacity: 1; }
-  90% { left: 85.03%; top: 65%; opacity: 0; }
+  4% { left: 11%; top: 45%; opacity: 0; }
+  5% { opacity: 1; }
+  18% { left: 7%; top: 58%; }
+  30% { left: 7%; top: 65%; }
+  70% { left: 93%; top: 65%; }
+  82% { left: 93%; top: 58%; }
+  95% { left: 89%; top: 45%; opacity: 1; }
+  96% { opacity: 0; }
   100% { left: 85.03%; top: 44.3%; opacity: 0; }
 }
+
+/* 좌우 굴 자리에 보라색 소용돌이 효과 - 몬스터가 나오는 위치라는 걸 시각적으로
+   분명히 보여주기 위한 장식(항상 노출, 게임 진행 중일 때). 방사형 보라 광원(펄스)
+   위에 회전하는 conic-gradient 무늬를 겹쳐서 소용돌이처럼 보이게 한다. */
+.hole-effects { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.hole-vortex {
+  position: absolute;
+  width: 11%; aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+}
+.hole-vortex::before {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.6) 0%, rgba(124, 58, 237, 0.4) 45%, transparent 75%);
+  animation: hole-vortex-pulse 1.6s ease-in-out infinite;
+}
+.hole-vortex::after {
+  content: ''; position: absolute; inset: 12%; border-radius: 50%;
+  background: conic-gradient(from 0deg, rgba(216, 180, 254, 0.9), rgba(88, 28, 135, 0.15), rgba(216, 180, 254, 0.9), rgba(88, 28, 135, 0.15), rgba(216, 180, 254, 0.9));
+  filter: blur(1px);
+  animation: hole-vortex-spin 1.8s linear infinite;
+}
+@keyframes hole-vortex-pulse {
+  0%, 100% { opacity: 0.7; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+@keyframes hole-vortex-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+/* 라운드 종료 5초 전부터 왼쪽 굴 위에 카운트다운 배지를 띄운다(사용자 참고 이미지:
+   시계 아이콘 + 큰 숫자, 어두운 배경에 보라 테두리/글로우). */
+.hole-countdown {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 6%));
+  display: flex; align-items: center; gap: 4px;
+  background: rgba(20, 10, 30, 0.88);
+  border: 2px solid #a855f7;
+  border-radius: 10px;
+  padding: 3px 9px;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.7);
+  white-space: nowrap;
+}
+.hole-countdown-icon { font-size: clamp(10px, 2.6vw, 13px); }
+.hole-countdown-num { font-size: clamp(16px, 4.4vw, 22px); font-weight: 800; color: var(--gold); }
 
 /* 전장 그리드는 배경 원화에 이미 돌판 프레임이 그려져 있어서(assets.js STAGE_LAYOUT.field
    참고) 배경/패딩을 넣지 않는다 - 목업의 .field-grid도 셀 테두리선만 있고 채우기 색은 없다.
@@ -312,12 +359,18 @@ body {
 /* ---- 상단 우측 컨트롤(일시정지/나가기) ---- */
 .stage-controls {
   position: absolute; right: 2%; top: 1.5%; z-index: 5;
-  display: flex; gap: 4%;
+  display: flex; gap: 2vw;
 }
+/* .stage-controls가 position:absolute + right/top만 있고 width/height가 없어서
+   auto(콘텐츠 기준) 크기다 - 자식의 height:%는 "컨테이닝 블록의 높이가 확정값일 때"만
+   유효한데 이 경우 그 조건이 깨져서 height:%가 조용히 무시되고(스펙상 auto로 처리)
+   버튼 안 이모지 글자의 최소 높이만큼 늘어나 찌그러져 보였다(width%는 13%로 먹었는데
+   height%는 안 먹어서 16x24px처럼 세로로 길쭉해짐) - width/height 둘 다 항상 확정값인
+   vw 단위 + aspect-ratio로 바꿔서 컨테이너 auto-sizing과 무관하게 진짜 원이 되게 했다. */
 .stage-control-btn {
-  width: 7%; aspect-ratio: 1; border-radius: 50%;
-  background: rgba(20, 16, 26, 0.65); border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #fff; font-size: clamp(10px, 2.4vw, 14px);
+  width: clamp(30px, 8.5vw, 42px); aspect-ratio: 1; border-radius: 50%;
+  background: rgba(20, 16, 26, 0.65); border: 2px solid rgba(255, 255, 255, 0.3);
+  color: #fff; font-size: clamp(14px, 4vw, 20px);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
 }
@@ -486,8 +539,8 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
   color: #fff; font-weight: 800; font-size: clamp(11px, 3.2vw, 15px);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
-/* 룰렛이 도는 시간은 정확히 1초 */
-.roulette-wheel-btn.spinning .roulette-wheel-circle { animation: roulette-spin 1s cubic-bezier(0.2, 0.8, 0.3, 1); }
+/* 룰렛이 도는 시간은 정확히 0.28초 */
+.roulette-wheel-btn.spinning .roulette-wheel-circle { animation: roulette-spin 0.28s cubic-bezier(0.2, 0.8, 0.3, 1); }
 @keyframes roulette-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(1080deg); }

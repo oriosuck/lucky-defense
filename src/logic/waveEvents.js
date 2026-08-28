@@ -89,6 +89,19 @@ export function tickWave(state, deltaSec) {
   }
 
   if (newState.wave >= 1 && !newState.result) {
+    // 이번 라운드에 새로 등장할 몬스터(최대 40마리)는 한꺼번에 추가되지 않고 라운드
+    // 경과 시간에 비례해 한 마리씩 트리클로 늘어난다("시간이 되면 한마리씩 나오는
+    // 개념") - monsterCount(필드 누적, 최대 110)에 더해진다. 이 최대 110은
+    // 라운드당 40마리와는 별개의 개념(필드 누적 총량 한도)이라 서로 다른 상수다.
+    const duration = waveDuration(newState.wave);
+    const elapsed = Math.max(0, duration - newState.waveTimeLeft);
+    const targetSpawnedThisRound = Math.max(0, Math.min(MONSTER_PER_ROUND, Math.floor((elapsed / duration) * MONSTER_PER_ROUND)));
+    const newlySpawned = targetSpawnedThisRound - (newState.roundMonsterSpawnedSoFar ?? 0);
+    if (newlySpawned > 0) {
+      newState.monsterCount = Math.min(newState.monsterMax, newState.monsterCount + newlySpawned);
+      newState.roundMonsterSpawnedSoFar = targetSpawnedThisRound;
+    }
+
     if (fieldOccupantCount(newState) > 0) {
       const beforeKillCount = Math.floor(newState.monsterCount);
       newState.monsterCount = Math.max(0, newState.monsterCount - MONSTER_KILL_RATE_PER_SEC * deltaSec);
@@ -104,8 +117,9 @@ export function tickWave(state, deltaSec) {
 }
 
 function onWaveStart(state) {
-  // 매 라운드 40마리씩 신규 등장(누적 유지)
-  state.monsterCount = Math.min(state.monsterMax, state.monsterCount + MONSTER_PER_ROUND);
+  // 이번 라운드의 트리클 스폰 진행도를 0부터 다시 센다(실제 monsterCount 증가는
+  // 위 tickWave에서 경과 시간에 비례해 처리).
+  state.roundMonsterSpawnedSoFar = 0;
 
   if (state.bossAttackSchedule.immobilizeRounds.includes(state.wave)) {
     const duration = waveDuration(state.wave);
