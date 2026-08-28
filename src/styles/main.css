@@ -152,10 +152,11 @@ body {
   color: #f5e6c8; font-weight: 700; font-size: clamp(13px, 3.8vw, 17px);
 }
 
-/* 즐겨찾기 즉시소환 아이콘: 전장 왼쪽 위에서부터 세로로 배경 위에 얹는다.
-   너비를 16%에서 10%로 줄임(사용자 지적 - 원이 너무 컸음) */
+/* 즐겨찾기 즉시소환 아이콘: 전장 왼쪽에서부터 세로로 배경 위에 얹는다.
+   너비를 16%에서 10%로 줄임(사용자 지적 - 원이 너무 컸음). top도 8%→17%로
+   내림(칸 2개 높이만큼, 4.61%/칸 * 2 - 너무 위에 있다는 지적) */
 .favorite-bar {
-  position: absolute; left: 2%; top: 8%; width: 10%; max-height: 55%;
+  position: absolute; left: 2%; top: 17%; width: 10%; max-height: 45%;
   display: flex; flex-direction: column; gap: 6%;
   overflow-y: auto; overflow-x: hidden;
   z-index: 4;
@@ -170,8 +171,9 @@ body {
 .favorite-icon-image { width: 100%; height: 100%; border-radius: 50%; }
 .favorite-icon:disabled { cursor: default; opacity: 0.6; border-color: rgba(255, 255, 255, 0.35); }
 /* 승급 가능한 불멸 후보 - 신화 조합 가능 아이콘과 구분되도록 보라색 테두리+글로우 */
-.favorite-icon-promote { border-color: #a855f7; box-shadow: 0 0 8px rgba(168, 85, 247, 0.8); }
-.favorite-icon-promote .favorite-icon-label { color: #d8b4fe; }
+/* 빨간 테두리 원 - 신화(보라색 원)와 구분되는 불멸 승급 후보 표시(사용자 지정) */
+.favorite-icon-promote { border-color: #e53935; box-shadow: 0 0 8px rgba(229, 57, 53, 0.85); }
+.favorite-icon-promote .favorite-icon-label { color: #ff8a80; }
 .favorite-icon-label {
   position: absolute; left: 50%; bottom: -34%; transform: translateX(-50%);
   font-size: 8px; font-weight: 700; color: var(--gold);
@@ -291,22 +293,57 @@ body {
    pointermove~pointerup 핸들러) - 드래그 시작 칸과 현재 올려놓은 칸을 각각 강조한다. */
 .field-slot.dragging-source { opacity: 0.4; }
 .field-slot.drag-hover { outline: 2px dashed var(--accent); }
-/* 영웅 토큰은 셀 크기에 대한 상대(%) 크기로 둬야 뷰포트가 좁아져 셀이 작아질 때도
-   같이 줄어든다 - 예전엔 24px/17px 고정값이라 셀이 그보다 작아지는 뷰포트에서
-   토큰이 셀 테두리 밖으로 삐져나왔다(문제 3의 원인). */
-.hero-token {
-  position: relative;
-  width: 55%; aspect-ratio: 1;
-  border-radius: 3px;
+/* 필드 캐릭터는 .field-slot 안에 눕혀 넣는 flex 자식이 아니라(그 방식으로는
+   overflow:hidden 때문에 칸보다 큰 이미지를 못 담는다), 칸 좌표 기준으로 절대배치되는
+   별도 오버레이 레이어(.stage-hero-layer, GameScreen.js의 renderHeroTokenLayer)로
+   그린다. 칸 높이의 1.75배로 세로로 키우고, object-position:bottom으로 이미지
+   발밑을 토큰 박스 하단(=칸 바닥선)에 맞춰서 서 있는 것처럼 보이게 한다. z-index는
+   그리드 행(row) 번호로 매겨 아래쪽(화면 앞쪽) 행 캐릭터가 위쪽(화면 뒷쪽) 행
+   캐릭터의 발밑을 가리게 한다(사용자 참고 스크린샷의 입체감). */
+/* pointer-events:none 필수 - 이 레이어가 .field-slot 위에 겹쳐 그려지는데, 캐릭터
+   토큰이 클릭/드래그를 가로채면 그 밑의 .field-slot이 e.target.closest('.field-slot')로
+   못 잡혀서 탭 선택/드래그 이동이 전혀 동작하지 않는다(실제로 이 버그가 났었음 -
+   .field-slot 안에 있던 예전 구조와 달리 지금은 완전히 별도 레이어라 이벤트를
+   투과시켜야 한다). */
+.stage-hero-layer { position: absolute; inset: 0; pointer-events: none; }
+.stage-hero-token {
+  position: absolute;
+  transform: translate(-50%, 0);
   animation: token-pop 0.12s ease-out;
 }
-.field-slot.count-2 .hero-token, .field-slot.count-3 .hero-token { width: 32%; }
 @keyframes token-pop {
-  from { transform: scale(0.4); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from { transform: translate(-50%, 0) scale(0.4); opacity: 0; }
+  to { transform: translate(-50%, 0) scale(1); opacity: 1; }
 }
-.hero-token-image { width: 100%; height: 100%; object-fit: contain; display: block; }
-.hero-token.selected { outline: 2px solid var(--gold); border-radius: 4px; }
+.stage-hero-shadow {
+  position: absolute; left: 50%; bottom: 3%; transform: translate(-50%, 0);
+  width: 55%; height: 16%; border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(10, 8, 6, 0.55) 0%, rgba(10, 8, 6, 0) 75%);
+}
+.stage-hero-image {
+  position: relative; display: block; width: 100%; height: 100%;
+  object-fit: contain; object-position: bottom center;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
+}
+.stage-hero-token.selected .stage-hero-image { outline: 2px solid var(--gold); border-radius: 4px; }
+/* 탑 베인 궁극기(이동 11회 환산) 이펙트 - 데미지 계산은 범위 밖이라 순수 연출용
+   글로우+링 확산 애니메이션만 잠깐 보여준다(사용자 요청). */
+.stage-hero-token.ultimate-flash .stage-hero-image {
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 10px #ffd54a) drop-shadow(0 0 18px #ff9d2f);
+}
+.stage-hero-token.ultimate-flash::after {
+  content: '';
+  position: absolute; left: 50%; bottom: 10%; transform: translate(-50%, 0);
+  width: 90%; aspect-ratio: 1; border-radius: 50%;
+  border: 3px solid rgba(255, 213, 74, 0.9);
+  animation: ultimate-ring 0.8s ease-out infinite;
+  animation-delay: var(--ring-delay, 0s);
+  pointer-events: none;
+}
+@keyframes ultimate-ring {
+  0% { transform: translate(-50%, 0) scale(0.3); opacity: 1; }
+  100% { transform: translate(-50%, 0) scale(1.4); opacity: 0; }
+}
 
 /* 판매/이동/강화/합성 등 모든 선택-영웅 조작 버튼: 선택 패널(모달) 안이 아니라
    선택된 칸 바로 위/아래에 세로로 쌓인다. 래퍼(.cell-quick-actions,
@@ -337,11 +374,64 @@ body {
   position: absolute; bottom: -2px; right: -2px;
   color: var(--gold); font-size: 8px; background: #000; border-radius: 4px; padding: 0 2px;
 }
-.immobilize-mark, .delete-mark, .treasure-mark {
+.immobilize-mark {
   position: absolute; top: 1px; right: 1px; width: 12px; height: 12px;
 }
-.immobilize-mark img, .treasure-mark img { width: 100%; height: 100%; object-fit: contain; }
-.delete-mark { color: var(--danger); font-size: 12px; text-shadow: 0 0 3px #000; }
+.immobilize-mark img { width: 100%; height: 100%; object-fit: contain; }
+
+/* 13/20라운드 삭제 공격 - 대상 행/열 전체를 감싸는 네모 테두리 + 왼쪽(행)/위쪽(열)
+   에서부터 차오르는 붉은 게이지(사용자 요청 시각 효과). 다 차면(9초) 그 라인의
+   캐릭터가 전부 삭제된다(실제 삭제는 waveEvents.js handleDeleteEvent). */
+.delete-line-box {
+  position: absolute;
+  border: 2px solid #e74c3c;
+  box-shadow: 0 0 10px rgba(231, 76, 60, 0.7), inset 0 0 10px rgba(231, 76, 60, 0.3);
+  overflow: hidden;
+  z-index: 1;
+  pointer-events: none;
+}
+.delete-line-gauge {
+  position: absolute; top: 0; left: 0;
+  background: rgba(231, 76, 60, 0.45);
+}
+.delete-line-gauge.from-left { height: 100%; }
+.delete-line-gauge.from-top { width: 100%; }
+
+/* 인디 보물 위치 - 작은 코너 아이콘이 아니라 칸 전체가 노란색으로 빛나야 눈에 띈다는
+   지적 반영. 인디가 그 칸에 있으면 앞줄 캐릭터에 일부 가려질 수 있어서 은은한 펄스
+   애니메이션으로 시선을 끈다. */
+.treasure-mark {
+  position: absolute; inset: 0; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: clamp(10px, 3vw, 14px);
+  background: radial-gradient(circle, rgba(255, 221, 0, 0.55) 0%, rgba(255, 221, 0, 0.18) 60%, transparent 82%);
+  animation: treasure-glow 1s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes treasure-glow {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}
+
+/* 채드 "판매하기" 화살표 선택 모드 - 대상이 될 수 있는 신화/불멸 머리 위에만 뜬다 */
+.chad-arrow-layer { position: absolute; inset: 0; z-index: 7; }
+.chad-sell-arrow {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  width: 7vw; height: 7vw; max-width: 30px; max-height: 30px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #4ee06a, #1f9e3f);
+  border: 2px solid #0c5c1e;
+  color: #06280d; font-weight: 900; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(78, 224, 106, 0.85);
+  animation: chad-arrow-bounce 0.7s ease-in-out infinite;
+}
+@keyframes chad-arrow-bounce {
+  0%, 100% { transform: translate(-50%, -100%); }
+  50% { transform: translate(-50%, -130%); }
+}
 
 /* 이동불능(게이지형) - 빨간 원이 5초 동안 차오르는 연출. 이미지가 아니라 conic-gradient +
    CSS 애니메이션으로 구현한다. */
@@ -360,9 +450,9 @@ body {
 .field-slot.immobilize-active { outline: 2px solid #e74c3c; }
 
 /* 보스 일반공격(디버프) - 실질 효과 없음, 대상 영웅만 보라색으로 표시(CSS 필터) */
-.hero-token.debuffed {
+.stage-hero-token.debuffed .stage-hero-image {
   outline: 2px solid #a259ff;
-  filter: sepia(1) hue-rotate(220deg) saturate(3);
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5)) sepia(1) hue-rotate(220deg) saturate(3);
 }
 
 /* ---- 상단 우측 컨트롤(일시정지/나가기) ---- */
@@ -560,6 +650,14 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
   position: absolute; inset: 0; margin: auto;
   width: 55%; height: 55%; object-fit: contain;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
+/* 성공 시 해골 대신 뽑힌 영웅 그림을 잠깐 보여준다(사용자 요청) - 해골과 같은
+   정적 표시 패턴(깜빡임 방지 이유는 위 주석 참고). */
+.roulette-success-image {
+  position: absolute; inset: 0; margin: auto;
+  width: 70%; height: 70%; object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+  background: rgba(255, 255, 255, 0.25); border-radius: 50%;
 }
 .roulette-item-cost {
   display: flex; align-items: center; gap: 3px;

@@ -69,10 +69,19 @@ export function synthesize(state, row, col) {
   const resultDef = candidates[Math.floor(Math.random() * candidates.length)];
 
   slot.occupants = [];
-  slot.occupants.push(createHeroInstance(resultDef.id));
+  const newInstance = createHeroInstance(resultDef.id);
   // 조합 결과가 이미 다른 칸에 있던 영웅이면(예: 산적 1마리가 다른 칸에 남아있는 상태에서
-  // 조합으로 산적이 또 나온 경우) 자동으로 한 칸에 모은다 - 판매 때와 동일한 스택 정리.
-  consolidateHeroStacks(newState, resultDef.id);
+  // 조합으로 산적이 또 나온 경우) 자동으로 한 칸에 모은다 - 단, 방금 조합이 일어난
+  // 이 칸이 아니라 "원래 있던 자리"로 새로 만들어진 개체가 옮겨가야 한다(사용자 지적 -
+  // 반대로 동작하고 있었음). 기존 칸에 넣고 나서 generic consolidateHeroStacks로
+  // 혹시 남는 조각(3마리 초과분 등)까지 마저 정리한다.
+  const existingHolder = newState.field.find((s) => s !== slot && s.occupants.some((o) => o.heroId === resultDef.id));
+  if (existingHolder) {
+    existingHolder.occupants.push(newInstance);
+    consolidateHeroStacks(newState, resultDef.id);
+  } else {
+    slot.occupants.push(newInstance);
+  }
 
   return { success: true, resultHero: resultDef, newState };
 }
@@ -224,13 +233,20 @@ export function feedMythicToChad(state, chadInstanceId, mythicInstanceId) {
 
   mythic.slot.occupants = mythic.slot.occupants.filter((o) => o.instanceId !== mythicInstanceId);
   newState.luckstone += CHAD_FEED_LUCKSTONE;
-  // 기가채드 조건 문구가 "신화 영웅 판매(먹이기) 5회"로 명시돼 있어 불멸 등급을
-  // 먹였을 때는 진행도에 반영하지 않는다(행운석 보상만 지급).
+  // 기가채드 조건은 "판매 5회 누적"이 아니라 능력치 %다(기획서 재확인) - 판매할
+  // 때마다 확률적으로 2%p씩 오르고 총 10%를 채우면 승급 가능. 불멸 등급을 먹였을
+  // 때는 진행도에 반영하지 않는다(행운석 보상만 지급, "신화 판매"로 못박은 조건 문구
+  // 유지).
+  let procced = false;
   if (fedTier === 'mythic') {
-    chad.instance.progress = (chad.instance.progress ?? 0) + 1;
+    const { extra } = HEROES_BY_ID.m_chad.immortalCondition;
+    if (Math.random() < extra.procChance) {
+      chad.instance.progress = Math.min(10, (chad.instance.progress ?? 0) + extra.procAmount);
+      procced = true;
+    }
   }
 
-  return { success: true, reward: { luckstone: CHAD_FEED_LUCKSTONE }, newState };
+  return { success: true, reward: { luckstone: CHAD_FEED_LUCKSTONE }, procced, newState };
 }
 
 /**
