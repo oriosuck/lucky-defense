@@ -18,8 +18,8 @@ const IMMOBILIZE_GAUGE_LOCK_SEC = 10;
 
 // ---- 삭제 공격 ("삭제 있는 버전"에서만, 13/20라운드) ----
 const DELETE_ROUNDS = [13, 20];
-const DELETE_START_AT_TIME_LEFT = 15;
-const DELETE_TRIGGER_AT_TIME_LEFT = 6;
+export const DELETE_START_AT_TIME_LEFT = 15;
+export const DELETE_TRIGGER_AT_TIME_LEFT = 6;
 const DELETE_IMMUNE_HERO_ID = 'm_orc_shaman';
 const DELETE_IMMUNE_COUNT = 5;
 
@@ -35,7 +35,7 @@ const RAID_KEY_HERO_IDS = ['m_mama', 'm_bane', 'm_roka'];
 const DEBUFF_MARK_SEC = 3;
 
 // ---- 인디 "보물 발굴" (5-4) ----
-const INDY_TREASURE_INTERVAL_SEC = 30;
+export const INDY_TREASURE_INTERVAL_SEC = 30;
 
 // 몬스터 처치 속도 - 데미지 계산이 시뮬레이션 범위 밖이라 임시로 둔 플레이스홀더 수치.
 // 예전 값(2/초)은 일반 라운드(30초)의 트리클 스폰 속도(40/30≈1.33/초)보다 빨라서
@@ -47,7 +47,15 @@ const INDY_TREASURE_INTERVAL_SEC = 30;
 // 느린 보스 라운드(150초, 40/150≈0.27/초)에서는 여전히 0까지 떨어져서 보스 레이드
 // 창이 정상적으로 열리도록 했다(전체 시뮬레이션 결과 20라운드 클리어까지 110을
 // 넘지 않음을 확인).
-const MONSTER_KILL_RATE_PER_SEC = 0.5; // 필드에 영웅이 1마리라도 있으면 초당 0.5마리씩 처치
+//
+// 이후 사용자가 "영웅 숫자에 따른 몬스터 제거 시간"을 다시 지적 - 고정값이 아니라
+// 필드의 영웅 수에 비례해서 처치 속도가 늘어나야 하고(영웅이 없으면 처치 자체가
+// 0이어야 함), 10라운드(150초 보스 라운드)는 2분24초(144초) 안에 몬스터가 0마리가
+// 될 수 있어야 한다는 조건이 확정됐다. 라운드별 영웅 수를 1→6→...→30(약 5~6라운드
+// 만에 필드 꽉 참)으로 잡고 시뮬레이션해서 0.04/초/마리로 맞추면 10라운드가 약
+// 116초 만에 0에 도달해 144초 조건을 만족하고, 영웅이 적어도(5마리) 20라운드까지
+// 패배하지 않음을 확인했다.
+const MONSTER_KILL_RATE_PER_HERO_PER_SEC = 0.04; // 필드 영웅 1마리당 초당 처치량(영웅 0마리면 처치 0)
 
 function randomInt(maxExclusive) {
   return Math.floor(Math.random() * maxExclusive);
@@ -111,9 +119,11 @@ export function tickWave(state, deltaSec) {
       newState.roundMonsterSpawnedSoFar = targetSpawnedThisRound;
     }
 
-    if (fieldOccupantCount(newState) > 0) {
+    const heroCount = fieldOccupantCount(newState);
+    if (heroCount > 0) {
       const beforeKillCount = Math.floor(newState.monsterCount);
-      newState.monsterCount = Math.max(0, newState.monsterCount - MONSTER_KILL_RATE_PER_SEC * deltaSec);
+      const killRate = heroCount * MONSTER_KILL_RATE_PER_HERO_PER_SEC;
+      newState.monsterCount = Math.max(0, newState.monsterCount - killRate * deltaSec);
       const killed = beforeKillCount - Math.floor(newState.monsterCount);
       if (killed > 0) newState.gold += killed * MONSTER_KILL_GOLD; // 몬스터 처치 시 골드 +30(마리당)
     }

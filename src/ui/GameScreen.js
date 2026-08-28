@@ -23,7 +23,7 @@ import {
   ENHANCE_LUCKSTONE_COST,
 } from '../logic/actions.js';
 import { checkImmortalPromotion, isImmortalPromotionReady, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
-import { IMMOBILIZE_GAUGE_FILL_SEC } from '../logic/waveEvents.js';
+import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT } from '../logic/waveEvents.js';
 import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 import { fieldOccupantCount, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
 import { el } from './components/dom.js';
@@ -36,15 +36,17 @@ import { heroImage } from './components/heroVisual.js';
 export function GameScreen({ getState, dispatch, onExit }) {
   const root = el('div', { class: 'screen game-screen' });
   const ui = {
-    selectedInstanceId: null,
+    selectedSlot: null, // {row,col} | null - 선택 기준은 개체가 아니라 칸 자체
     popup: null, // null | 'mythic' | 'roulette' | 'enhance' | 'mission'
     mythicTab: 'mythic', // 'mythic' | 'immortal'
     mythicSelectedId: null,
     spinningTier: null, // 룰렛 스핀 연출 중인 등급
     rouletteFailTier: null, // 방금 실패해서 해골을 잠깐 보여줄 등급
+    rouletteSuccessHero: null, // 방금 성공해서 나온 영웅 그림을 잠깐 보여줄 heroId
     monsters: [], // 좌->우 굴을 지나가는 장식용 몬스터 애니메이션 상태
     monsterSpawnWave: null, // 아래 두 필드가 몇 라운드 기준인지(라운드 바뀌면 리셋)
     monsterSpawnedCount: 0, // 이번 라운드에 지금까지 스폰한 장식용 몬스터 수
+    chadSellMode: false, // 채드 "판매하기" 버튼을 눌러 화살표 선택 모드에 들어간 상태
   };
 
   function apply(result) {
@@ -130,14 +132,22 @@ export function GameScreen({ getState, dispatch, onExit }) {
   root.addEventListener('pointerdown', (e) => {
     pointerDown = true;
     const cellEl = e.target.closest('.field-slot');
-    if (!cellEl || ui.popup) return;
+    if (!cellEl) {
+      // 칸도, 그 칸의 액션 버튼도, 채드 화살표도 아닌 곳을 누르면 선택 해제
+      // (사용자 지정 - "칸 선택 후 다른 곳 아무데나 누르면 해제").
+      if (!ui.popup && ui.selectedSlot && !e.target.closest('.cell-quick-actions') && !e.target.closest('.chad-arrow-layer')) {
+        ui.selectedSlot = null;
+        render(getState());
+      }
+      return;
+    }
+    if (ui.popup) return;
     const row = Number(cellEl.dataset.row);
     const col = Number(cellEl.dataset.col);
     const state = getState();
     const slot = state.field.find((s) => s.row === row && s.col === col);
     if (!slot || slot.occupants.length === 0) return;
     dragState = {
-      instanceId: slot.occupants[0].instanceId,
       fromRow: row, fromCol: col,
       startX: e.clientX, startY: e.clientY, moved: false,
       // 이동불능(속박) 상태인 칸은 탭 선택은 그대로 되지만 실제 드래그 이동은
@@ -167,7 +177,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const sourceEl = root.querySelector('.dragging-source');
     if (sourceEl) sourceEl.classList.remove('dragging-source');
     setDragHover(null);
-    const { instanceId, fromRow, fromCol, moved, immobilized } = dragState;
+    const { fromRow, fromCol, moved, immobilized } = dragState;
     dragState = null;
     if (!moved) {
       // 이동량이 거의 없으면 드래그가 아니라 탭 - 기존 선택 토글 동작을 그대로 수행.
@@ -184,7 +194,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const toRow = Number(cellEl.dataset.row);
     const toCol = Number(cellEl.dataset.col);
     if (toRow === fromRow && toCol === fromCol) return;
-    apply(moveHero(getState(), instanceId, toRow, toCol));
+    apply(moveHero(getState(), fromRow, fromCol, toRow, toCol));
   }
 
   window.addEventListener('pointerup', (e) => { endDrag(e); });
@@ -243,8 +253,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
       );
     }
     stage.appendChild(renderField(state));
+    const deleteLine = renderDeleteLineEffect(state);
+    if (deleteLine) stage.appendChild(deleteLine);
+    stage.appendChild(renderHeroTokenLayer(state));
     const quickActions = renderCellQuickActions(state);
     if (quickActions) stage.appendChild(quickActions);
+    const chadArrows = renderChadArrowLayer(state);
+    if (chadArrows) stage.appendChild(chadArrows);
     stage.appendChild(renderFavoriteBar(state));
     stage.appendChild(renderStageControls(state));
     stage.appendChild(renderResourceRow(state));
@@ -375,15 +390,18 @@ export function GameScreen({ getState, dispatch, onExit }) {
       items.map((item) => {
         const heroDef = HEROES_BY_ID[item.heroId];
         if (item.kind === 'promote') {
+          // 빨간 테두리 원 안에는 지금(신화) 그림이 아니라 승급될 불멸 그림이 들어가야
+          // 한다(사용자 지정 - 목표를 미리 보여주는 자리).
+          const immortalDef = HEROES_BY_ID[heroDef.immortalCondition.id] ?? heroDef;
           return el(
             'button',
             {
               class: 'favorite-icon favorite-icon-promote',
-              title: heroDef?.name,
+              title: immortalDef?.name,
               onclick: () => apply(checkImmortalPromotion(state, item.instanceId)),
             },
             [
-              heroImage(heroDef, { className: 'favorite-icon-image' }),
+              heroImage(immortalDef, { className: 'favorite-icon-image' }),
               el('span', { class: 'favorite-icon-label', text: '승급 가능!' }),
             ],
           );
@@ -426,23 +444,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
         // ondragstart를 막아야 하는 이유는 heroVisual.js의 draggable=false 주석 참고.
         ondragstart: (e) => e.preventDefault(),
       });
-      slot.occupants.forEach((occ) => {
-        const heroDef = HEROES_BY_ID[occ.heroId];
-        const debuffed = state.eventLog.debuffEvent?.instanceId === occ.instanceId;
-        cell.appendChild(
-          el('div', {
-            class: `hero-token${occ.instanceId === ui.selectedInstanceId ? ' selected' : ''}${debuffed ? ' debuffed' : ''}`,
-          }, [
-            heroImage(heroDef, { className: 'hero-token-image', instance: occ }),
-            occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
-          ]),
-        );
-      });
       if (isImmobilized(state, slot)) {
         cell.appendChild(el('div', { class: 'immobilize-mark' }, [el('img', { src: UI_IMAGES.immobilizeIcon, alt: '이동불능' })]));
       }
-      if (isDeleteTarget(state, slot)) cell.appendChild(el('div', { class: 'delete-mark', text: '❌' }));
-      if (isTreasureSlot(state, slot)) cell.appendChild(el('div', { class: 'treasure-mark', text: '💰' }));
+      // 보물 위치는 필드 임의의 칸에 랜덤 등장한다(기획서 명시 사항) - 작은 코너 아이콘이
+      // 아니라 칸 전체가 노란색으로 빛나야 눈에 띈다는 사용자 지적을 반영해 글로우로 표시.
+      if (isTreasureSlot(state, slot)) cell.appendChild(el('div', { class: 'treasure-mark' }, [el('span', { text: '💰' })]));
       grid.appendChild(cell);
     }
     return grid;
@@ -459,11 +466,89 @@ export function GameScreen({ getState, dispatch, onExit }) {
     };
   }
 
+  // 13/20라운드 삭제 공격: 로직(waveEvents.js handleDeleteEvent)은 이미 행/열 하나를
+  // 골라 targetSlots에 담아두고 phase:'filling' 동안 9초(DELETE_START~TRIGGER_AT_TIME_LEFT
+  // 차이)를 세다가 다 차면 그 라인을 지운다 - 여기서는 그 라인 전체를 감싸는 네모
+  // 테두리를 그리고, 왼쪽(행)/위쪽(열)에서부터 게이지가 차오르는 오버레이를 겹쳐서
+  // 사용자가 요청한 시각 효과로 표현한다.
+  function renderDeleteLineEffect(state) {
+    const ev = state.eventLog.deleteEvent;
+    if (!ev || ev.phase !== 'filling' || ev.targetSlots.length === 0) return null;
+    const isRow = ev.targetSlots.every((t) => t.row === ev.targetSlots[0].row);
+    const first = fieldCellRect(ev.targetSlots[0].row, ev.targetSlots[0].col);
+    const last = fieldCellRect(
+      ev.targetSlots[ev.targetSlots.length - 1].row,
+      ev.targetSlots[ev.targetSlots.length - 1].col,
+    );
+    const rect = {
+      left: Math.min(first.left, last.left),
+      top: Math.min(first.top, last.top),
+      width: isRow ? STAGE_LAYOUT.field.width : first.width,
+      height: isRow ? first.height : STAGE_LAYOUT.field.height,
+    };
+    const totalFillSec = DELETE_START_AT_TIME_LEFT - DELETE_TRIGGER_AT_TIME_LEFT;
+    const elapsedSec = DELETE_START_AT_TIME_LEFT - state.waveTimeLeft;
+    const progress = Math.max(0, Math.min(1, elapsedSec / totalFillSec));
+    return el('div', {
+      class: 'delete-line-box',
+      style: `left:${rect.left}%; top:${rect.top}%; width:${rect.width}%; height:${rect.height}%;`,
+    }, [
+      el('div', {
+        class: `delete-line-gauge ${isRow ? 'from-left' : 'from-top'}`,
+        style: isRow ? `width:${progress * 100}%;` : `height:${progress * 100}%;`,
+      }),
+    ]);
+  }
+
+  // 필드 캐릭터는 칸 안에 눕혀 넣는 flex 자식이 아니라, 칸 좌표를 기준으로 절대배치되는
+  // 별도 오버레이 레이어로 그린다(.field-slot이 overflow:hidden이라 칸보다 큰 이미지를
+  // 담을 수 없어서). 칸 높이의 1.75배로 세로로 키우고 이미지 발밑을 칸 하단(바닥선)에
+  // 맞춰서 서 있는 것처럼 보이게 하며, z-index를 그리드 행(row) 번호로 매겨 아래쪽
+  // (화면 앞쪽) 행 캐릭터가 위쪽(화면 뒷쪽) 행 캐릭터를 가리는 입체감을 낸다
+  // (사용자 참고 스크린샷 그대로 - 원근감 있는 배치).
+  const HERO_TOKEN_HEIGHT_RATIO = 1.75; // 칸 높이 대비 1.5~2배 사이
+  const ULTIMATE_FLASH_MS = 1200; // 베인 궁 이펙트 지속 시간
+
+  function renderHeroTokenLayer(state) {
+    const layer = el('div', { class: 'stage-hero-layer' });
+    for (const slot of state.field) {
+      if (slot.occupants.length === 0) continue;
+      const rect = fieldCellRect(slot.row, slot.col);
+      const tokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO;
+      const tokenTop = rect.top + rect.height - tokenHeight; // 하단이 칸 바닥선에 오도록
+      const subWidth = rect.width / slot.occupants.length;
+      const selected = ui.selectedSlot && ui.selectedSlot.row === slot.row && ui.selectedSlot.col === slot.col;
+      slot.occupants.forEach((occ, i) => {
+        const heroDef = HEROES_BY_ID[occ.heroId];
+        const debuffed = state.eventLog.debuffEvent?.instanceId === occ.instanceId;
+        // 탑 베인이 방금 궁극기 환산 임계치(11회 이동)를 넘겼으면 잠깐 이펙트를 준다
+        // (사용자 요청 - immortal.js의 recordImmortalEvent가 남긴 타임스탬프 확인).
+        // 게임 루프가 0.2초마다 전체 DOM을 다시 그리는 구조라(main.js), infinite
+        // 애니메이션에 고정 delay를 넣으면 매번 처음부터 재생되며 멈춘 것처럼 보인다
+        // (몬스터 이동 애니메이션과 같은 함정, CLAUDE.md 참고) - 실제 경과 시간 기준으로
+        // animation-delay를 매 렌더 다시 계산해서 넣는다.
+        const ultimateElapsedMs = occ.ultimateFlashAt ? Date.now() - occ.ultimateFlashAt : Infinity;
+        const usingUltimate = occ.heroId === 'm_bane' && ultimateElapsedMs < ULTIMATE_FLASH_MS;
+        const centerX = rect.left + (i + 0.5) * subWidth;
+        layer.appendChild(el('div', {
+          class: `stage-hero-token${selected ? ' selected' : ''}${debuffed ? ' debuffed' : ''}${usingUltimate ? ' ultimate-flash' : ''}`,
+          style: `left:${centerX}%; top:${tokenTop}%; width:${subWidth}%; height:${tokenHeight}%; z-index:${2 + slot.row};${usingUltimate ? ` --ring-delay:-${ultimateElapsedMs % 800}ms;` : ''}`,
+        }, [
+          el('div', { class: 'stage-hero-shadow' }),
+          heroImage(heroDef, { className: 'stage-hero-image', instance: occ }),
+          occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
+        ]));
+      });
+    }
+    return layer;
+  }
+
   // 선택된 영웅의 모든 조작(이동/강화/판매/합성/영웅별 특수 액션)을 큰 팝업 패널이
   // 아니라 선택된 칸 바로 위/아래에 붙는 작은 버튼 묶음으로 띄운다(사용자 지정 UI -
   // "칸 클릭했을 때 팝업이 뜨는 게 아니라 위 아래로 버튼이 뜨는 것"). 판매/이동/강화는
   // 칸 위쪽에 쌓고, 합성과 영웅별 특수 액션은 칸 아래쪽에 쌓는다.
   function renderCellQuickActions(state) {
+    if (ui.chadSellMode) return null; // 화살표 선택 모드 중엔 다른 칸 클릭을 방해하지 않게 숨김
     const found = selectedInstance(state);
     if (!found) return null;
     const { slot, instance } = found;
@@ -477,26 +562,18 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
     above.push(el('button', {
       class: 'cell-quick-btn cell-quick-close', text: '✕',
-      onclick: () => { ui.selectedInstanceId = null; render(state); },
+      onclick: () => { ui.selectedSlot = null; render(state); },
     }));
 
     // 일반~전설은 판매/합성 외에 다른 기능이 없다(이동/강화 버튼 없음). 신화~불멸은
-    // 반대로 일반 판매가 안 되고 채드가 필드에 있을 때만 "먹이기"로 처분할 수 있다 -
-    // 그 자리가 일반 판매 버튼과 같은 위치(above)에 온다.
+    // 일반 판매가 안 되고, 채드의 "판매하기" 버튼으로 화살표 모드에 들어가야만 처분할
+    // 수 있다(아래 renderChadArrowLayer 참고 - 신화/불멸을 선택했다고 자동으로 먹이기
+    // 버튼이 뜨는 게 아니라, 채드 쪽에서 먼저 시작해야 하는 사용자 지정 순서).
     if (heroDef.tier !== 'mythic' && heroDef.tier !== 'immortal') {
       above.push(el('button', {
         class: 'cell-quick-btn cell-quick-sell', text: '판매',
-        onclick: () => { apply(sellHero(state, instance.instanceId)); ui.selectedInstanceId = null; },
+        onclick: () => apply(sellHero(state, instance.instanceId)),
       }));
-    } else if (instance.heroId !== 'm_chad' && instance.heroId !== 'i_giga_chad') {
-      // 기가채드(불멸)는 전용 판매(below의 '판매(+6💧)')가 따로 있어 채드 먹이기 대상에서 제외.
-      const chad = state.field.flatMap((s) => s.occupants).find((o) => o.heroId === 'm_chad');
-      if (chad) {
-        above.push(el('button', {
-          class: 'cell-quick-btn cell-quick-sell', text: '채드 먹이기(+5💧)',
-          onclick: () => { apply(feedMythicToChad(state, chad.instanceId, instance.instanceId)); ui.selectedInstanceId = null; },
-        }));
-      }
     }
 
     if (slot.occupants.length === 3 && heroDef.tier !== 'legendary') {
@@ -505,7 +582,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
         onclick: () => apply(synthesize(state, slot.row, slot.col)),
       }));
     }
-    if (instance.heroId === 'm_mama') {
+    // 승급 가능 상태가 되면(왼쪽 즉시소환 바에 "승급 가능!"으로 이미 노출 중) 칸
+    // 위의 돌파 버튼은 더 이상 필요 없어서 숨긴다(사용자 지정 - 불멸 조건 충족 시
+    // 캐릭터 쪽에는 돌파/승급 버튼이 남아있으면 안 됨).
+    if (instance.heroId === 'm_mama' && !isImmortalPromotionReady(state, instance.instanceId)) {
       below.push(el('button', {
         class: `cell-quick-btn cell-quick-extra ${instance.breakthrough ? 'active' : ''}`, text: '돌파',
         onclick: () => apply(toggleBreakthrough(state, instance.instanceId)),
@@ -518,6 +598,17 @@ export function GameScreen({ getState, dispatch, onExit }) {
       below.push(el('button', {
         class: 'cell-quick-btn cell-quick-extra', text: '판매(+6💧)',
         onclick: () => apply(sellGigaChad(state, instance.instanceId)),
+      }));
+    }
+    // 채드 전용: "판매하기"를 누르면 팝니다 버튼이 아니라 필드의 신화/불멸(채드/기가채드
+    // 본인 제외) 머리 위에 초록 화살표가 뜨는 모드로 들어간다 - 그 화살표를 눌러야
+    // 비로소 판매(먹이기)가 실행된다(사용자 지정 순서: 채드 하단 버튼 → 화살표 표시 →
+    // 화살표 클릭 → 판매).
+    if (instance.heroId === 'm_chad') {
+      below.push(el('button', {
+        class: `cell-quick-btn cell-quick-extra ${ui.chadSellMode ? 'active' : ''}`,
+        text: ui.chadSellMode ? '취소' : '판매하기',
+        onclick: () => { ui.chadSellMode = !ui.chadSellMode; render(state); },
       }));
     }
     if (instance.heroId === 'm_tar' && countHeroOnField(state, 'm_tar').count > 1) {
@@ -537,7 +628,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
       below.push(el('button', {
         class: 'cell-quick-btn cell-quick-extra',
         text: `2차 변신(성공 ${Math.round(SECOND_STAGE_IMMORTAL[instance.heroId].successRate * 100)}%)`,
-        onclick: () => { apply(attemptSecondStageEvolution(state, instance.instanceId)); ui.selectedInstanceId = null; },
+        onclick: () => apply(attemptSecondStageEvolution(state, instance.instanceId)),
       }));
     }
     // 이동은 이제 버튼이 아니라 칸을 직접 드래그하는 방식이라(아래 드래그 핸들러
@@ -581,6 +672,39 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return el('div', { class: 'cell-quick-actions' }, [aboveWrap, belowWrap].filter(Boolean));
   }
 
+  // 채드의 "판매하기" 버튼을 누르면(ui.chadSellMode) 필드의 신화/불멸(채드/기가채드
+  // 본인 제외) 머리 위에 초록 화살표를 띄운다 - 화살표를 누르면 그제서야 판매(먹이기)가
+  // 실행되고 모드에서 빠져나온다. 자동으로 신화 위에 판매 표시가 뜨는 게 아니라 채드
+  // 쪽에서 먼저 시작해야 한다는 사용자 지정 순서를 그대로 구현한 것.
+  function renderChadArrowLayer(state) {
+    if (!ui.chadSellMode) return null;
+    const chad = state.field.flatMap((s) => s.occupants).find((o) => o.heroId === 'm_chad');
+    if (!chad) { ui.chadSellMode = false; return null; }
+    const targets = [];
+    for (const slot of state.field) {
+      for (const occ of slot.occupants) {
+        const def = HEROES_BY_ID[occ.heroId];
+        if (!def) continue;
+        if ((def.tier === 'mythic' || def.tier === 'immortal') && occ.heroId !== 'm_chad' && occ.heroId !== 'i_giga_chad') {
+          targets.push({ slot, occ });
+        }
+      }
+    }
+    if (targets.length === 0) return null;
+    return el('div', { class: 'chad-arrow-layer' }, targets.map(({ slot, occ }) => {
+      const rect = fieldCellRect(slot.row, slot.col);
+      return el('button', {
+        class: 'chad-sell-arrow',
+        style: `left:${rect.left + rect.width / 2}%; top:${rect.top}%;`,
+        title: '판매(먹이기)',
+        onclick: () => {
+          ui.chadSellMode = false;
+          apply(feedMythicToChad(state, chad.instanceId, occ.instanceId));
+        },
+      }, [el('span', { text: '⬇' })]);
+    }));
+  }
+
   // m_tar(단계별)/m_dragon(드레인 준비) 등, 필드에서 상태에 따라 표시가 달라지던 영웅들을
   // 위한 이름 라벨.
   function heroDisplayLabel(instance, heroDef) {
@@ -597,18 +721,15 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const ev = state.eventLog.immobilizeEvent;
     return ev && ev.phase === 'filling' && ev.targetSlots.some((t) => t.row === slot.row && t.col === slot.col);
   }
-  function isDeleteTarget(state, slot) {
-    const ev = state.eventLog.deleteEvent;
-    return ev && ev.phase === 'filling' && ev.targetSlots.some((t) => t.row === slot.row && t.col === slot.col);
-  }
   function isTreasureSlot(state, slot) {
     const t = state.indyTreasure.slot;
     return t && t.row === slot.row && t.col === slot.col;
   }
 
   function onSlotClick(state, slot) {
-    const first = slot.occupants[0];
-    ui.selectedInstanceId = first ? first.instanceId : null;
+    // 선택 기준은 개체 하나가 아니라 칸 자체다(사용자 지정 규칙) - 판매 등 액션을
+    // 눌러도 그 칸에 뭔가 남아있는 한 선택이 계속 유지된다.
+    ui.selectedSlot = slot.occupants.length ? { row: slot.row, col: slot.col } : null;
     render(getState());
   }
 
@@ -649,12 +770,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   function selectedInstance(state) {
-    if (!ui.selectedInstanceId) return null;
-    for (const slot of state.field) {
-      const instance = slot.occupants.find((o) => o.instanceId === ui.selectedInstanceId);
-      if (instance) return { slot, instance };
-    }
-    ui.selectedInstanceId = null;
+    if (!ui.selectedSlot) return null;
+    const slot = state.field.find((s) => s.row === ui.selectedSlot.row && s.col === ui.selectedSlot.col);
+    if (slot && slot.occupants.length) return { slot, instance: slot.occupants[0] };
+    ui.selectedSlot = null;
     return null;
   }
 
@@ -716,7 +835,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
   function onRouletteWheelClick(r) {
     if (ui.spinningTier) return; // 이미 도는 중이면 무시
     const cost = ROULETTE_COST[r.slot];
-    if (getState().luckstone < cost) return;
+    const state = getState();
+    if (state.luckstone < cost) return;
+    // 필드가 꽉 찼으면 재화 소모/결과 처리 이전에 스핀 연출 자체를 시작하지 않는다
+    // (summonRoulette도 동일하게 막지만, 그건 결과 처리 시점이라 스핀 애니메이션이
+    // 먼저 돌아버리는 게 어색해서 여기서도 미리 막는다).
+    if (fieldOccupantCount(state) >= state.fieldMaxCapacity) return;
     ui.spinningTier = r.tier;
     render(getState());
     setTimeout(() => {
@@ -729,6 +853,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
           ui.rouletteFailTier = null;
           if (root.isConnected) render(getState());
         }, ROULETTE_FAIL_FLASH_MS);
+      } else if (result.success) {
+        // 실패하면 해골이 뜨듯이, 성공하면 뽑힌 영웅 그림을 잠깐 보여준다(사용자 요청).
+        ui.rouletteSuccessHero = { tier: r.tier, heroId: result.hero.id };
+        setTimeout(() => {
+          ui.rouletteSuccessHero = null;
+          if (root.isConnected) render(getState());
+        }, ROULETTE_FAIL_FLASH_MS);
       }
       apply(result);
     }, ROULETTE_SPIN_MS);
@@ -739,17 +870,19 @@ export function GameScreen({ getState, dispatch, onExit }) {
       const cost = ROULETTE_COST[r.slot];
       const spinning = ui.spinningTier === r.tier;
       const failed = ui.rouletteFailTier === r.tier;
+      const succeededHeroId = ui.rouletteSuccessHero?.tier === r.tier ? ui.rouletteSuccessHero.heroId : null;
       return el('div', { class: 'roulette-item' }, [
         el('span', { class: 'roulette-pct', text: `${Math.round(ROULETTE_SUCCESS_RATE[r.tier] * 100)}%` }),
         el('button', {
           class: `roulette-wheel-btn${spinning ? ' spinning' : ''}`,
-          disabled: state.luckstone < cost || Boolean(ui.spinningTier),
+          disabled: state.luckstone < cost || Boolean(ui.spinningTier) || fieldOccupantCount(state) >= state.fieldMaxCapacity,
           onclick: () => onRouletteWheelClick(r),
         }, [
           el('div', { class: `roulette-wheel-circle ${r.colorClass}` }, [
             el('span', { class: 'roulette-wheel-label', text: TIER_LABEL[r.tier] }),
           ]),
           failed ? el('img', { class: 'roulette-fail-skull', src: UI_IMAGES.skullIcon, alt: '실패' }) : null,
+          succeededHeroId ? heroImage(HEROES_BY_ID[succeededHeroId], { className: 'roulette-success-image' }) : null,
         ]),
         el('span', { class: 'roulette-item-cost' }, [el('img', { src: UI_IMAGES.luckstoneIcon, alt: '' }), el('span', { text: String(cost) })]),
       ]);

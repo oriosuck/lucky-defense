@@ -1,7 +1,8 @@
-import { findInstance, canPlaceInSlot, findSlot } from '../state/gameState.js';
+import { findInstance, findSlot } from '../state/gameState.js';
 import { recordImmortalEvent } from './immortal.js';
 import { rollNormalTier } from './summon.js';
-import { TIERS } from '../data/heroes.js';
+import { INDY_TREASURE_INTERVAL_SEC } from './waveEvents.js';
+import { TIERS, HEROES_BY_ID } from '../data/heroes.js';
 import { GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 
 export const ENHANCE_GOLD_COST = 30;
@@ -25,24 +26,48 @@ export function enhanceHero(state, instanceId) {
   return { success: true, newState: afterEvent.success ? afterEvent.newState : newState };
 }
 
-/** 슬롯 간 이동(재배치). 탑 베인의 궁극기 환산 카운트 등 이동 기반 불멸 조건과 연동. */
-export function moveHero(state, instanceId, toRow, toCol) {
+/**
+ * 칸 간 이동(재배치). 선택 기준이 개체 하나가 아니라 "칸 자체"라서(사용자 지정 규칙),
+ * 칸에 여러 마리가 쌓여 있으면 전부 한 번에 옮긴다 - 3마리를 옮기려고 3번 드래그할
+ * 필요가 없다. 대상 칸이 비어 있으면 통째로 이동, 같은 영웅이 이미 있으면(신화/불멸
+ * 제외 - 항상 단일 개체) 최대 3마리까지 합치고 넘치는 만큼은 원래 칸에 남으며,
+ * 서로 다른 영웅이면 두 칸의 내용을 통째로 맞바꾼다(교차 이동).
+ * 탑 베인의 궁극기 환산 카운트 등 이동 기반 불멸 조건은 실제로 옮겨진 개체마다 기록한다.
+ */
+export function moveHero(state, fromRow, fromCol, toRow, toCol) {
   const newState = structuredClone(state);
-  const found = findInstance(newState, instanceId);
-  if (!found) return { success: false, reason: 'not-found', newState: state };
-  const targetSlot = findSlot(newState, toRow, toCol);
-  if (!targetSlot) return { success: false, reason: 'invalid-slot', newState: state };
-  if (targetSlot === found.slot) return { success: false, reason: 'same-slot', newState: state };
-  if (!canPlaceInSlot(newState, targetSlot, found.instance.heroId)) {
-    return { success: false, reason: 'cannot-place', newState: state };
+  const fromSlot = findSlot(newState, fromRow, fromCol);
+  const toSlot = findSlot(newState, toRow, toCol);
+  if (!fromSlot || !toSlot || fromSlot === toSlot || fromSlot.occupants.length === 0) {
+    return { success: false, reason: 'invalid-move', newState: state };
   }
 
-  found.slot.occupants = found.slot.occupants.filter((o) => o.instanceId !== instanceId);
-  targetSlot.occupants.push(found.instance);
+  const movedInstanceIds = fromSlot.occupants.map((o) => o.instanceId);
+  const movingHeroId = fromSlot.occupants[0].heroId;
+  const movingHeroDef = HEROES_BY_ID[movingHeroId];
+  const singleSlot = movingHeroDef?.tier === 'mythic' || movingHeroDef?.tier === 'immortal';
+
+  if (toSlot.occupants.length === 0) {
+    toSlot.occupants = fromSlot.occupants;
+    fromSlot.occupants = [];
+  } else if (!singleSlot && toSlot.occupants[0].heroId === movingHeroId) {
+    const combined = [...toSlot.occupants, ...fromSlot.occupants];
+    toSlot.occupants = combined.slice(0, 3);
+    fromSlot.occupants = combined.slice(3);
+  } else {
+    const swapped = toSlot.occupants;
+    toSlot.occupants = fromSlot.occupants;
+    fromSlot.occupants = swapped;
+  }
+
   newState.counters.moveCount += 1;
 
-  const afterEvent = recordImmortalEvent(newState, instanceId, 'move');
-  return { success: true, newState: afterEvent.success ? afterEvent.newState : newState };
+  let result = newState;
+  for (const instanceId of movedInstanceIds) {
+    const afterEvent = recordImmortalEvent(result, instanceId, 'move');
+    if (afterEvent.success) result = afterEvent.newState;
+  }
+  return { success: true, newState: result };
 }
 
 /** "돌파" 상태 On/Off - 현재는 마마 전용 */
@@ -77,6 +102,11 @@ export function digTreasure(state, instanceId) {
   const current = found.instance.indyTreasureTier;
   const upgraded = !current || TIERS.indexOf(rolledTier) > TIERS.indexOf(current);
   if (upgraded) found.instance.indyTreasureTier = rolledTier;
+  // 발굴은 한 번으로 끝나야 한다(사용자 지적 - 예전엔 자리를 안 비워서 같은 자리에서
+  // 연속으로 계속 발굴할 수 있었음). 자리를 비우고 쿨타임을 다시 꽉 채워서, 발굴한
+  // 시점을 기준으로 정확히 INDY_TREASURE_INTERVAL_SEC 뒤에 새 위치가 등장하게 한다.
+  newState.indyTreasure.slot = null;
+  newState.indyTreasure.timer = INDY_TREASURE_INTERVAL_SEC;
 
   return { success: true, tier: rolledTier, upgraded, newState };
 }
@@ -100,6 +130,9 @@ export function upgradeGlobalEnhance(state, track) {
   if (cost.gold) newState.gold -= cost.gold;
   if (cost.luckstone) newState.luckstone -= cost.luckstone;
   newState.globalEnhance[track] += 1;
+  // "강화 시작" 미션(강화 버튼 2회 사용)은 4트랙 중 아무 버튼이나 눌러도 진행돼야 한다
+  // (사용자 지적 - enhanceHero()는 특정 영웅 전용이라 거의 안 눌려서 미션이 막혀 있었음).
+  newState.counters.enhanceCount += 1;
 
   return { success: true, newState };
 }

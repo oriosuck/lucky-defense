@@ -8,7 +8,7 @@ export const MISSIONS = [
     checkType: 'counter',
     counterKey: 'enhanceCount',
     target: 2,
-    reward: null, // 보상 미정
+    reward: { luckstone: 5 }, // 보상 확정 수치 없어 플레이스홀더로 행운석 5 지급
   },
   {
     id: 'mission_sell_5',
@@ -17,7 +17,7 @@ export const MISSIONS = [
     checkType: 'counter',
     counterKey: 'sellCount',
     target: 5,
-    reward: null,
+    reward: { luckstone: 5 }, // 보상 확정 수치 없어 플레이스홀더로 행운석 5 지급
   },
   {
     id: 'mission_legendary_roulette_fail_5',
@@ -26,7 +26,7 @@ export const MISSIONS = [
     checkType: 'counter',
     counterKey: 'legendaryRouletteFailCount',
     target: 5,
-    reward: null,
+    reward: { luckstone: 5 }, // 보상 확정 수치 없어 플레이스홀더로 행운석 5 지급
   },
 ];
 

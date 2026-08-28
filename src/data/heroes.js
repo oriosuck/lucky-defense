@@ -125,8 +125,15 @@ const MYTHIC_RAW = [
 // consumeMaterial: 승급 시 소모되는 타 영웅 재료 {heroId, count}
 export const IMMORTAL_CONDITIONS = {
   m_chad: {
-    id: 'i_giga_chad', name: '기가 채드', type: 'real-event', target: 5,
-    eventType: 'feedMythicToChad', extra: { note: '채드 보유 중 신화 영웅 판매(먹이기) 5회 누적, 채드별 개별 집계' },
+    // target은 "5회 누적"이 아니라 능력치 %다 - 판매(먹이기)할 때마다 확률적으로
+    // 2%p씩 오르고 총 10%를 채우면 승급 가능(기획서 재확인 사항). 확률 수치 자체는
+    // 확정 안 돼서 procChance는 플레이스홀더.
+    id: 'i_giga_chad', name: '기가 채드', type: 'real-event', target: 10,
+    eventType: 'feedMythicToChad',
+    extra: {
+      procChance: 0.5, procAmount: 2,
+      note: '채드 보유 중 신화/불멸 판매(먹이기) 시 확률적으로 능력치 2%p 상승, 총 10% 도달 시 승급(채드별 개별 집계, 확률 수치는 미확정 플레이스홀더)',
+    },
   },
   m_ray: {
     id: 'i_hero_ray', name: '용사 레이', type: 'hybrid', target: 1,

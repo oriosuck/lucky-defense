@@ -95,6 +95,13 @@ export function summonRoulette(state, tier, slotPosition = 'left') {
   const newState = structuredClone(state);
   drainPendingQueue(newState);
 
+  // 필드가 꽉 찼으면 소환 자체를 막는다(일반 소환과 동일한 규칙) - 예전엔 자리가
+  // 없어도 재화를 깎고 결과를 대기열(pendingPlacementQueue)에 넣기만 해서, 사용자
+  // 입장에선 "필드 꽉 찬 채로 룰렛이 돌아가며 재화만 소모되는" 것처럼 보였다.
+  if (fieldOccupantCount(newState) >= newState.fieldMaxCapacity) {
+    return { success: false, reason: 'field-full', newState: state };
+  }
+
   const cost = ROULETTE_COST[slotPosition] ?? ROULETTE_COST.left;
   if (newState.luckstone < cost) {
     return { success: false, reason: 'not-enough-luckstone', newState: state };

@@ -85,6 +85,7 @@ export function createGameState(config) {
       legendaryRouletteFailCount: 0,
       moveCount: 0,
     },
+    claimedMissionIds: [], // 이미 보상을 지급한 미션(missions.js checkMissions 참고, 중복 지급 방지
     result: null, // 'win' | 'lose' | null
     log: [],
   };

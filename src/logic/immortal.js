@@ -215,7 +215,20 @@ export function recordImmortalEvent(state, instanceId, eventType, payload = {}) 
   }
 
   const amount = cond.incrementPerTick != null ? rollValue(cond.incrementPerTick) : (payload.amount ?? 1);
-  found.instance.progress = (found.instance.progress ?? 0) + amount;
+  const before = found.instance.progress ?? 0;
+  found.instance.progress = before + amount;
+
+  // 탑 베인은 이동 moveToUltimateRatio(11)회마다 "궁극기 1회 사용"으로 환산된다
+  // (기획서 수치). 실제 데미지 계산은 범위 밖이라, 그 순간을 넘길 때마다 필드에서
+  // 잠깐 궁 이펙트를 보여주는 용도로만 타임스탬프를 남긴다(사용자 요청 - "베인이
+  // 궁 쓸 때 효과 주기").
+  if (found.instance.heroId === 'm_bane' && cond.extra?.moveToUltimateRatio) {
+    const ratio = cond.extra.moveToUltimateRatio;
+    if (Math.floor(before / ratio) < Math.floor(found.instance.progress / ratio)) {
+      found.instance.ultimateFlashAt = Date.now();
+    }
+  }
+
   return { success: true, newState };
 }
 
@@ -438,11 +451,14 @@ export function tickMamaImps(state, deltaSec) {
   forEachMythicInstance(newState, (slot, instance, cond) => {
     if (instance.heroId !== 'm_mama') return;
     if ((instance.impStock ?? 0) >= MAX_IMP_STOCK) return;
-    const interval = instance.breakthrough
+    const baseInterval = instance.breakthrough
       ? IMMORTAL_MAMA.breakthroughIntervalSec
       : newState.wave > 8
         ? IMMORTAL_MAMA.postRound8IntervalSec
         : IMMORTAL_MAMA.impIntervalSec;
+    // 전설~불멸 강화(하단 강화 팝업의 globalEnhance.legendary 트랙)를 1레벨이라도
+    // 올렸으면 임프 생성 속도가 2배 빨라진다(사용자 지정 요청).
+    const interval = (newState.globalEnhance?.legendary ?? 0) > 0 ? baseInterval / 2 : baseInterval;
     if (!instance.immortalTick) instance.immortalTick = { elapsed: 0, nextTick: interval };
     const t = instance.immortalTick;
     t.elapsed += deltaSec;
