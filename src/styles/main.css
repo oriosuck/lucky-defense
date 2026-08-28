@@ -309,11 +309,11 @@ body {
 /* 필드 캐릭터는 .field-slot 안에 눕혀 넣는 flex 자식이 아니라(그 방식으로는
    overflow:hidden 때문에 칸보다 큰 이미지를 못 담는다), 칸 좌표 기준으로 절대배치되는
    별도 오버레이 레이어(.stage-hero-layer, GameScreen.js의 renderHeroTokenLayer)로
-   그린다. 토큰 박스는 칸 바닥선이 아니라 칸 정중앙을 기준으로 배치되고 크기도 칸의
-   3배라(사용자 지정) 사방으로 크게 넘친다 - object-position도 bottom이 아니라
-   center로 맞춰서 이미지가 박스 중앙에 온다. z-index는 그리드 행(row) 번호로 매겨
-   아래쪽(화면 앞쪽) 행 캐릭터가 위쪽(화면 뒷쪽) 행 캐릭터를 가리게 한다(사용자 참고
-   스크린샷의 입체감). */
+   그린다. 토큰 박스의 "발끝"(하단)이 칸 바닥선이 아니라 칸 정중앙에 오도록 배치하고
+   (사용자 지정), object-position:bottom center로 이미지 발밑을 그 박스 하단에
+   맞춘다 - 몸통/머리는 칸 위로 넘치고 발은 칸 안쪽에 남는 모양이 된다. z-index는
+   그리드 행(row) 번호로 매겨 아래쪽(화면 앞쪽) 행 캐릭터가 위쪽(화면 뒷쪽) 행
+   캐릭터를 가리게 한다(사용자 참고 스크린샷의 입체감). */
 /* pointer-events:none 필수 - 이 레이어가 .field-slot 위에 겹쳐 그려지는데, 캐릭터
    토큰이 클릭/드래그를 가로채면 그 밑의 .field-slot이 e.target.closest('.field-slot')로
    못 잡혀서 탭 선택/드래그 이동이 전혀 동작하지 않는다(실제로 이 버그가 났었음 -
@@ -324,11 +324,11 @@ body {
   position: absolute;
   transform: translate(-50%, 0);
 }
-/* bottom%는 GameScreen.js가 인라인 style로 매번 계산해서 넣는다(칸 바닥선이 토큰
-   박스 안 몇 %에 오는지는 토큰 크기 배율에 따라 달라짐 - shadowBottomPct 참고). */
+/* 박스 하단이 곧 발끝 위치라(위 주석 참고) 그림자도 고정 %로 박스 맨 아래에 둔다 -
+   토큰 크기가 바뀌어도 발끝은 항상 박스 하단이라 이 값은 다시 계산할 필요가 없다. */
 .stage-hero-shadow {
-  position: absolute; left: 50%; transform: translate(-50%, 0);
-  width: 20%; height: 7%; border-radius: 50%;
+  position: absolute; left: 50%; bottom: -2%; transform: translate(-50%, 0);
+  width: 45%; height: 14%; border-radius: 50%;
   background: radial-gradient(ellipse, rgba(10, 8, 6, 0.55) 0%, rgba(10, 8, 6, 0) 75%);
 }
 /* filter는 선택 외곽선/디버프/궁극기 발광 상태에 따라 GameScreen.js가 매번 직접
@@ -340,8 +340,8 @@ body {
    (몬스터 이동/궁 링과 같은 패턴, CLAUDE.md 참고). */
 .stage-hero-image {
   position: relative; display: block; width: 100%; height: 100%;
-  object-fit: contain; object-position: center center;
-  transform-origin: center center;
+  object-fit: contain; object-position: bottom center;
+  transform-origin: bottom center;
   animation: stage-hero-attack 900ms ease-in-out infinite;
 }
 @keyframes stage-hero-attack {
