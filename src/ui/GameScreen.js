@@ -186,13 +186,24 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 항상 비슷한 수(약 4마리)만 떠 있었다 - 이제는 스프라이트가 사라지지 않고 계속
   // 경로를 무한 반복하며, 개수 자체가 카운트를 그대로 따라간다(카운트가 늘면 새
   // 스프라이트 추가, 줄면 제거).
+  //
+  // 각 몬스터는 고정 delayMs가 아니라 실제 스폰 시각(spawnTime, performance.now()
+  // 기준)을 저장해둔다 - 게임 루프가 0.2초마다 전체 DOM을 다시 그리는데(main.js
+  // RENDER_INTERVAL_SEC), 고정 delayMs를 매번 그대로 animation-delay에 넣으면 새로
+  // 생성된 <div>의 CSS 애니메이션이 항상 그 "같은 지점"에서부터 다시 0.2초만 재생되고
+  // 리셋되기를 반복해서, 경로 전체(10.4초)를 도는 대신 제자리에서 아주 짧은 구간만
+  // 왔다갔다하며 깜빡이는 것처럼 보였다("몬스터가 제자리에서 좌우로 왔다갔다하고
+  // 중간에서 튀어나온다"는 리포트의 원인). 실제 경과 시간을 매 렌더마다 다시 계산해서
+  // animation-delay를 그때그때 갱신해야 재생성되어도 애니메이션이 끊기지 않고
+  // 이어진다.
   function updateMonsterAnimation(state) {
     const active = state.wave >= 1 && !state.result;
     const target = active ? Math.floor(state.monsterCount) : 0;
     while (ui.monsters.length < target) {
       // 전부 같은 타이밍에 나오면 한 덩어리로 뭉쳐 보이므로, 경로 한 바퀴(MONSTER_TRAVEL_MS)
-      // 안에서 랜덤한 시점부터 시작하도록 흩뿌린다.
-      ui.monsters.push({ id: `mon_${Date.now()}_${Math.random()}`, delayMs: Math.random() * MONSTER_TRAVEL_MS });
+      // 안에서 랜덤한 시점부터 시작한 것처럼 스폰 시각을 과거로 흩뿌린다.
+      const staggerMs = Math.random() * MONSTER_TRAVEL_MS;
+      ui.monsters.push({ id: `mon_${Date.now()}_${Math.random()}`, spawnTime: performance.now() - staggerMs });
     }
     if (ui.monsters.length > target) ui.monsters.length = target;
   }
@@ -205,10 +216,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const holeEffects = renderHoleEffects(state);
     if (holeEffects) stage.appendChild(holeEffects);
     for (const m of ui.monsters) {
+      const phaseMs = (performance.now() - m.spawnTime) % MONSTER_TRAVEL_MS;
       stage.appendChild(
         el('div', {
           class: 'stage-monster',
-          style: `top:${STAGE_LAYOUT.leftHole.y}%; left:${STAGE_LAYOUT.leftHole.x}%; animation: monster-travel ${MONSTER_TRAVEL_MS}ms linear infinite; animation-delay: -${m.delayMs}ms;`,
+          style: `top:${STAGE_LAYOUT.leftHole.y}%; left:${STAGE_LAYOUT.leftHole.x}%; animation: monster-travel ${MONSTER_TRAVEL_MS}ms linear infinite; animation-delay: -${phaseMs}ms;`,
         }, [el('img', { src: UI_IMAGES.monsterIcon, alt: '몬스터' })]),
       );
     }
