@@ -65,6 +65,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 문제가 있어서 실측 후 픽셀로 못박는다(CLAUDE.md 참고).
   const STAGE_RATIO = 688 / 1508;
 
+  // 뷰포트 비율이 STAGE_RATIO와 안 맞을 때(특히 모바일 브라우저 - 카카오톡 인앱
+  // 브라우저 등에서 실제 사용 가능한 높이가 688:1508과 어긋나는 경우가 흔함) 예전엔
+  // "contain"(전체가 다 보이게, 안 맞는 쪽에 검은 여백/레터박스)이었는데, 사용자가
+  // 그 "까만거" 없이 화면을 꽉 채워달라고 요청했다(item 2) - "cover"(꽉 채우고,
+  // 안 맞는 쪽은 넘치는 만큼 잘림)로 바꿨다. `.game-stage-wrap`에 이미 걸려있는
+  // overflow:hidden이 넘치는 부분을 가려준다.
   function sizeStageToFit(wrap, stage) {
     const availW = wrap.clientWidth;
     const availH = wrap.clientHeight;
@@ -72,11 +78,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
     let w;
     let h;
     if (availW / availH > STAGE_RATIO) {
-      h = availH;
-      w = h * STAGE_RATIO;
-    } else {
       w = availW;
       h = w / STAGE_RATIO;
+    } else {
+      h = availH;
+      w = h * STAGE_RATIO;
     }
     stage.style.width = `${w}px`;
     stage.style.height = `${h}px`;
@@ -532,6 +538,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
   const HERO_TOKEN_HEIGHT_RATIO = 1.0;
   const HERO_TOKEN_WIDTH_RATIO = 0.55;
   const IMP_TOKEN_SCALE = 0.5; // 마마 임프는 다른 캐릭터의 절반 크기(사용자 지적 - 너무 컸음)
+  // 신화/불멸은 항상 칸당 1마리라 스택 폭 제약(위 3마리 계산)이 적용 안 되므로
+  // 더 크게 키워도 된다(사용자 지정 - "신화는 크기를 2.5배 키워도 괜찮아. 불멸도
+  // 신화랑 크기 똑같으니 참고").
+  const MYTHIC_TOKEN_SCALE = 2.5;
   const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
   const ATTACK_CYCLE_MS = 900; // 공격 모션(위아래 스쿼시-스트레치) 반복 주기
 
@@ -587,15 +597,22 @@ export function GameScreen({ getState, dispatch, onExit }) {
     for (const slot of state.field) {
       if (slot.occupants.length === 0) continue;
       const rect = fieldCellRect(slot.row, slot.col);
+      const firstHeroTier = HEROES_BY_ID[slot.occupants[0].heroId]?.tier;
       const isImpCell = slot.occupants[0].heroId === IMP_HERO_ID;
-      const sizeScale = isImpCell ? IMP_TOKEN_SCALE : 1;
+      const isMythicCell = firstHeroTier === 'mythic' || firstHeroTier === 'immortal';
+      const sizeScale = isImpCell ? IMP_TOKEN_SCALE : isMythicCell ? MYTHIC_TOKEN_SCALE : 1;
       const tokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO * sizeScale;
       const n = slot.occupants.length;
-      // 발끝(박스 하단)이 칸 정중앙에 오도록(사용자 지정) - 마리 수와 무관하게
-      // 항상 같은 기준선을 쓴다. 3마리일 때 뒤 2마리의 발끝이 바로 이 기준선에
-      // 오고, 앞 1마리만 stackOffsets의 dy로 그 아래에 별도로 걸린다(사용자 정정 -
-      // "위에 있는 2마리는 밑선을 가운데에 맞추고 그 아래에 한 마리를 추가").
-      const baseTop = rect.top + rect.height / 2 - tokenHeight;
+      // 발끝(박스 하단) 기준선: 일반~영웅은 칸 정중앙(사용자 지정) - 마리 수와
+      // 무관하게 항상 같은 기준선을 쓴다. 3마리일 때 뒤 2마리의 발끝이 바로 이
+      // 기준선에 오고, 앞 1마리만 stackOffsets의 dy로 그 아래에 별도로 걸린다
+      // (사용자 정정 - "위에 있는 2마리는 밑선을 가운데에 맞추고 그 아래에 한
+      // 마리를 추가"). 신화/불멸(항상 1마리, 훨씬 큼)은 그 "앞 1마리" 기준선에
+      // 맞춘다(사용자 지정 - "일반 3마리일 때 아래에 있는 애 발선 있잖아 거기
+      // 맞추면 됨") - 칸 정중앙에서 기본(1배) 칸 높이의 0.2배만큼 더 아래.
+      const baseTop = isMythicCell
+        ? rect.top + rect.height * (0.5 + 0.2 * HERO_TOKEN_HEIGHT_RATIO) - tokenHeight
+        : rect.top + rect.height / 2 - tokenHeight;
       const tokenWidth = rect.width * HERO_TOKEN_WIDTH_RATIO * sizeScale; // 마리 수와 무관하게 항상 고정
       const cellCenterX = rect.left + rect.width / 2;
       const offsets = stackOffsets(n);
