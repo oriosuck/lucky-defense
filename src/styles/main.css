@@ -325,7 +325,16 @@ body {
   object-fit: contain; object-position: bottom center;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
 }
-.stage-hero-token.selected .stage-hero-image { outline: 2px solid var(--gold); border-radius: 4px; }
+/* 선택 표시는 개체마다 따로 그리지 않고, 칸에 쌓인 무리 전체를 감싸는 흰 테두리
+   하나로 표시한다(사용자 참고 이미지 - 3마리든 몇 마리든 하나로 묶어서 선택). */
+.stage-hero-selection-halo {
+  position: absolute;
+  transform: translate(-50%, 0);
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
+}
 /* 탑 베인 궁극기(이동 11회 환산) 이펙트 - 데미지 계산은 범위 밖이라 순수 연출용
    글로우+링 확산 애니메이션만 잠깐 보여준다(사용자 요청). */
 .stage-hero-token.ultimate-flash .stage-hero-image {
@@ -363,6 +372,10 @@ body {
 .cell-quick-close {
   background: rgba(20, 16, 26, 0.85); border-color: rgba(255, 255, 255, 0.3);
   padding: 1px 6px; font-size: 10px;
+}
+/* 판매/합성 버튼은 다른 cell-quick-btn보다 크게(사용자 지적 - 너무 작았음) */
+.cell-quick-sell, .cell-quick-synth {
+  padding: 6px 16px; font-size: 15px; border-radius: 10px; border-width: 3px;
 }
 .cell-quick-sell { background: linear-gradient(180deg, #e0483f, #b22e26); border-color: #7a1a15; }
 .cell-quick-synth { background: linear-gradient(180deg, #f5c542, #d99e1f); border-color: #7a4d10; color: #3a2205; }

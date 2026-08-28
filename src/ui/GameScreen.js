@@ -506,7 +506,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 맞춰서 서 있는 것처럼 보이게 하며, z-index를 그리드 행(row) 번호로 매겨 아래쪽
   // (화면 앞쪽) 행 캐릭터가 위쪽(화면 뒷쪽) 행 캐릭터를 가리는 입체감을 낸다
   // (사용자 참고 스크린샷 그대로 - 원근감 있는 배치).
+  //
+  // 캐릭터 크기는 그 칸에 몇 마리가 쌓여있든 항상 고정이다(사용자 지적 - 예전엔
+  // 칸 너비를 마리 수만큼 나눠서 1마리일 때와 3마리일 때 크기가 달라졌었음). 대신
+  // 여러 마리는 서로 살짝 겹치며 한 칸 폭 안에 쑤셔넣듯 배치한다.
   const HERO_TOKEN_HEIGHT_RATIO = 1.75; // 칸 높이 대비 1.5~2배 사이
+  const HERO_TOKEN_WIDTH_RATIO = 0.7; // 칸 너비 대비 고정 폭(기존보다 30% 축소)
+  const HERO_TOKEN_STACK_STEP_RATIO = 0.42; // 겹쳐 쌓을 때 마리당 가로 간격(토큰 폭 대비)
   const ULTIMATE_FLASH_MS = 1200; // 베인 궁 이펙트 지속 시간
 
   function renderHeroTokenLayer(state) {
@@ -516,8 +522,22 @@ export function GameScreen({ getState, dispatch, onExit }) {
       const rect = fieldCellRect(slot.row, slot.col);
       const tokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO;
       const tokenTop = rect.top + rect.height - tokenHeight; // 하단이 칸 바닥선에 오도록
-      const subWidth = rect.width / slot.occupants.length;
+      const tokenWidth = rect.width * HERO_TOKEN_WIDTH_RATIO; // 마리 수와 무관하게 항상 고정
+      const step = tokenWidth * HERO_TOKEN_STACK_STEP_RATIO;
+      const cellCenterX = rect.left + rect.width / 2;
+      const n = slot.occupants.length;
       const selected = ui.selectedSlot && ui.selectedSlot.row === slot.row && ui.selectedSlot.col === slot.col;
+
+      // 선택 시 개체마다 따로 테두리를 그리는 게 아니라, 쌓인 무리 전체를 감싸는
+      // 흰 테두리 하나만 그린다(사용자 참고 이미지 그대로).
+      if (selected) {
+        const clusterWidth = tokenWidth + (n - 1) * step;
+        layer.appendChild(el('div', {
+          class: 'stage-hero-selection-halo',
+          style: `left:${cellCenterX}%; top:${tokenTop}%; width:${clusterWidth}%; height:${tokenHeight}%; z-index:${1 + slot.row};`,
+        }));
+      }
+
       slot.occupants.forEach((occ, i) => {
         const heroDef = HEROES_BY_ID[occ.heroId];
         const debuffed = state.eventLog.debuffEvent?.instanceId === occ.instanceId;
@@ -529,10 +549,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
         // animation-delay를 매 렌더 다시 계산해서 넣는다.
         const ultimateElapsedMs = occ.ultimateFlashAt ? Date.now() - occ.ultimateFlashAt : Infinity;
         const usingUltimate = occ.heroId === 'm_bane' && ultimateElapsedMs < ULTIMATE_FLASH_MS;
-        const centerX = rect.left + (i + 0.5) * subWidth;
+        const centerX = cellCenterX + (i - (n - 1) / 2) * step;
         layer.appendChild(el('div', {
-          class: `stage-hero-token${selected ? ' selected' : ''}${debuffed ? ' debuffed' : ''}${usingUltimate ? ' ultimate-flash' : ''}`,
-          style: `left:${centerX}%; top:${tokenTop}%; width:${subWidth}%; height:${tokenHeight}%; z-index:${2 + slot.row};${usingUltimate ? ` --ring-delay:-${ultimateElapsedMs % 800}ms;` : ''}`,
+          class: `stage-hero-token${debuffed ? ' debuffed' : ''}${usingUltimate ? ' ultimate-flash' : ''}`,
+          style: `left:${centerX}%; top:${tokenTop}%; width:${tokenWidth}%; height:${tokenHeight}%; z-index:${2 + slot.row};${usingUltimate ? ` --ring-delay:-${ultimateElapsedMs % 800}ms;` : ''}`,
         }, [
           el('div', { class: 'stage-hero-shadow' }),
           heroImage(heroDef, { className: 'stage-hero-image', instance: occ }),
