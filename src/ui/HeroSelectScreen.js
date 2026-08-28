@@ -50,9 +50,11 @@ export function HeroSelectScreen({ onStart }) {
       .map(([heroId, v]) => ({ heroId, immortal: v.immortal, favorite: v.favorite }));
   }
 
+  // 불멸 펫 보유 유무 선택 UI는 없앴다(사용자 지정 - 항상 보유한 것으로 가정).
+  // local.immortalPet은 createLocalState()에서 true로 고정되고, 프리셋을 불러와도
+  // 이 값은 건드리지 않는다(예전 프리셋에 false가 저장돼 있었더라도 무시).
   function applyPreset(preset) {
     local.gameType = preset.gameType;
-    local.immortalPet = preset.immortalPet;
     local.settings = new Map((preset.heroSettings ?? []).map((h) => [h.heroId, { immortal: h.immortal, favorite: h.favorite }]));
     update();
   }
@@ -63,7 +65,6 @@ export function HeroSelectScreen({ onStart }) {
     const defaultPreset = loadPreset(defaultPresetId);
     if (defaultPreset) {
       local.gameType = defaultPreset.gameType;
-      local.immortalPet = defaultPreset.immortalPet;
       local.settings = new Map((defaultPreset.heroSettings ?? []).map((h) => [h.heroId, { immortal: h.immortal, favorite: h.favorite }]));
     }
   }
@@ -186,24 +187,14 @@ export function HeroSelectScreen({ onStart }) {
       ]),
     );
 
-    const petRadios = [true, false].map((val) =>
-      el('label', { class: 'radio' }, [
-        el('input', {
-          type: 'radio', name: 'immortalPet', checked: local.immortalPet === val,
-          onchange: () => { local.immortalPet = val; update(); },
-        }),
-        el('span', { text: val ? '불멸 펫 보유' : '불멸 펫 미보유' }),
-      ]),
-    );
-
     return el('div', { class: 'hero-select-inner' }, [
       el('div', { class: 'top-bar' }, [startBtn]),
       // 프리셋 저장/불러오기는 맨 밑이 아니라 화면 맨 위쪽에 둔다(사용자 요청).
       renderPresetBar(),
       el('section', { class: 'options' }, [
         el('div', { class: 'radio-group' }, gameTypeRadios),
-        el('div', { class: 'radio-group' }, petRadios),
-        el('p', { class: 'options-note', text: '모든 유물은 항상 최대 레벨(11)로 고정되어 있습니다. 신화 등급을 제외한 모든 영웅은 기본으로 보유한 상태로 시작합니다.' }),
+        // 불멸 펫 보유 유무 선택 UI는 제거했다(사용자 지정 - 항상 보유한 것으로 가정).
+        el('p', { class: 'options-note', text: '모든 유물은 항상 최대 레벨(11)로 고정되어 있습니다. 신화 등급을 제외한 모든 영웅은 기본으로 보유한 상태로 시작합니다. 불멸 펫은 항상 보유한 것으로 가정합니다.' }),
       ]),
       el('section', { class: 'hero-grid' }, SELECTABLE_TIERS.flatMap((tier) => heroesByTier(tier).map(renderHeroCard))),
     ]);

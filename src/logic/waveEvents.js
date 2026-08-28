@@ -12,9 +12,13 @@ import {
 } from '../data/constants.js';
 
 // ---- 이동불능(즉시형/게이지형) - 게임당 정확히 2회, 라운드는 createGameState에서 미리 확정됨 ----
-const IMMOBILIZE_INSTANT_SEC = 5;
+// 실제로 이동불능 상태에 걸려 있는 시간(즉시형/게이지형 공통)은 20초로 통일한다
+// (사용자 지정 - "공격 당했을 때 당하는 시간은 일단 20초로 통일해두자", 정확한 수치가
+// 기획서에 없어 임시로 맞춘 값). 게이지형의 "차오르는 시간"(IMMOBILIZE_GAUGE_FILL_SEC)은
+// 당하는 시간이 아니라 발동 전 예열 시간이라 별개로 그대로 둔다.
+const IMMOBILIZE_INSTANT_SEC = 20;
 export const IMMOBILIZE_GAUGE_FILL_SEC = 5;
-const IMMOBILIZE_GAUGE_LOCK_SEC = 10;
+const IMMOBILIZE_GAUGE_LOCK_SEC = 20;
 
 // ---- 삭제 공격 ("삭제 있는 버전"에서만, 13/20라운드) ----
 const DELETE_ROUNDS = [13, 20];
@@ -30,9 +34,9 @@ const RAID_MISSING_PENALTY_SEC = 5;
 const RAID_KEY_HERO_IDS = ['m_mama', 'm_bane', 'm_roka'];
 
 // ---- 보스 일반공격(디버프) - 이동불능과 별개, 1~2 주사위 간격으로 반복 발동 ----
-// 실질 효과 없음(공격속도/공격력 감소 미반영), 대상 영웅 색상만 표시. 지속시간은 기획서에
-// 명시되어 있지 않아 짧은 플래시로 처리한다.
-const DEBUFF_MARK_SEC = 3;
+// 실질 효과 없음(공격속도/공격력 감소 미반영), 대상 칸 표시만. 지속시간은 기획서에
+// 명시되어 있지 않아 이동불능과 마찬가지로 20초로 통일한다(사용자 지정).
+const DEBUFF_MARK_SEC = 20;
 
 // ---- 인디 "보물 발굴" (5-4) ----
 export const INDY_TREASURE_INTERVAL_SEC = 30;
@@ -72,7 +76,11 @@ function pickRandomSlots(state, count) {
  */
 function applyRoundEndReward(state, isFirstWave) {
   if (isFirstWave) {
-    state.gold += FIRST_WAVE_SUBSIDY;
+    // "고정값"은 기존 보유 골드(STARTING_GOLD)에 더하는 게 아니라 시작 시점의 총
+    // 골드를 이 값으로 확정 짓는 것이다(사용자 지적 - 0라운드에 아무것도 안 썼는데
+    // 1라운드 시작 금액이 2284보다 더 많이 들어오던 버그, 원인은 여기서 += 로
+    // STARTING_GOLD 위에 얹어버리고 있었기 때문).
+    state.gold = FIRST_WAVE_SUBSIDY;
   } else {
     state.gold += state.gold * VAULT_BONUS_PERCENT + ROUND_END_FLAT_GOLD;
   }
@@ -156,11 +164,13 @@ function onWaveStart(state) {
   }
 
   // 보스 일반공격(디버프) 스케줄 - 이동불능과 별개로, 예정된 라운드마다 발동하고 다음
-  // 예정 라운드를 다시 주사위(1~2)로 굴린다.
+  // 예정 라운드를 다시 주사위(1~2)로 굴린다. 대상은 개체 하나가 아니라 칸 하나다
+  // (사용자 지적 - 한 칸에 3마리가 쌓여 있으면 그 중 1마리만 아니라 칸 전체가 디버프
+  // 대상이어야 한다).
   if (state.wave === state.bossAttackSchedule.nextAttackRound) {
-    const occupants = state.field.flatMap((s) => s.occupants);
-    const target = occupants.length ? occupants[randomInt(occupants.length)] : null;
-    state.eventLog.debuffEvent = target ? { instanceId: target.instanceId, timer: DEBUFF_MARK_SEC } : null;
+    const occupiedSlots = state.field.filter((s) => s.occupants.length > 0);
+    const target = occupiedSlots.length ? occupiedSlots[randomInt(occupiedSlots.length)] : null;
+    state.eventLog.debuffEvent = target ? { row: target.row, col: target.col, timer: DEBUFF_MARK_SEC } : null;
     state.bossAttackSchedule.nextAttackRound = state.wave + 1 + randomInt(2);
   }
 

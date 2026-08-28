@@ -548,14 +548,19 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   // 선택/합성가능 표시는 칸을 감싸는 사각 테두리가 아니라(사용자 지적 - "누가
   // 네모로 하랬냐"), 캐릭터 이미지의 실제 알파 채널(실루엣)을 따라가는 흰색
-  // 외곽선이어야 한다. drop-shadow를 8방향으로 얇게 겹쳐 쌓으면 투명 배경은 그대로
-  // 투명하게 두고 그림이 있는 픽셀 가장자리에만 색이 번져서 실루엣 외곽선처럼 보인다.
-  const OUTLINE_OFFSET_PX = 2;
+  // 외곽선이어야 한다. drop-shadow를 여러 방향으로 얇게 겹쳐 쌓으면 투명 배경은
+  // 그대로 투명하게 두고 그림이 있는 픽셀 가장자리에만 색이 번져서 실루엣
+  // 외곽선처럼 보인다.
+  // 함정: CSS `filter: drop-shadow(A) drop-shadow(B) ...`는 각 항이 원본이 아니라
+  // "이전까지 누적된 결과물"에 다시 적용된다(체이닝) - 그래서 8방향을 그대로 다
+  // 겹치면 오프셋들이 서로 누적돼 실제 시각적 크기가 OUTLINE_OFFSET_PX 하나의
+  // 몇 배로 부풀어 보인다(사용자 지적 - "흰색 테두리가 너무 커서 가시성이
+  // 떨어져"). 오프셋 자체를 확 줄이고(2px→0.6px) 4방향(상하좌우)만 남겨서
+  // 누적되는 항 수도 줄였다 - 결과적으로 실제 렌더 크기가 절반보다 훨씬 작아진다.
+  const OUTLINE_OFFSET_PX = 0.6;
   function outlineFilter() {
     const offsets = [
       [OUTLINE_OFFSET_PX, 0], [-OUTLINE_OFFSET_PX, 0], [0, OUTLINE_OFFSET_PX], [0, -OUTLINE_OFFSET_PX],
-      [OUTLINE_OFFSET_PX, OUTLINE_OFFSET_PX], [-OUTLINE_OFFSET_PX, OUTLINE_OFFSET_PX],
-      [OUTLINE_OFFSET_PX, -OUTLINE_OFFSET_PX], [-OUTLINE_OFFSET_PX, -OUTLINE_OFFSET_PX],
     ];
     return offsets.map(([x, y]) => `drop-shadow(${x}px ${y}px 0 #fff)`).join(' ');
   }
@@ -589,7 +594,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
       slot.occupants.forEach((occ, i) => {
         const heroDef = HEROES_BY_ID[occ.heroId];
-        const debuffed = state.eventLog.debuffEvent?.instanceId === occ.instanceId;
+        // 디버프는 개체 하나가 아니라 칸 전체에 적용된다(사용자 지적 - 한 칸에 3마리가
+        // 있으면 그 중 1마리만이 아니라 칸에 있는 전원이 대상이어야 한다).
+        const debuffEv = state.eventLog.debuffEvent;
+        const debuffed = debuffEv && debuffEv.row === slot.row && debuffEv.col === slot.col;
         // 탑 베인이 방금 궁극기 환산 임계치(이동 왕복 15~20회 랜덤)를 넘겼으면 잠깐
         // 이펙트를 준다(사용자 요청 - immortal.js의 recordImmortalEvent가 남긴
         // 타임스탬프 확인). 게임 루프가 0.2초마다 전체 DOM을 다시 그리는 구조라
@@ -732,17 +740,16 @@ export function GameScreen({ getState, dispatch, onExit }) {
       }));
     }
 
-    // 불멸 진행도/마마 임프 수/타르 단계 등 부가 정보는 큰 카드 대신 작은 배지 한 줄로만
-    // 보여준다. 단, 마마는 임프가 이제 필드에 실제 캐릭터로 보이니 텍스트 배지가
-    // 중복 정보라 사용자 요청으로 아예 안 띄운다.
+    // 부가 정보는 큰 카드 대신 작은 배지 한 줄로만 보여준다. 불멸 진행도("불멸
+    // N/target")는 어떤 신화 캐릭터를 클릭하든 아예 노출하지 않는다(사용자 지정 -
+    // 처음엔 마마만 뺐었는데 "마마뿐만 아니라 다른것들도 다 하지마"라고 확장 지적).
+    // 단, 마마는 임프가 이제 필드에 실제 캐릭터로 보이니 나머지(임프 수) 텍스트도
+    // 중복 정보라 사용자 요청으로 배지 자체를 아예 안 띄운다.
     if (instance.heroId !== 'm_mama') {
       const statusText = extraStatusText(instance, heroDef);
       const displayLabel = heroDisplayLabel(instance, heroDef);
       const statusParts = [];
       if (displayLabel !== heroDef.name) statusParts.push(displayLabel);
-      if (heroDef.immortalCondition) {
-        statusParts.push(`불멸 ${Math.floor(instance.progress ?? 0)}${heroDef.immortalCondition.target != null ? '/' + heroDef.immortalCondition.target : ''}`);
-      }
       if (statusText) statusParts.push(statusText);
       if (statusParts.length) {
         above.unshift(el('div', { class: 'cell-status-badge', text: statusParts.join(' · ') }));
@@ -1031,8 +1038,16 @@ export function GameScreen({ getState, dispatch, onExit }) {
     ]);
   }
 
+  // 즐겨찾기된 신화(/그 불멸)가 팝업 그리드에서도 맨 앞으로 오도록 정렬한다(사용자
+  // 지적 - 왼쪽 즉시소환 바는 이미 즐겨찾기 우선으로 정렬돼 있었지만, 이 그리드는
+  // heroesByTier() 원본 순서 그대로라 즐겨찾기가 전혀 반영되지 않고 있었다).
+  function sortFavoriteFirst(state, defs, heroIdOf) {
+    const favoriteIds = new Set(state.heroSettings.filter((h) => h.favorite).map((h) => h.heroId));
+    return [...defs].sort((a, b) => Number(favoriteIds.has(heroIdOf(b))) - Number(favoriteIds.has(heroIdOf(a))));
+  }
+
   function renderMythicPopup(state) {
-    const allMythics = heroesByTier('mythic');
+    const allMythics = sortFavoriteFirst(state, heroesByTier('mythic'), (h) => h.id);
     if (!ui.mythicSelectedId) {
       ui.mythicSelectedId = allMythics.find((h) => craftMaterialsReady(state, h))?.id ?? allMythics[0]?.id ?? null;
     }
@@ -1109,7 +1124,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   function renderImmortalGrid(state) {
-    const allImmortals = [...heroesByTier('immortal')];
+    const allImmortals = sortFavoriteFirst(state, heroesByTier('immortal'), (h) => h.baseHeroId);
     return el('div', { class: 'mythic-grid' }, allImmortals.map((heroDef) => {
       const unlocked = immortalUnlockStatus(state, heroDef);
       return el('div', { class: `mythic-cell ${unlocked ? 'ready' : 'locked'}` }, [
