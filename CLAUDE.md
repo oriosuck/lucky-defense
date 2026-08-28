@@ -117,50 +117,79 @@ git stash pop
 않으므로 PR 번호가 계속 올라간다 — 현재 #6까지 merge됨). 브랜치 이름 자체는
 계속 재사용한다(작업 지시서에 고정된 이름).
 
-## 이미지 자산 매핑 (실측/육안 확인 완료분)
+## 이미지 자산 매핑 2차분 (게임화면_목업.html 기준 재구축, 최신)
 
-### 영웅 초상화 (`public/heroes/*.webp`, `src/data/heroes.js`의 `imagePath()`)
+이미지 없이 진행한 리팩토링(위 섹션) 이후, 사용자가 **목업 HTML**(레이아웃 참고용) +
+**전체 이미지 zip**(영웅 89장 + UI 24장 + 배경)을 새로 줘서 실제 이미지를 전부
+연결했다. **아래 내용이 이 프로젝트의 이미지 매핑에 대한 최신 원본이다** — 예전
+zip(`zap.webp`/`birdraw.webp` 같은 영문 코드명, `public/heroes/extra/` 여분 파일 등)
+관련 기록은 이번에 완전히 새 zip으로 교체되면서 전부 무효가 됐으니 참고하지 말 것
+(`public/heroes/extra/`도 이번에 삭제함 - 미야옹/배트맨/로켓츄 변신 이미지였다는 게
+이번에 밝혀져서 새 zip의 정식 파일로 교체됨).
 
-사용자가 준 zip의 파일명은 영문 코드명이라 한글 영웅명과 1:1로 안 맞는 경우가
-있었다. 아래는 헷갈렸다가 사용자가 직접 정정해준 것들 (전부 반영 완료):
+### 영웅 초상화 (`public/heroes/*.webp|png`, 총 89장)
 
-| 한글 영웅명 | 신화 파일 | 불멸 파일 | 비고 |
-|---|---|---|---|
-| 지지 | `zap.webp` | `geniewiz.png`(i_archmage_gigi) | 처음엔 `birdraw`로 착각 |
-| 골라조 | `birdraw.webp` | `immobirdraw.webp` | 지지 때문에 한 번 잘못 뺏겼다가 원위치 |
-| 우치 | `lazytaoist.webp` | `azuralazytaoist.webp` | 초나와 서로 뒤바뀌어 있었음 |
-| 초나 | `verdee.webp` | `evergreenverdee.webp` | 우치와 서로 뒤바뀌어 있었음 |
+새 zip은 파일명이 **한글 영웅명 그대로**라(`영웅 이미지/1.일반/궁수.webp` 식으로
+등급별 폴더 안에 있음) 매핑이 훨씬 쉬웠다. `heroes.js`에서 `HEROES` 배열을 덤프해서
+한글 이름으로 자동 매칭하는 스크립트로 74종은 기계적으로 처리하고, 나머지는 수동
+매핑했다:
+- `독수리.webp` → `h_eagle_general`(독수리장군, zip 파일명이 축약형이었음)
+- `타르v1/v2/v3.webp` → `m_tar`(기본상태=v1) + `TAR_STAGE_IMAGES`(1~3단계)
+- `사신개구리변신전/변신후.webp` → `i_death_frog`(전) / `i_death_frog_evolved`(후,
+  신규 2차 변신 - 아래 5-3 갱신분 참고)
+- `에이스배트맨변신전/변신투수모드/변신타자모드.webp` → `i_ace_batman`(기본) +
+  `i_ace_batman_pitcher`/`i_ace_batman_batter`(신규, `ACE_BATMAN_TRANSFORM_IMAGES`)
+- `아이언미야옹변신1/2.webp` → `m_iron_meyaong_transform1`/`transform2`(신규,
+  `IRON_MEYAONG_TRANSFORM_IMAGES`)
+- `로켓츄변신.webp` → `m_rocketchu_transform`(신규, `ROCKETCHU_TRANSFORM_IMAGE`)
+- `개구리 왕자.webp`/`개구리왕자변신.webp` → `m_frog_prince` / `FROG_TRANSFORM_IMAGES`
+- `드레인.webp` → `DRAGON_DRAIN_IMAGE`(드래곤 승급 준비 시 필드 토큰용)
 
-**변신 모습이 따로 있는 영웅** (선택 패널에 보조 썸네일로 같이 표시):
-- 드래곤(`m_dragon`): 승급 준비되면(`immortalEligible`) 필드 토큰이
-  `m_dragon_drain.webp`(드레인 형태)로 바뀜.
-- 개구리왕자/사신개구리: `FROG_TRANSFORM_IMAGES`에 `m_frog_prince_transform.webp`
-  (kingdian 유래), `i_death_frog_transform.webp`(immoreaperdian 유래) 등록됨.
-  둘 다 선택 패널에서 원본 이미지 옆에 "변신 모습"으로 같이 보여줌.
-- 군체 타르(`m_tar`): 1~3단계 그래픽 별도 존재(`TAR_STAGE_IMAGES`). "동족포식"
-  버튼(`cannibalizeTar`)으로 다른 타르를 흡수하면 `instance.tarStage`가 오르고
-  이미지가 바뀜. 3단계 도달이 불멸 승급 조건.
+**주의**: `FROG_TRANSFORM_IMAGES`에서 `i_death_frog` 항목은 이번에 뺐다 - 예전엔
+사신개구리의 "변신 모습" 보조 썸네일이었는데, 이제 `i_death_frog_evolved`가 진짜
+불멸 개체(2차 변신)로 승격됐으니 그 역할이 필요 없어짐(`heroes.js`의
+`SECOND_STAGE_IMMORTAL` 참고).
 
-**안 쓰인 여분 파일** (`public/heroes/extra/`): `herobomba.webp`,
-`immobatmanhitter.webp`, `immobatmanpitcher.webp`, `ironmeowv2.webp`,
-`ironmeowv3.webp`, `overclockedrocketchu.webp`. 용도 확인 안 된 상태로 보관만
-해둠 — 사용자가 언급하면 그때 연결.
+**여전히 못 채운 것**: 기획서 5-4의 "나아무"(초나의 소환 유닛) 이미지는 이번 zip에도
+없었다. 텍스트("나아무 N회 소환" 진행도)로만 표시 중 - 나중에 파일 받으면 연결.
 
-### UI 버튼/바 (`public/ui/*.webp`, `src/data/assets.js`의 `UI_IMAGES`)
+### UI 버튼/아이콘 (`public/ui/*.png`, `src/data/assets.js`의 `UI_IMAGES`)
 
-`신화 보는 버튼.png`, `룰렛 팝업 여는 버튼.png`, `소환 버튼.png`,
-`강화 버튼.png`, `룰렛 배경.png`, `희귀/영웅/전설 룰렛.png`(원형 배지, 가격
-표시 칸까지 그림에 포함됨), `재화 바.png`, `몬스터 카운트 바.png`,
-`라운드 카운트 배경.png`, `2배 켰을/안켰을 때.png`, `해골 이미지.png` 전부
-매핑 완료.
+목업 HTML에서 숫자 파일명(`2.png`~`25.png`)이라 용도를 육안으로 하나씩 확인해야
+했다. 매핑 결과(`GameScreen.js`/`main.css`에 이미 반영됨):
+`2`=몬스터, `3`=이동불능 아이콘(사슬), `4`=임프, `5`=행운석, `6`=골드,
+`8/9/10`=강화 팝업 4종 중 전설/영웅/(일반+확률, 10.png 한 장에 2개가 붙어있어서
+좌우로 크롭해서 분리함), `11`=몬스터 카운트 바, `13`=해골, `14`=상단 라운드/시간
+배지 배경, `15/16`=배속 꺼짐/켜짐, `17`=재화 바(골드·행운석·인원 아이콘이 이미
+그림 안에 그려져 있어서 숫자만 텍스트로 얹으면 됨), `18/19/20/21`=강화/소환/룰렛/신화
+버튼(텍스트가 그림에 이미 포함돼 있어서 별도 라벨 오버레이 불필요),
+`22/23/24`=전설/희귀/영웅 룰렛(원형 배지, 가격 칸 포함, 예전 zip과 **비율이 정확히
+일치**해서 같은 원화 재사용으로 확인됨), `25`=보스(예전엔 `boss.png`가 없어서
+플레이스홀더였는데 이번에 정식 파일이 생김). `12.png`(커튼 프레임, 예전
+`roulette_popup_bg.webp`와 비율 일치)는 새 목업이 룰렛/강화 팝업을 플랫 배경 하단
+시트로 바꾸면서 안 쓰게 됐다 - `UI_IMAGES.popupTopBarBg`에 매핑만 해두고 미사용.
 
-**함정**: `몬스터 카운트 바`와 `2배 안켰을 때` 두 장만 배경이 완전 불투명
-흰색으로 채워져 있었다(나머지는 정상 투명). 단순 알파 스레숄드로는 안 지워져서
-**모서리부터 flood-fill로 흰 배경만 제거**했다(스켈레톤 얼굴의 크림색처럼
-그림 안쪽에 있는 흰색은 안 건드림). 새로 받는 이미지가 이상하게 나오면
-먼저 모서리 픽셀 alpha를 찍어봐서 진짜 투명인지 확인할 것.
+**함정 재발**: `2.png`(몬스터)와 `3.png`(이동불능 아이콘) 두 장이 이번에도
+배경이 완전 불투명 흰색이었다(RGB 모드, 알파 채널 자체가 없었음). 예전과 똑같이
+**네 모서리에서 BFS flood-fill로 흰 배경만 제거**해서 고쳤다. 그림 안쪽 흰색
+디테일(몬스터 눈동자, 사슬 하이라이트)은 안 건드림 - 이 프로젝트에서 흰 배경
+이미지가 섞여 오는 건 일회성이 아니라 반복되는 패턴이니, 새 이미지 받을 때마다
+`Image.open(f).convert('RGBA').getpixel((0,0))`으로 모서리 알파부터 확인할 것.
+
+**강화 팝업 4칸의 실제 데이터 매핑** (기획서에 명시 안 된 부분이라 직접 판단한 것):
+목업은 common/epic/legend/rate 4개 카드를 보여주지만, 이 시뮬레이터에 실제로 있는
+강화 메커니즘은 `enhanceHero`(개체당 `enhanceLevel`) 하나뿐이다. 판단:
+- **common**(회색 방패): 진짜 `enhanceHero` 연결(선택된 영웅의 실제 강화 레벨/비용)
+- **rate**(파란 방패): 기획서가 "소환확률은 항상 맥스 고정"이라고 명시했으므로
+  "MAX" 표시만 하는 비활성 카드(클릭해도 아무 효과 없음, 실제로 그런 시스템이니까)
+- **epic/legend**(보라 방패, 금-빨강 트로피): 대응하는 실제 게임 상태가 없어서
+  **"준비 중" 잠금 카드**로만 노출(숫자를 지어내지 않음). 나중에 실제 강화 하위
+  시스템이 확정되면 `renderEnhancePopup`(`GameScreen.js`)에서 이 두 칸만 채우면 됨.
 
 ### 배경 (`public/bg/background.jpg`, 688×1508)
+
+새 zip의 배경도 크기가 688×1508로 예전과 동일 - `STAGE_LAYOUT` 좌표를 그대로 재사용
+가능했다(재실측 불필요).
 
 `src/data/assets.js`의 `STAGE_LAYOUT`이 실측 좌표(%). 핵심 교훈: 원본에
 검은 테두리로 그려져 있던 사각형은 **보스 자리가 아니라 전장(4x6칸) 자리**였다
@@ -190,6 +219,15 @@ git stash pop
    직접 얹혀 있다. 선택된 영웅 패널(`selected-panel`)도 마찬가지로, 영웅을
    선택했을 때만 보스 위에 카드로 떠서 보이는 오버레이다(상시 노출 아님,
    의도된 설계).
+5. (2차 이미지 매핑 때 변경) 목업 HTML이 "라운드/시간 배지"와 "몬스터 카운트 바"까지
+   포함한 배경 이미지 위에 전부 절대좌표로 얹는 구조라, `top-bar`/`monster-row`를
+   `.game-stage` 바깥의 별도 flex 형제로 두던 걸 버리고 **`.game-stage` 안의
+   오버레이**로 합쳤다(`GameScreen.js`의 `renderTopBadge`/`renderMonsterRow`).
+   `.game-screen`은 이제 `.game-stage-wrap` 하나만 감싸는 얇은 래퍼다. 룰렛/강화
+   팝업도 `position:fixed` 풀스크린 모달이 아니라 `.game-stage` 안에 절대좌표로
+   붙는 하단 시트(`.game-popup`)로 바뀌었다 - 미션 팝업/결과 화면만 예전 방식
+   (`.popup-overlay`, 풀스크린 고정)을 그대로 씀(목업에 해당 화면이 없어서 굳이
+   안 바꿈).
 
 ## 기획서를 다시 읽고서야 발견한 버그
 
@@ -205,7 +243,14 @@ git stash pop
 
 ## 아직 안 끝난 것 / 다음에 손볼 만한 것
 
-- `public/heroes/extra/`의 여분 이미지들 — 용도 확인 필요.
+- ~~`public/heroes/extra/`의 여분 이미지들~~ — 2차 이미지 매핑 때 해결됨: 새 zip에서
+  정식 한글 파일명(에이스배트맨변신투수/타자모드, 아이언미야옹변신1/2, 로켓츄변신)으로
+  다시 받아서 정식 반영했고, 정체불명이던 예전 `extra/` 폴더는 삭제했다.
+- 인디(`m_indy`)의 "보물 발굴"(5-4) 보물 자체의 전용 아이콘, 초나의 "나아무" 소환
+  유닛 이미지는 이번 zip에도 없어서 텍스트로만 표시 중.
+- 강화 팝업의 epic/legend 카드(보라 방패/금-빨강 트로피 아이콘)는 이미지는 붙여놨지만
+  대응하는 실제 게임 메커니즘이 없어서 "준비 중" 잠금 카드다 — 실제 하위 시스템이
+  정해지면 `GameScreen.js`의 `renderEnhancePopup`만 고치면 됨.
 - `src/logic/immortal.js`: 27개 불멸 승급 조건 중 고유 소모/미니게임 로직이
   실제로 구현된 건 `m_frog_prince`, `m_mama`, `m_ninja`, `m_chona`, `m_gigi`,
   `m_tar`, `m_lancelot` 정도고, 나머지는 "진행도만 목표 도달하면 승급"하는
@@ -213,9 +258,6 @@ git stash pop
   필요하면 `promotionHandlers`에 채워 넣으면 됨.
 - 판매 보상 골드/보석 수치, 몬스터 누적 곡선, 강화 비용은 정식 밸런스 수치가
   없어서 플레이스홀더 값 그대로다 (코드 내 주석에 표시돼 있음).
-- `public/heroes/extra`의 batman hitter/pitcher, ironmeow v2/v3,
-  overclockedrocketchu 등은 강화 단계별 스킨이나 액션 프레임일 가능성이
-  있는데 아직 안 물어봄.
 
 ## 빌드/확인 방법
 

@@ -1,7 +1,7 @@
 import { TIER_LABEL, heroesByTier } from '../data/heroes.js';
 import { savePreset, listPresets, loadPreset, deletePreset, PRESET_NAME_MAX_LENGTH } from '../state/presetStore.js';
 import { el } from './components/dom.js';
-import { heroPlaceholder } from './components/heroPlaceholder.js';
+import { heroImage } from './components/heroVisual.js';
 
 // 일반~전설은 항상 소환 풀에 포함되고 모든 영웅이 기본 보유 상태이므로 사전 선택이 필요 없다.
 // 홈 화면에서는 이번 판에서 불멸로 취급할지/즐겨찾기할지를 신화 등급 카드에서만 고른다.
@@ -102,7 +102,7 @@ export function HeroSelectScreen({ onStart }) {
     return el('div', { class: 'hero-card' }, [
       el('button', { class: 'favorite-toggle', text: state.favorite ? '★' : '☆', onclick: (e) => { e.stopPropagation(); toggleFavorite(heroDef.id); } }),
       el('div', { class: 'hero-card-body' }, [
-        heroPlaceholder(heroDef, { className: 'hero-card-image' }),
+        heroImage(heroDef, { className: 'hero-card-image' }),
         el('div', { class: 'hero-name', text: heroDef.name }),
         el('div', { class: 'hero-tier', text: TIER_LABEL[heroDef.tier] }),
       ]),
