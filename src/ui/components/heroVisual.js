@@ -12,9 +12,15 @@ export function resolveHeroImage(heroDef, instance) {
 }
 
 export function heroImage(heroDef, { className = '', instance = null, src = null } = {}) {
-  return el('img', {
+  const img = el('img', {
     class: `hero-image ${className}`.trim(),
     src: src ?? resolveHeroImage(heroDef, instance),
     alt: heroDef.name,
   });
+  // <img>는 기본적으로 브라우저 네이티브 드래그(HTML5 Drag and Drop)가 켜져 있어서,
+  // 필드 칸 드래그 이동 제스처(GameScreen.js의 pointermove 핸들러)를 마우스다운 직후
+  // 가로채 버린다 - 네이티브 드래그가 시작되면 이후 pointermove가 더 이상 안 들어와서
+  // 칸을 아무리 옮겨도 첫 좌표에서 멈춘 것처럼 보이는 버그의 원인이었다.
+  img.draggable = false;
+  return img;
 }

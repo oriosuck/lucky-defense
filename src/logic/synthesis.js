@@ -6,8 +6,8 @@ import {
   placeInstanceAtSlot,
 } from '../state/gameState.js';
 
-// 판매 보상표(기획 확정: 일반 마리당 30코인, 희귀 1행운석, 영웅 2행운석, 전설 4행운석)
-const SELL_GOLD_BY_TIER = { normal: 30 };
+// 판매 보상표(기획 확정: 일반 마리당 120코인, 희귀 1행운석, 영웅 2행운석, 전설 4행운석)
+const SELL_GOLD_BY_TIER = { normal: 120 };
 const SELL_LUCKSTONE_BY_TIER = { rare: 1, hero: 2, legendary: 4 };
 
 // 판매 시 받을 보상 미리보기(칸 위 판매 버튼에 표시용) - 실제 지급은 sellHero()가 담당.
