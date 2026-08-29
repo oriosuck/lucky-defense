@@ -171,6 +171,20 @@ export function GameScreen({ getState, dispatch, onExit }) {
   root.addEventListener('pointerdown', (e) => {
     pointerDown = true;
 
+    // 채드 판매(화살표) 모드 중엔 renderCellQuickActions()가 통째로 숨어서
+    // "취소" 버튼조차 안 보인다(line 872 근처 가드) - 화살표를 눌러 강제로
+    // 먹이는 것 말고는 이 모드를 빠져나갈 방법이 없었다. 사용자 요청 - "채드로
+    // 판매하기 눌렀을 때 아무것도 안파는 경우도 있거든 그럴때 밖에 아무거나
+    // 클릭했을 때 초록 화살표 없어지게 해줘" - 화살표(.chad-sell-arrow) 자체를
+    // 누른 게 아니면 이 탭으로 다른 동작(칸 선택 등)을 같이 수행하지 않고
+    // 화살표 모드만 취소하고 끝낸다(팝업 바깥 클릭 시 팝업만 닫고 끝내는
+    // 아래 로직과 동일한 패턴).
+    if (ui.chadSellMode && !e.target.closest('.chad-sell-arrow')) {
+      ui.chadSellMode = null;
+      render(getState());
+      return;
+    }
+
     // 팝업이 하나라도 열려 있으면 팝업 바깥을 누르는 즉시 자동으로 닫는다(사용자
     // 요청 - "팝업 뜨는것들은 전부 팝업 외부를 눌렀을 때 자동으로 꺼지게 해줘").
     // 미션 팝업(.popup-overlay)은 이미 자체적으로 어두운 배경 클릭 시 닫히는 로직이
@@ -1079,14 +1093,21 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const chad = state.field.flatMap((s) => s.occupants).find((o) => o.instanceId === ui.chadSellMode);
     if (!chad) { ui.chadSellMode = null; return null; }
     // 일반 채드는 신화만, 기가채드는 신화+불멸 둘 다 대상(사용자 지정 - "일반
-    // 채드는 불멸을 못 팔아. 기가채드만 신화/불멸 다 팔 수 있어").
+    // 채드는 불멸을 못 팔아. 기가채드만 신화/불멸 다 팔 수 있어"). m_chad는 신화
+    // 등급이라 다른 채드 개체도 원래는 유효한 대상이어야 하는데, "채드/기가채드
+    // 본인 제외"를 heroId 기준(occ.heroId !== 'm_chad' && ... !== 'i_giga_chad')으로
+    // 잘못 구현해서 필드에 채드가 2마리 이상 있으면 서로를 절대 못 먹는 버그가
+    // 있었다(사용자 리포트 - "채드가 채드를 못먹는 문제가 생겼는데?") - "본인
+    // 제외"는 지금 판매를 시작한 그 채드 개체 하나만 스스로를 못 먹게 막으라는
+    // 뜻이었지, 다른 채드 개체까지 전부 배제하라는 뜻이 아니었다. instanceId
+    // 기준(occ.instanceId !== chad.instanceId)으로 바꿔서 자기 자신만 제외한다.
     const allowedTiers = chad.heroId === 'i_giga_chad' ? ['mythic', 'immortal'] : ['mythic'];
     const targets = [];
     for (const slot of state.field) {
       for (const occ of slot.occupants) {
         const def = HEROES_BY_ID[occ.heroId];
         if (!def) continue;
-        if (allowedTiers.includes(def.tier) && occ.heroId !== 'm_chad' && occ.heroId !== 'i_giga_chad') {
+        if (allowedTiers.includes(def.tier) && occ.instanceId !== chad.instanceId) {
           targets.push({ slot, occ });
         }
       }
