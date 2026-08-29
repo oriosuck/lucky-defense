@@ -50,18 +50,11 @@ export const MISSIONS = [
     target: 4,
     reward: { gold: 100, luckstone: 3 },
   },
-  {
-    id: 'mission_lucky_day',
-    name: '운빨좋은날',
-    // 정확한 발동 조건이 기획서에 명시돼 있지 않아, "룰렛 아닌 일반 소환으로 전설을
-    // 뽑는" 흔치 않은 순간(고정 확률 2.2%)을 "운 좋은 날"로 해석했다 - 나중에
-    // 사용자가 다른 조건을 의도했다고 하면 이 부분만 다시 정의하면 됨.
-    description: '일반 소환으로 전설 등급 획득',
-    checkType: 'counter',
-    counterKey: 'normalSummonLegendaryCount',
-    target: 1,
-    reward: { gold: 100, luckstone: 3 },
-  },
+  // "운빨좋은날" 미션은 일단 제외한다(사용자 지정 - "일단 제외해줘. 내가 나중에
+  // 정확하게 미션 다시 보고 알려줄게"). 이전엔 "일반 소환으로 전설 획득"으로
+  // 임의 해석해서 넣어뒀었는데, 정확한 조건을 사용자가 다시 확인해주기로 함 -
+  // 그때 여기에 새 항목으로 추가할 것. 카운터(`normalSummonLegendaryCount`,
+  // summon.js)는 그대로 남겨뒀다 - 나중에 그 조건으로 확정되면 바로 재사용 가능.
   {
     id: 'mission_luckstone_10',
     name: '행운석 수집가',
