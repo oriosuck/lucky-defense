@@ -91,16 +91,23 @@ export function HeroSelectScreen({ onStart }) {
   // local.immortalPet은 createLocalState()에서 true로 고정되고, 프리셋을 불러와도
   // 이 값은 건드리지 않는다(예전 프리셋에 false가 저장돼 있었더라도 무시).
   //
-  // 먼저 기본값(전부 불멸 체크)으로 맵을 채운 뒤 프리셋에 저장된 값으로 덮어쓴다 -
-  // 이 기능을 추가하기 전에 저장된 예전 프리셋은 heroId마다 immortal/favorite만
-  // 있고 breakthrough가 없거나, 애초에 즐겨찾기/불멸을 둘 다 안 켰던 영웅은 항목
-  // 자체가 없을 수 있는데, 그런 항목도 새 기본값(불멸 체크)으로 자연스럽게
-  // 채워지도록 한다.
+  // 기본값(불멸 체크)으로 맵을 채운 뒤 프리셋에 저장된 favorite/breakthrough만
+  // 덮어쓴다 - immortal은 **의도적으로 프리셋 값을 무시**한다: 이 기능을 추가하기
+  // 전에 사용자가 즐겨찾기만 켜두고 저장했던 예전 프리셋들에 (당시 기본값이었던)
+  // immortal:false가 같이 저장돼 있어서, 그 저장된 false가 여기서 새 기본값(true)을
+  // 도로 덮어써버리는 바람에 "다 체크됐다더니 몇 명은 안 됐다"는 리포트로
+  // 이어졌다(사용자 지적 - "선택 안된게 있는데 무슨말이야", 실제 스크린샷으로
+  // 오크주술사/밤바/마마/개구리왕자/배트맨/베인/아토/로카/채드 9명이 예전 프리셋의
+  // 저장된 false 때문에 안 체크된 걸 확인함). 불멸 체크박스 자체가 아직 어느 게임
+  // 로직에도 안 쓰이는 값이라 프리셋에 저장된 걸 무시해도 데이터 손실 위험이 없다 -
+  // 대신 사용자가 이번 세션에서 직접 체크/해제하면 그 값은 정상적으로 저장되고
+  // (collectHeroSettings), 다음에 저장하는 새 프리셋부터는 그 값이 반영된다.
   function applyPreset(preset) {
     local.gameType = preset.gameType;
     const map = defaultHeroSettingsMap();
     for (const h of preset.heroSettings ?? []) {
-      map.set(h.heroId, { immortal: h.immortal ?? true, favorite: h.favorite ?? false, breakthrough: h.breakthrough ?? false });
+      const base = map.get(h.heroId) ?? { ...DEFAULT_HERO_SETTING_NO_IMMORTAL };
+      map.set(h.heroId, { immortal: base.immortal, favorite: h.favorite ?? false, breakthrough: h.breakthrough ?? false });
     }
     local.settings = map;
     update();
@@ -114,7 +121,8 @@ export function HeroSelectScreen({ onStart }) {
       local.gameType = defaultPreset.gameType;
       const map = defaultHeroSettingsMap();
       for (const h of defaultPreset.heroSettings ?? []) {
-        map.set(h.heroId, { immortal: h.immortal ?? true, favorite: h.favorite ?? false, breakthrough: h.breakthrough ?? false });
+        const base = map.get(h.heroId) ?? { ...DEFAULT_HERO_SETTING_NO_IMMORTAL };
+        map.set(h.heroId, { immortal: base.immortal, favorite: h.favorite ?? false, breakthrough: h.breakthrough ?? false });
       }
       local.settings = map;
     }
