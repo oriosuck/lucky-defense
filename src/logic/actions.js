@@ -55,9 +55,9 @@ export function nextEnhanceSuccessRate(heroId, currentLevel) {
 /**
  * 필드 영웅 강화. 데미지 계산은 시뮬레이션 범위 밖 - 강화 단계만 증가.
  * 배트맨만 골드를 쓰고 확률적으로 실패할 수 있다(실패해도 시도한 골드는 그대로
- * 소모됨 - 일반적인 강화 게임 관례를 따른 가정, 실패 시 레벨 하락/개체 소멸 같은
- * 페널티는 없음). 다른 영웅은 비용 없이 항상 성공(레벨 카운트만 올리면 되는
- * 용도라 실패 개념 자체가 없음).
+ * 소모됨 - 배트맨은 실패하면 레벨이 0으로 초기화된다, 사용자 지정 - "배트 강화
+ * 실패하면 0으로 돌아가야해"). 다른 영웅은 비용 없이 항상 성공(레벨 카운트만
+ * 올리면 되는 용도라 실패 개념 자체가 없음).
  */
 export function enhanceHero(state, instanceId) {
   const newState = structuredClone(state);
@@ -76,6 +76,7 @@ export function enhanceHero(state, instanceId) {
   const successRate = found.instance.heroId === 'm_batman' ? batmanEnhanceSuccessRate(nextLevel) : 1;
   const leveledUp = Math.random() < successRate;
   if (!leveledUp) {
+    if (found.instance.heroId === 'm_batman') found.instance.enhanceLevel = 0;
     return { success: true, leveledUp: false, newState };
   }
 
@@ -87,18 +88,22 @@ export function enhanceHero(state, instanceId) {
 }
 
 /**
- * 에이스 배트맨(불멸) 전용 "모드 변신" - 기본/투수모드/타자모드를 순환한다.
- * 데미지 계산 범위 밖이라 실질 효과는 없는 연출용 전환(다른 변신들과 같은 패턴).
+ * 에이스 배트맨(불멸) 전용 모드 선택 - 투수/타자 중 하나를 캐릭터 좌우 버튼으로
+ * 직접 고른다(순환 버튼 아님, 사용자 지정 - "지금처럼 하지 말고"). 한 번
+ * 고르면 그걸로 고정, 다시 바꿀 수 없다(사용자 지정 - "한번 변신하면 못바꿔") -
+ * batmanMode가 이미 있으면 거부한다. 데미지 계산 범위 밖이라 실질 효과는 없는
+ * 연출용 전환(다른 변신들과 같은 패턴).
  */
-export function cycleBatmanMode(state, instanceId) {
+export function chooseBatmanMode(state, instanceId, mode) {
   const newState = structuredClone(state);
   const found = findInstance(newState, instanceId);
   if (!found || found.instance.heroId !== 'i_ace_batman') {
     return { success: false, reason: 'not-ace-batman', newState: state };
   }
-  const order = [null, 'pitcher', 'batter'];
-  const currentIndex = order.indexOf(found.instance.batmanMode ?? null);
-  found.instance.batmanMode = order[(currentIndex + 1) % order.length];
+  if (found.instance.batmanMode) {
+    return { success: false, reason: 'already-chosen', newState: state };
+  }
+  found.instance.batmanMode = mode; // 'pitcher' | 'batter'
   return { success: true, newState };
 }
 
