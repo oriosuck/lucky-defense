@@ -5,6 +5,31 @@ import { GameScreen } from './ui/GameScreen.js';
 
 const appEl = document.getElementById('app');
 
+// 더블탭 확대 방지 - CSS touch-action:manipulation(main.css `*` 규칙)만으로는
+// 배경(보스 위/빈 전장 칸/하늘 부분처럼 클릭 핸들러가 없는 영역)에서 여전히
+// 더블탭 확대가 재현된다는 사용자 리포트를 받았다. 예전에 모든 touchend에
+// preventDefault를 걸었다가 버튼 연타가 통째로 막히는 회귀가 났었는데(PR #43),
+// 그건 preventDefault가 브라우저의 click 합성까지 취소시켜서였다 - 이 프로젝트의
+// 필드 칸 선택/드래그는 click이 아니라 pointerdown/pointerup을 직접 쓰고
+// (pointerup은 touchend보다 먼저 끝나므로 나중에 touchend를 막아도 영향 없음),
+// 버튼만 onclick(click 이벤트)에 의존한다. 그래서 이번엔 버튼과 팝업 배경
+// 클릭(.popup-overlay, 미션 팝업 닫기용)만 제외하고, 그 외 모든 영역(필드 배경,
+// 빈 칸, 보스, 하늘 등)에서는 같은 지점을 짧은 간격(300ms) 안에 두 번 건드리면
+// 더블탭으로 보고 그 확대만 막는다 - 같은 target일 때만 발동시켜서 서로 다른
+// 두 곳을 빠르게 연달아 누르는 정상적인 조작까지 걸리지 않게 한다.
+let lastBgTouchEnd = { time: 0, target: null };
+document.addEventListener('touchend', (e) => {
+  if (e.target.closest('button, .popup-overlay')) {
+    lastBgTouchEnd = { time: 0, target: null };
+    return;
+  }
+  const now = Date.now();
+  if (now - lastBgTouchEnd.time <= 300 && lastBgTouchEnd.target === e.target) {
+    e.preventDefault();
+  }
+  lastBgTouchEnd = { time: now, target: e.target };
+}, { passive: false });
+
 function swapRoot(node) {
   appEl.innerHTML = '';
   appEl.appendChild(node);
