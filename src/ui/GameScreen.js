@@ -136,6 +136,26 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   root.addEventListener('pointerdown', (e) => {
     pointerDown = true;
+
+    // 팝업이 하나라도 열려 있으면 팝업 바깥을 누르는 즉시 자동으로 닫는다(사용자
+    // 요청 - "팝업 뜨는것들은 전부 팝업 외부를 눌렀을 때 자동으로 꺼지게 해줘").
+    // 미션 팝업(.popup-overlay)은 이미 자체적으로 어두운 배경 클릭 시 닫히는 로직이
+    // 있어서(popup-box 내부는 제외) 여기서는 그 팝업 전체를 "안쪽"으로만 판정해
+    // 건드리지 않는다(이중 처리 방지). 룰렛 팝업이 열려 있을 때는 필드 조작이
+    // 예외적으로 허용되므로(이전 요청 - "룰렛 팝업이 떠있을 때에도 필드에 있는
+    // 캐릭터 조작 가능하게") 필드 칸/액션을 누르는 것도 "안쪽"과 동등하게 취급해
+    // 닫히지 않게 한다.
+    if (ui.popup) {
+      const insidePopup = e.target.closest('.game-popup, .mythic-popup, .popup-overlay');
+      const insideFieldWhileRoulette = ui.popup === 'roulette'
+        && e.target.closest('.field-slot, .cell-quick-actions, .chad-arrow-layer');
+      if (!insidePopup && !insideFieldWhileRoulette) {
+        ui.popup = null;
+        render(getState());
+        return;
+      }
+    }
+
     const cellEl = e.target.closest('.field-slot');
     if (!cellEl) {
       // 칸도, 그 칸의 액션 버튼도, 채드 화살표도 아닌 곳을 누르면 선택 해제
@@ -146,10 +166,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
       }
       return;
     }
-    // 룰렛 팝업은 전체화면을 덮는 모달이 아니라 하단 시트라 필드가 여전히 보이는데도
-    // 조작이 막혀 있었다(사용자 지적 - "룰렛 팝업이 떠있을 때에도 필드에 있는 캐릭터
-    // 조작 가능하게"). 다른 팝업(신화/강화/미션)은 기존대로 필드 조작을 막는다.
-    if (ui.popup && ui.popup !== 'roulette') return;
+    // 위 팝업 자동 닫힘 처리를 이미 통과했으므로, 여기까지 왔다는 건 팝업이 없거나
+    // 룰렛 팝업이 열려 있는 상태뿐이다 - 그 외 팝업은 이미 위에서 닫혔다.
     const row = Number(cellEl.dataset.row);
     const col = Number(cellEl.dataset.col);
     const state = getState();
@@ -724,12 +742,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
       // 이동불능(속박) 사슬 아이콘 - 칸 구석의 작은 아이콘이 아니라 캐릭터 바로
       // 앞(위)을 덮는 큰 아이콘으로 표시해달라는 사용자 지적(참고 이미지: 캐릭터
       // 크기만큼 큰 사슬 X가 캐릭터 앞에 겹쳐 보임). 캐릭터 토큰과 같은 좌표계
-      // (cellCenterX/baseTop/tokenWidth/tokenHeight)를 그대로 재사용해 칸 전체(3마리
-      // 스택 포함)를 덮도록 살짝 더 키우고, z-index를 캐릭터 토큰보다 위로 둬서
-      // "캐릭터 앞"에 오게 한다.
+      // (cellCenterX/baseTop/tokenWidth/tokenHeight)를 그대로 재사용한다. 처음엔
+      // 1.6/1.15배로 키웠는데 사용자가 "너무 크다"고 다시 줄여달라고 해서
+      // 캐릭터 크기에 더 가깝게(1.05/0.9배) 낮췄다 - 여전히 캐릭터보다 살짝 크게
+      // 덮으면서도 화면을 압도하지 않는다.
       if (isImmobilized(state, slot)) {
-        const chainWidth = tokenWidth * 1.6;
-        const chainHeight = tokenHeight * 1.15;
+        const chainWidth = tokenWidth * 1.05;
+        const chainHeight = tokenHeight * 0.9;
         layer.appendChild(el('div', {
           class: 'stage-immobilize-mark',
           style: `left:${cellCenterX}%; top:${baseTop + tokenHeight / 2}%; width:${chainWidth}%; height:${chainHeight}%; z-index:${20 + slot.row};`,
