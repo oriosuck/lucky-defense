@@ -282,6 +282,20 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   const MONSTER_TRAVEL_MS = 10400; // 기존 2600ms의 4배로 느리게(사용자 요청)
 
+  // 화면에 표시할 몬스터 수는 Math.floor가 아니라 Math.ceil로 반올림한다 - 필드
+  // 영웅이 많으면 처치 속도가 스폰 속도를 거의 항상 앞질러서 실제 monsterCount가
+  // 정수 1에 못 미치는 소수(예: 0.3)로 계속 맴돌 수 있는데, floor를 쓰면 이런
+  // "몬스터가 실제로 존재하긴 하는" 상태가 화면엔 늘 0으로만 보여서 "몬스터가 아예
+  // 안 나온다"는 리포트로 이어졌다(사용자 지적, 시뮬레이션으로 실측 - 풀 필드
+  // 기준 화면 표시값은 거의 100% 0이었지만 판정에 쓰는 원시값은 시간의 약 65%가
+  // 0보다 컸다). 몬스터 처치/스폰 속도 자체(10라운드 보스 4초 전멸 요구사항과
+  // 맞물린 밸런스 수치)는 건드리지 않고, 소수로 존재하는 몬스터를 "없다"가 아니라
+  // "1마리 이상 있다"로 보여주는 표시 방식만 고쳤다 - 승패 판정(monsterCount>=
+  // monsterMax)은 원시값을 그대로 쓰므로 이 변경과 무관하게 그대로 동작한다.
+  function displayMonsterCount(state) {
+    return Math.ceil(state.monsterCount);
+  }
+
   // 장식용 몬스터 스프라이트 개수를 몬스터 카운트 바에 표시되는 값(state.monsterCount)과
   // 항상 정확히 같게 유지한다 - 예전엔 몬스터가 한 바퀴(MONSTER_TRAVEL_MS) 돌고 나면
   // 사라지는 "1회성 애니메이션"이라 화면에 몇 마리가 보이든 카운트 숫자와 무관하게
@@ -300,7 +314,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 이어진다.
   function updateMonsterAnimation(state) {
     const active = state.wave >= 1 && !state.result;
-    const target = active ? Math.floor(state.monsterCount) : 0;
+    const target = active ? displayMonsterCount(state) : 0;
     while (ui.monsters.length < target) {
       // 전부 같은 타이밍에 나오면 한 덩어리로 뭉쳐 보이므로, 경로 한 바퀴(MONSTER_TRAVEL_MS)
       // 안에서 랜덤한 시점부터 시작한 것처럼 스폰 시각을 과거로 흩뿌린다.
@@ -370,7 +384,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // (waveEvents.js의 tickWave 참고). 헷갈려서 한 번 40을 최대값으로 잘못 표시했었다.
   function renderMonsterRow(state) {
     return el('div', { class: 'monster-row' }, [
-      el('span', { class: 'monster-count-text', text: `${Math.floor(state.monsterCount)} / ${state.monsterMax}` }),
+      el('span', { class: 'monster-count-text', text: `${displayMonsterCount(state)} / ${state.monsterMax}` }),
     ]);
   }
 
