@@ -4,6 +4,7 @@ import {
   DRAGON_DRAIN_IMAGE,
   ACE_BATMAN_TRANSFORM_IMAGES,
   IRON_MEYAONG_TRANSFORM_IMAGES,
+  FROG_TRANSFORM_IMAGES,
   UI_IMAGES,
 } from '../../data/assets.js';
 
@@ -21,6 +22,10 @@ export function resolveHeroImage(heroDef, instance) {
     if (heroDef.id === 'm_iron_meyaong' && instance.meyaongTransformStage) {
       return IRON_MEYAONG_TRANSFORM_IMAGES[instance.meyaongTransformStage - 1];
     }
+    // 개구리왕자 "변신" - immortal.js의 attemptFrogTransform()이 35% 확률로
+    // instance.frogTransformed를 세운다(실패하면 개체 자체가 소멸하므로 이
+    // 분기까지 오지 않음).
+    if (heroDef.id === 'm_frog_prince' && instance.frogTransformed) return FROG_TRANSFORM_IMAGES.m_frog_prince;
   }
   return heroDef.image;
 }

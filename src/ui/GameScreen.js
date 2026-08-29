@@ -24,7 +24,7 @@ import {
   nextEnhanceLuckstoneCost,
   nextEnhanceSuccessRate,
 } from '../logic/actions.js';
-import { checkImmortalPromotion, isImmortalPromotionReady, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
+import { checkImmortalPromotion, isImmortalPromotionReady, cannibalizeTar, attemptSecondStageEvolution, attemptFrogTransform } from '../logic/immortal.js';
 import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT, INDY_TREASURE_INTERVAL_SEC } from '../logic/waveEvents.js';
 import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 import { fieldOccupantCount, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
@@ -975,6 +975,21 @@ export function GameScreen({ getState, dispatch, onExit }) {
         class: 'cell-quick-btn cell-quick-extra',
         text: `2차 변신(성공 ${Math.round(SECOND_STAGE_IMMORTAL[instance.heroId].successRate * 100)}%)`,
         onclick: () => apply(attemptSecondStageEvolution(state, instance.instanceId)),
+      }));
+    }
+    // 개구리왕자 전용 "변신" - 사신개구리(불멸) 승급의 선행 단계(사용자 지정
+    // 순서: "변신 버튼을 눌러... 35% 확률이고 실패하면 없어져. 변신에 성공하면
+    // 불멸 소환이 가능해져"). 변신에 성공하기 전까진 왼쪽 즐겨찾기 바에 "승급
+    // 가능!" 아이콘 자체가 안 뜨므로(isImmortalPromotionReady의 'm_frog_prince'
+    // case 참고), 여기 버튼이 유일한 시작점이다. 변신 이후엔 더 이상 이 버튼이
+    // 필요 없으니(승급은 왼쪽 아이콘으로) instance.frogTransformed 조건으로만
+    // 숨긴다.
+    if (heroDef.id === 'm_frog_prince' && !instance.frogTransformed) {
+      const successRate = heroDef.immortalCondition.extra.successRate;
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra',
+        text: `변신(성공 ${Math.round(successRate * 100)}%)`,
+        onclick: () => apply(attemptFrogTransform(state, instance.instanceId)),
       }));
     }
     // 이동은 이제 버튼이 아니라 칸을 직접 드래그하는 방식이라(아래 드래그 핸들러

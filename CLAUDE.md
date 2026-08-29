@@ -3255,6 +3255,72 @@ false-fail이 났다 - `presetStore.js`의 실제 기본값 프리셋 키가
 끝난 뒤 다시 제거했다(디버그 전용, 커밋에 남기지 않음 - 제거 후 재빌드해서
 `__debug` 참조가 번들에 전혀 없는 것까지 확인).
 
+## 개구리왕자 승급을 "변신 먼저, 그 다음 불멸" 2단계로 재구현 - 예전 확인이 틀렸음
+
+"내가 개구리는 수동으로 변신 한번 눌르고 변신 성공하면 그다음 바로 불멸 될 수 있다고
+말했는데 왜자꾸 그냥 불멸 시켜?"라는 지적을 받았다. 예전 라운드("사신개구리 2단계
+변신 메커니즘 재확인" 섹션 참고)에서 코드를 다시 읽고 "설명과 정확히 일치한다"고
+확인했던 게 실제로는 **틀린 확인이었다** - 그때 확인한 건 "35% 확률 판정이 존재하고
+실패하면 소멸한다"는 큰 틀만 맞았을 뿐, 정확히는 그 판정이 **왼쪽 즐겨찾기 바의
+"승급 가능!" 아이콘 클릭 한 번**에 다 같이 일어나고 있었다 - `IMMORTAL_CONDITIONS.
+m_frog_prince.target`이 `null`이라 `isImmortalPromotionReady()`가 개구리왕자
+소환 즉시(아무 선행 조건 없이) "승급 가능!"으로 띄웠고, `promotionHandlers.
+m_frog_prince`가 그 클릭 시점에 35% 판정+소멸까지 한 번에 처리했다. `FROG_TRANSFORM_
+IMAGES`(개구리왕자변신.webp)라는 전용 "변신" 이미지 자산도 있었지만 코드 어디에도
+연결이 안 된 죽은 데이터였다 - 즉 "변신"이라는 별도 단계 자체가 아예 존재하지
+않았다. AskUserQuestion으로 정확한 구조를 재확인받았다: "개구리왕자가 있어. 변신
+버튼을 눌러. 그러면 개구리왕자변신 상태가 돼. 이건 35% 확률이고 실패하면 없어져.
+만약 변신에 성공하면 불멸 소환이 가능해져. 그러면 사신개구리를 필드에 소환 가능해."
+즉 위험한 RNG(35%, 실패 시 소멸)는 **"변신"이라는 별도의 선행 단계**에서 끝나야
+하고, 그 변신에 성공한 뒤에야 비로소 "승급 가능!" 상태가 되며, 그 이후의 실제
+사신개구리 전환은 **더 이상 확률 없이 확정**이어야 한다(사용자 설명에 그 단계의
+실패 확률이 언급되지 않음 - 위험은 이미 변신 단계에서 다 해소된 것으로 해석).
+
+**구현**: `immortal.js`에 `attemptFrogTransform(state, instanceId)`를 신규
+추가했다(`i_death_frog`의 기존 "2차 변신"(`attemptSecondStageEvolution`)과 같은
+패턴 - 수동 버튼, 즉시 35% 판정, 실패 시 개체 소멸) - 성공하면 개체를 다른
+heroId로 교체하는 게 아니라 같은 `m_frog_prince` 개체에 `instance.frogTransformed
+= true` 플래그만 세운다(외형만 바뀌고 등급은 아직 신화 그대로). `promotionHandlers.
+m_frog_prince`는 이제 확률 판정을 하지 않고 `instance.frogTransformed`가 true인지만
+확인한다(false면 거부) - 위험한 RNG는 이미 변신 단계에서 끝났으므로 여기 도달하면
+항상 확정 성공. `isImmortalPromotionReady()`의 스위치에 `m_frog_prince` 전용
+case를 추가해(예전엔 `default: return true`로 폴백해서 무조건 준비된 것으로
+취급했음) `instance.frogTransformed === true`일 때만 왼쪽 바에 "승급 가능!"
+아이콘이 뜨게 했다. `GameScreen.js`에는 `heroDef.id === 'm_frog_prince' &&
+!instance.frogTransformed`일 때만 뜨는 전용 "변신(성공 35%)" 버튼을 추가했다(
+`i_death_frog`의 "2차 변신" 버튼과 같은 위치/패턴 - `below` 스택). `heroVisual.js`의
+`resolveHeroImage()`에도 `m_frog_prince` + `frogTransformed`일 때 `FROG_TRANSFORM_
+IMAGES.m_frog_prince`를 보여주는 분기를 추가해서 죽어있던 이미지 자산을 마침내
+연결했다(배트맨 모드/아이언미야옹 변신과 같은 기존 패턴 재사용).
+
+**교훈**: "코드를 다시 읽어서 사용자 설명과 일치하는지 확인했다"는 검증이라도,
+그 확인이 실제로는 표면적인 항목(확률 수치, 실패 시 소멸 여부)만 맞았을 뿐 **더
+세부적인 구조(몇 단계로 나뉘는지, 어느 클릭에 어느 판정이 묶여 있는지)까지는
+검증하지 못했을 수 있다** - 이번처럼 나중에 "왜 자꾸 그냥 불멸 시켜?"라는 재지적을
+받고 나서야, 그 확인이 "35% 확률과 소멸이라는 결과"만 맞고 "그 판정이 정확히
+언제/어떤 버튼에서 일어나는지"는 어긋나 있었다는 걸 알았다. 다음에 비슷하게 "예전에
+이미 확인했다"고 답하기 전에는, 언급된 단계 수(이번엔 "변신"과 "불멸" 두 단계)가
+실제 코드의 클릭 지점 수와 정확히 일치하는지까지 대조할 것 - 죽어있는 에셋
+(`FROG_TRANSFORM_IMAGES`처럼 매핑만 되고 어디서도 안 쓰이는 것)이 있다면 그 자체가
+"이 기능이 아직 완성되지 않았을 수 있다"는 강한 신호로 받아들일 것.
+
+**검증 방법**: `window.__debug` 훅(`createHeroInstance`, `findAutoPlaceSlot`,
+`placeInstanceAtSlot`, `checkImmortalPromotion`, `isImmortalPromotionReady`,
+`attemptFrogTransform`, `getState`/`setState`)을 `main.js`에 임시로 추가해
+Playwright로 검증했다 - (1) 변신 전에는 왼쪽 바에 "승급 가능!" 아이콘이 안 뜨고
+선택 시 "변신(성공 35%)" 버튼만 뜨는지, (2) `Math.random`을 0으로 고정해 변신을
+강제 성공시켜 `instance.frogTransformed=true`가 되고, 개체는 필드에 그대로
+남아있고, 이미지가 `m_frog_prince_transform.webp`로 바뀌고, "변신" 버튼은 사라지고
+"승급 가능!" 아이콘이 새로 뜨는지, (3) 그 아이콘을 `Math.random`을 0.999(실패
+쪽)로 고정한 채로 눌러도 확정 승급되는지(더 이상 RNG가 없다는 걸 반증하는 검증 -
+만약 아직도 판정이 남아있었다면 이 값에서 실패했을 것), (4) 원본 개구리왕자는
+사라지고 `i_death_frog`로 교체됐는지, (5) 변신 실패 케이스(`Math.random`을 0.99로
+고정)에서 개체가 필드에서 완전히 소멸하는지, (6) 회귀 확인으로 `i_death_frog`의
+기존 "2차 변신"(50%, `attemptSecondStageEvolution`)이 이번 변경과 무관하게 그대로
+동작하는지까지 총 10+2개 항목을 전부 확인했다. 검증이 끝난 뒤 `window.__debug`
+훅은 `main.js`에서 다시 제거했다(디버그 전용, 커밋에 남기지 않음 - 제거 후 재빌드
+해서 `__debug` 참조가 번들에 전혀 없는 것까지 확인).
+
 ## CSS/레이아웃에서 배운 것
 
 1. **배경 이미지 비율 유지는 JS로 실측해서 픽셀로 박아라.** `.game-stage`를
