@@ -593,6 +593,14 @@ export function GameScreen({ getState, dispatch, onExit }) {
   const HERO_TOKEN_WIDTH_RATIO = 0.44;
   const IMP_TOKEN_SCALE = 0.5; // 마마 임프는 다른 캐릭터의 절반 크기(사용자 지적 - 너무 컸음)
   const MYTHIC_TOKEN_SCALE = 1.6875;
+  // 전설 등급이 일반~영웅 등급보다 유독 작아 보인다는 지적(사용자 - "다른 캐릭터들에
+  // 비해 너무 작아") - 원인은 크기 로직 자체가 아니라(일반~전설은 같은
+  // HERO_TOKEN_WIDTH/HEIGHT_RATIO를 공유해서 프로그램상 크기는 동일했다) 전설 등급
+  // 원화 89장 중 실제 인물이 캔버스에서 차지하는 비중이 이미지마다 달라서 생기는
+  // 시각적 차이로 보인다 - object-fit:contain은 알파 bbox 기준으로만 맞추므로
+  // 여백이 상대적으로 많은 이미지는 같은 박스 안에서도 작게 보인다. 전설 등급
+  // 전용 배율을 별도로 둬서 다른 등급과 비슷한 존재감이 나도록 50% 키웠다.
+  const LEGENDARY_TOKEN_SCALE = 1.5;
   const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
   const ATTACK_CYCLE_MS = 900; // 공격 모션(위아래 스쿼시-스트레치) 반복 주기
 
@@ -680,7 +688,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
       const firstHeroTier = HEROES_BY_ID[slot.occupants[0].heroId]?.tier;
       const isImpCell = slot.occupants[0].heroId === IMP_HERO_ID;
       const isMythicCell = firstHeroTier === 'mythic' || firstHeroTier === 'immortal';
-      const sizeScale = isImpCell ? IMP_TOKEN_SCALE : isMythicCell ? MYTHIC_TOKEN_SCALE : 1;
+      const isLegendaryCell = firstHeroTier === 'legendary';
+      const sizeScale = isImpCell ? IMP_TOKEN_SCALE : isMythicCell ? MYTHIC_TOKEN_SCALE : isLegendaryCell ? LEGENDARY_TOKEN_SCALE : 1;
       const tokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO * sizeScale;
       const n = slot.occupants.length;
       // 발끝(박스 하단) 기준선: 일반~영웅은 칸 정중앙(사용자 지정) - 마리 수와
