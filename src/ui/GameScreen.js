@@ -420,11 +420,22 @@ export function GameScreen({ getState, dispatch, onExit }) {
   function favoriteBarItems(state) {
     const favoriteIds = new Set(state.heroSettings.filter((h) => h.favorite).map((h) => h.heroId));
 
+    // 필드에는 불멸이 종류별로 최대 1마리만 존재할 수 있으므로(immortal.js의
+    // checkImmortalPromotion 가드), 같은 heroId를 가진 신화가 여러 마리 있고
+    // 전부 동시에 승급 조건을 채워도 실제로 승급 가능한 건 하나뿐이다 - 왼쪽
+    // 아이콘도 그 규칙과 맞춰서 heroId당 하나만 보여준다(사용자 지적 - "마마
+    // 2마리라고 왼쪽에 불멸 2마리 뜨잖아... 필드에는 1마리 정상 적용되어도
+    // 왼쪽에도 적용되어야지"). 어느 개체를 누르든 결과는 같으니(승급 가능 여부는
+    // 공유 자원 기준이라 하나가 승급하면 나머지도 곧 조건을 다시 채워야 함) 필드
+    // 순서상 먼저 찾은 개체를 대표로 쓴다.
+    const promoteHeroIds = new Set();
     const promoteItems = [];
     for (const slot of state.field) {
       for (const occ of slot.occupants) {
         const heroDef = HEROES_BY_ID[occ.heroId];
+        if (promoteHeroIds.has(occ.heroId)) continue;
         if (heroDef?.tier === 'mythic' && heroDef.immortalCondition && isImmortalPromotionReady(state, occ.instanceId)) {
+          promoteHeroIds.add(occ.heroId);
           promoteItems.push({ kind: 'promote', instanceId: occ.instanceId, heroId: occ.heroId });
         }
       }
@@ -606,6 +617,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
   const LEGENDARY_TOKEN_SCALE = 1.5;
   const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
   const ATTACK_CYCLE_MS = 900; // 공격 모션(위아래 스쿼시-스트레치) 반복 주기
+  // 로카 탄약 배지 위치 - 토큰 박스 top(box top)을 그대로 쓰면 신화 박스가 실제
+  // 그림보다 훨씬 커서(object-fit:contain 여백) 머리 위에서 한참 떨어져 보였다
+  // (사용자 지적 - "로카 바로 머리 위에 뜨면 좋겠는데 지금 너무 멀어"). 박스
+  // 안쪽으로 내려서 실제 머리 근처에 오도록 비율을 잡았다(스크린샷으로 확인하며
+  // 튜닝한 값 - 나중에 토큰 크기 배율이 또 바뀌면 다시 확인해야 한다).
+  const ROKA_BADGE_TOP_RATIO = 0.86;
 
   // 한 칸에 쌓인 마리 수별 배치 오프셋(토큰 폭/높이 대비 비율). 3마리는 일렬이 아니라
   // 뒤 2마리 + 앞 1마리의 삼각형 대열로 배치한다(사용자 참고 이미지). 인덱스 순서가
@@ -771,17 +788,15 @@ export function GameScreen({ getState, dispatch, onExit }) {
           occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
         ]));
 
-        // 로카(불멸 조건: 시간 기반 자동 누적, 10초마다 1~5)는 누적 진행도(N/160)가
-        // 아니라 "10초마다 한 번씩 얼마나 장전했는지"(방금 굴린 값 그 자체)를
-        // 캐릭터 바로 위에 항상 표시한다(사용자 정정 - "장전 진행도가 아니라...
-        // 몇초동안 한번씩 1~5씩 장전을 하잖아 그 숫자를 적어달라고"). 굴린 값은
-        // immortal.js의 m_roka 틱 핸들러가 매번 instance.lastChargeAmount에
-        // 남긴다 - 첫 틱이 돌기 전(아직 한 번도 장전 안 함)에는 대기 문구를 보여준다.
+        // 로카는 지금 장전된 탄약 수(instance.ammo, immortal.js의 m_roka 핸들러가
+        // 10초마다 1~5 재장전 + 0.5초마다 1발씩 소모)를 머리 바로 위에 숫자만
+        // 표시한다(사용자 지정 - "장전 대기중 이런거 쓸데없는 말 다 빼... 숫자만
+        // 적으라고"). 탄약 0이어도 그냥 0으로 보여준다(별도 문구 없음).
         if (occ.heroId === 'm_roka') {
           layer.appendChild(el('div', {
             class: 'roka-charge-badge',
-            style: `left:${centerX}%; top:${top}%; z-index:${30 + slot.row};`,
-            text: occ.lastChargeAmount != null ? `장전 +${occ.lastChargeAmount}` : '장전 대기중',
+            style: `left:${centerX}%; top:${top + tokenHeight * ROKA_BADGE_TOP_RATIO}%; z-index:${30 + slot.row};`,
+            text: `${occ.ammo ?? 0}`,
           }));
         }
       });

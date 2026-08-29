@@ -205,10 +205,9 @@ export const IMMORTAL_CONDITIONS = {
   m_mama: {
     id: 'i_grand_mama', name: '그랜드 마마', type: 'hybrid', target: null,
     eventType: 'consumeImp',
-    extra: {
-      impIntervalSec: 3, breakthroughIntervalSec: 2, postRound8IntervalSec: 5,
-      stopRound: 10, normalCost: 9, breakthroughCost: 7,
-    },
+    // 임프 생성 간격은 원래 상태(돌파/라운드/강화)별로 따로 뒀었는데 "너무 빠르다"는
+    // 사용자 지적으로 전부 걷어내고 1~10초 랜덤 하나로 단순화했다(사용자 지정).
+    extra: { impIntervalSec: [1, 10], stopRound: 10, normalCost: 9, breakthroughCost: 7 },
   },
   m_ninja: {
     id: 'i_ghost_ninja', name: '귀신 닌자', type: 'hybrid', target: 11,
