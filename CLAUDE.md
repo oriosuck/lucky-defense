@@ -1682,6 +1682,58 @@ PR #39 배포 후 "합성했을 때 기존에 있던 캐릭터 자리로 가는 
 합성/소환 결과를 위해 `heroesByTier` 노출)을 `main.js`에 임시로 추가해 Playwright로
 검증하고 끝난 뒤 다시 제거했다(디버그 전용, 커밋에 남기지 않음).
 
+## 모바일 페이지 스크롤/바운스 고정 + 선택 캐릭터 원형 표시 + 빈 칸 탭 시 즉시 해제 (PR #40 배포 후)
+
+PR #40 배포 후 3개를 지적했다. 첫 번째 요청("이거 스크롤도 안되게 고정해줘")은
+메시지가 중간에 끊겨서 무엇을 고정해달라는 건지 애매했는데, 재질문으로 "게임
+화면 전체(모바일 페이지 스크롤/바운스)"를 가리킨 것임을 확인했다.
+
+1. **모바일 페이지 스크롤/바운스 고정**: 게임 화면(`.game-screen`)이 이미
+   `100dvh`로 뷰포트를 꽉 채우고 내부는 전부 절대좌표 오버레이라 그 자체는
+   스크롤이 필요 없는데도, `html`/`body` 레벨에서 막아두지 않으면 iOS/Android
+   브라우저가 주소창 접힘 등으로 생기는 여분 공간을 당겨서 페이지를 튕기거나
+   스크롤시킨다. `html, body`에 `height:100%; overflow:hidden;
+   overscroll-behavior:none;`을 걸고 `body`는 `position:fixed; inset:0;`으로
+   완전히 고정했다. **주의**: 시작 화면(`.hero-select-screen`)은 영웅 카드가
+   89종이라 세로로 뷰포트보다 훨씬 길어서(테스트 결과 `scrollHeight`
+   2528px vs `clientHeight` 844px) 자체 스크롤이 반드시 있어야 한다 - body를
+   통째로 잠그면서 이 화면까지 스크롤 불가능해지는 걸 막기 위해 `#app`에
+   `height:100%; overflow:hidden;`을 주고 `.hero-select-screen`에만
+   `overflow-y:auto`를 열어줬다(게임 화면은 자체 스크롤이 필요 없으니 그대로
+   overflow:hidden 상속). Playwright로 게임 화면 진입 후 `body`가 여전히
+   `position:fixed`인지, 시작 화면에서는 `.hero-select-screen`의
+   `scrollHeight > clientHeight`(실제로 스크롤이 필요한 상태)이면서
+   `overflow-y:auto`인지 둘 다 확인했다.
+2. **선택된 캐릭터 표시용 연한 원형 테두리 신규 추가**: "어떤 캐릭을 선택했는지
+   잘 보이게 그 인근으로 원을 테두리만 하나 연하게 그려줘(버튼이랑 이어지게)"라는
+   요청 - `renderCellQuickActions`에 `.cell-select-ring`(채우기 없이 흰색
+   반투명 테두리만, `border-radius:50%`)을 추가했다. 위/아래 버튼 스택
+   (`.cell-quick-stack-above`/`-below`)과 똑같이 칸 좌표(`rect`)를 기준으로
+   위치를 잡되, 링의 세로 크기를 칸 높이의 1.7배로 살짝 넘치게 잡아서 버튼
+   스택과 자연스럽게 맞닿아 보이게 했다(정확히 딱 맞추는 대신 넉넉하게 겹치는
+   쪽을 택함 - 사용자 지정 "이어지게"라는 표현에 맞춰 링이 버튼에서 살짝 멀어져
+   보이는 것보다 겹치는 쪽이 안전). Playwright로 링의 bounding box와 위쪽 버튼
+   스택의 bounding box가 실제로 인접/겹치는지 좌표로 확인했다.
+3. **빈 칸을 탭해도 선택이 바로 해제되지 않던 버그**: "캐릭터 한번 누르고 나서
+   다른곳 누르면 바로 선택 해제되어야 하는데 지금 바로 해제가 안돼" - 원인은
+   루트 `pointerdown` 핸들러에서 탭한 칸이 `.field-slot`과 매치되면(빈 칸이든
+   찬 칸이든) "칸이 아닌 곳을 눌렀을 때 해제"하는 분기(`if (!cellEl) {...}`)를
+   아예 안 타고, 그 아래에서 `if (!slot || slot.occupants.length === 0) return;`
+   로 빈 칸이면 그대로 조용히 리턴해버리던 것이었다 - `dragState`가 전혀
+   안 만들어지니 `pointerup`의 `endDrag()`도 `if (!dragState) return;`에서
+   막혀서, 원래 빈 칸 탭 시 해제를 담당하도록 이미 짜여 있던 `onSlotClick()`
+   (`slot.occupants.length ? {row,col} : null`)까지 아예 도달하지 못했다 -
+   그래서 캐릭터가 선택된 상태에서 빈 칸을 눌러도 필드 그리드 밖(상단 배지 등
+   `.field-slot`이 아닌 영역)을 눌러야만 해제가 됐다. `if (!slot) return;`
+   으로만 가드를 좁히고 빈 칸이어도 `dragState`를 정상적으로 세워서
+   `endDrag()`→`onSlotClick()` 경로를 타게 했다 - 빈 칸에서 시작하는 드래그
+   이동은 `moveHero()` 자체가 출발 칸이 비어 있으면 안전하게 실패 처리하므로
+   부작용이 없다. Playwright로 캐릭터를 선택한 뒤 다른 빈 칸을 탭 한 번만으로
+   즉시 해제되는지(판매 버튼 등 액션 UI가 그 즉시 사라지는지) 확인했다.
+
+**검증 방법**: 이전 라운드들과 동일하게 `window.__debug` 훅을 `main.js`에 임시로
+추가해 Playwright로 검증하고 끝난 뒤 다시 제거했다(디버그 전용, 커밋에 남기지 않음).
+
 ## CSS/레이아웃에서 배운 것
 
 1. **배경 이미지 비율 유지는 JS로 실측해서 픽셀로 박아라.** `.game-stage`를
