@@ -6,6 +6,7 @@ import {
   tickBossRaidWindow,
   tickDebuffTimer,
   tickIndyTreasure,
+  tickIndyDig,
 } from './waveEvents.js';
 import { tickImmortalProgress, tickMamaImps } from './immortal.js';
 import { checkMissions, tickMissionToast } from './missions.js';
@@ -25,6 +26,7 @@ export function tick(state, deltaSec) {
   next = tickBossRaidWindow(next, deltaSec);
   next = tickDebuffTimer(next, deltaSec);
   next = tickIndyTreasure(next, deltaSec);
+  next = tickIndyDig(next, deltaSec);
   next = tickImmortalProgress(next, deltaSec);
   next = tickMamaImps(next, deltaSec);
   next = checkMissions(next);

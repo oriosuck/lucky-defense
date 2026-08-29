@@ -1400,6 +1400,68 @@ PR #36 배포 후 2개 지시를 받았다.
    `HEIGHT_RATIO`)은 그대로 두고 신화/불멸 배율만 줄였다 - 상대적 크기 위계
    (신화/불멸이 일반~전설보다 크다는 관계)는 그대로 유지된다.
 
+## 인디 보물 발굴 UX 개선 - 발굴 대기시간/외곽선 색/상시 게이지/완료 플래시 (PR #37 배포 후)
+
+PR #36 배포 후 사용자가 "이제 마지막이야"라며 인디(`m_indy`) "보물 발굴" 기능에
+5가지를 지시했다(발굴 지시 중간에 메시지가 끊겼다가 "이때 캐릭터가 이미 있는
+장소에도 보물이 있을 수 있는거 참고하고"라는 추가 조건이 이어졌다).
+
+1. **발굴 버튼을 눌러도 즉시 결과가 안 나오고 2초 대기**: `state.indyTreasure`에
+   `digging: {instanceId, timer}|null` 필드를 추가했다. `actions.js`의
+   `digTreasure()`는 이제 즉시 등급을 굴리지 않고 `digging` 상태만 세팅하고,
+   `waveEvents.js`에 새로 추가한 `tickIndyDig()`(게임 루프에 `tickIndyTreasure` 바로
+   다음 순서로 연결, `gameLoop.js`)가 `INDY_DIG_DURATION_SEC`(2초) 뒤에 실제 등급
+   판정(`rollNormalTier()`, 기존 보유 등급보다 낮으면 교체 안 함)을 확정한다. 발굴
+   중엔 `tickIndyTreasure()`가 쿨타임 자체를 멈춘다(안 그러면 발굴 결과가 나오기
+   전에 자연 만료로 보물 위치가 다른 칸으로 옮겨가버릴 수 있음). 칸 버튼도 발굴
+   중엔 "발굴 중..."으로 바뀌고 비활성화된다(`GameScreen.js`의
+   `renderCellQuickActions`).
+2. **보물 등급에 따라 인디 본인의 외곽선 색이 바뀜**: 기존 `outlineFilter()`(3마리
+   스택 합성 가능 표시에 쓰던, drop-shadow 4방향을 겹쳐 실루엣을 따라가는 흰색
+   외곽선 헬퍼)가 흰색으로 하드코딩돼 있던 것을 `color` 인자를 받도록 일반화했다.
+   `INDY_TREASURE_OUTLINE_COLOR`(일반/희귀/영웅/전설 - main.css의 `--tier-color`
+   팔레트와 맞춤)를 새로 두고, `renderHeroTokenLayer`의 필터 합성 목록에 인디
+   전용 항목으로 추가했다(`occ.heroId === 'm_indy'`일 때만, `occ.indyTreasureTier`
+   기준).
+3. **인디 쿨타임(30초) 게이지를 인디 바로 밑에 항상 표시**: 칸 선택 여부와 무관하게
+   항상 보여야 한다는 게 사용자 지정 사항("이건 클릭 안 해도 보여지게") - 칸에
+   `m_indy`가 있으면 `renderHeroTokenLayer`가 매 슬롯 루프 끝에서
+   `renderIndyTreasureGauge(state, rect)`를 호출해 칸 좌표 바로 아래에 얇은 바를
+   그린다. 채우는 비율은 `1 - indyTreasure.timer / INDY_TREASURE_INTERVAL_SEC`로
+   계산(선택 상태와 무관하게 항상 최신 state 기준).
+4. **게이지가 다 차면(새 보물 등장 시점) "완료" 텍스트를 한 번만 플래시**:
+   `indyTreasure.completedAt`(게이지가 다 차서 `tickIndyTreasure()`가 새 슬롯을
+   뽑은 시각, `Date.now()`)을 새로 추가하고, `renderIndyTreasureGauge`가
+   `Date.now() - completedAt < INDY_GAUGE_FLASH_MS`(1.5초)인 동안만 "완료" 텍스트를
+   그린다 - 몬스터 이동/궁 링 이펙트와 같은 이유로(0.2초마다 DOM이 재생성되는 구조)
+   고정 타이머 대신 실제 경과 시간 기준으로 매 렌더 다시 판정해야 자연스럽게
+   나타났다 사라진다.
+5. **"보물이 이미 다른 캐릭터가 있는 칸에도 등장할 수 있다"는 사용자의 추가
+   확인을 반영해 기존 `.treasure-mark`(칸 전체 노란 글로우) 가시성 버그를 같이
+   고쳤다**: `.field-grid`(먼저 그려짐)와 `.stage-hero-layer`(나중에 그려짐,
+   z-index 미지정) 둘 다 명시적 z-index가 없어서 기본 DOM 순서상 캐릭터 토큰이
+   글로우 위에 그려지고 있었다 - 3마리가 쌓인 칸처럼 캐릭터가 칸을 거의 다 채우면
+   글로우가 거의 안 보일 수 있는 상태였다(인디 본인이 이미 발굴한 칸에 있을 땐
+   문제 없었지만, 아직 인디가 도착 안 한 다른 점유 칸에 보물이 뜬 경우 눈에 안
+   띌 수 있었음). `.treasure-mark`의 `z-index`를 1 → 10(캐릭터 토큰 z-index 최대치
+   2+행번호=5보다 확실히 높게)으로 올려서 항상 캐릭터 위에 뜨게 했다 -
+   `pointer-events:none`이라 클릭/드래그는 그대로 아래 칸으로 투과된다. **참고**:
+   "인디를 클릭했을 때 빛나야 한다"는 요청 자체는 이미 만족돼 있었다 -
+   `.treasure-mark`는 원래부터 인디 선택 여부와 무관하게 보물이 존재하는 칸이면
+   항상 켜져 있는 무조건부 글로우라(`isTreasureSlot()` 체크만), "클릭했을 때"도
+   당연히 포함된다. 이번에 진짜로 고친 건 그 글로우의 z-index 가시성 문제였다.
+
+**검증 방법**: `window.__debug`(getState/setState 훅)를 `main.js`에 임시로 추가해
+Playwright에서 필드 상태를 직접 주입한 뒤(인디를 특정 칸에 배치, `indyTreasure`를
+원하는 timer/slot/completedAt으로 세팅) 스크린샷과 DOM 계산값으로 5가지를 모두
+확인했다 - 발굴 클릭 직후 `digging.timer`가 2초에서 실시간으로 줄어드는 것, 2.3초
+뒤 `digging`이 null로 정리되고 `indyTreasureTier`가 갱신(또는 유지)되는 것, 등급별
+`outlineFilter` 색상이 실제로 다르게 합성되는 것, 게이지 `width`가 timer에 비례하는
+것, `completedAt` 직후엔 "완료" 텍스트가 있다가 1.5초 뒤엔 사라지는 것, 3마리
+스택 위에 뜬 보물 글로우의 계산된 z-index가 10으로 실제 hero-layer보다 위에서
+페인트되는 것까지 전부 확인했다. 검증이 끝난 뒤 `window.__debug` 훅은
+`main.js`에서 다시 제거했다(디버그 전용, 커밋에 남기지 않음).
+
 ## CSS/레이아웃에서 배운 것
 
 1. **배경 이미지 비율 유지는 JS로 실측해서 픽셀로 박아라.** `.game-stage`를

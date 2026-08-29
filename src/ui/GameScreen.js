@@ -22,7 +22,7 @@ import {
   ENHANCE_LUCKSTONE_COST,
 } from '../logic/actions.js';
 import { checkImmortalPromotion, isImmortalPromotionReady, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
-import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT } from '../logic/waveEvents.js';
+import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT, INDY_TREASURE_INTERVAL_SEC } from '../logic/waveEvents.js';
 import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 import { fieldOccupantCount, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
 import { el } from './components/dom.js';
@@ -620,11 +620,40 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 1.5px로 다시 키워서 눈에 띄면서도 예전(2px/8방향)처럼 뭉개지지 않는 지점을
   // 찾았다(Playwright 스크린샷으로 직접 눈으로 확인하며 맞춤).
   const OUTLINE_OFFSET_PX = 1.5;
-  function outlineFilter() {
+  function outlineFilter(color = '#fff') {
     const offsets = [
       [OUTLINE_OFFSET_PX, 0], [-OUTLINE_OFFSET_PX, 0], [0, OUTLINE_OFFSET_PX], [0, -OUTLINE_OFFSET_PX],
     ];
-    return offsets.map(([x, y]) => `drop-shadow(${x}px ${y}px 0 #fff)`).join(' ');
+    return offsets.map(([x, y]) => `drop-shadow(${x}px ${y}px 0 ${color})`).join(' ');
+  }
+
+  // 인디가 보유한 보물 등급에 따라 인디 본인의 외곽선 색을 바꾼다(사용자 지정) -
+  // 등급 색은 기존 팔레트(main.css의 --tier-color 변수들)와 맞춰뒀다.
+  const INDY_TREASURE_OUTLINE_COLOR = {
+    normal: '#8b93a8', rare: '#4fc3f7', hero: '#9b6df0', legendary: '#f5a623',
+  };
+
+  const INDY_GAUGE_FLASH_MS = 1500; // "완료" 텍스트가 잠깐 떠 있는 시간(1회성)
+
+  // 인디의 보물 발굴 쿨타임(30초)을 인디 캐릭터 바로 밑에 항상 보여주는 게이지
+  // (사용자 지정 - "이건 클릭 안 해도 보여지게"). 칸을 선택했는지와 무관하게 항상
+  // 그린다(renderHeroTokenLayer에서 인디가 있는 칸마다 호출). 게이지가 다 차서 새
+  // 보물이 등장한 순간(indyTreasure.completedAt)부터 INDY_GAUGE_FLASH_MS 동안만
+  // "완료" 텍스트를 한 번 보여준다 - 궁극기 링/공격 모션과 같은 이유로 고정 delay가
+  // 아니라 실제 경과 시간으로 판정한다(0.2초마다 DOM이 재생성되는 구조라 매 렌더
+  // 새로 계산해야 멈추지 않고 자연스럽게 사라진다).
+  function renderIndyTreasureGauge(state, rect) {
+    const fillRatio = Math.max(0, Math.min(1, 1 - state.indyTreasure.timer / INDY_TREASURE_INTERVAL_SEC));
+    const completedElapsedMs = state.indyTreasure.completedAt ? Date.now() - state.indyTreasure.completedAt : Infinity;
+    const showComplete = completedElapsedMs < INDY_GAUGE_FLASH_MS;
+    const gaugeTop = rect.top + rect.height + 1.2;
+    return el('div', {
+      class: 'indy-treasure-gauge',
+      style: `left:${rect.left}%; top:${gaugeTop}%; width:${rect.width}%;`,
+    }, [
+      el('div', { class: 'indy-treasure-gauge-fill', style: `width:${fillRatio * 100}%;` }),
+      showComplete ? el('div', { class: 'indy-treasure-gauge-complete', text: '완료' }) : null,
+    ]);
   }
 
   function renderHeroTokenLayer(state) {
@@ -691,6 +720,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
         if (usingUltimate) filterParts.push('drop-shadow(0 0 10px #ffd54a)', 'drop-shadow(0 0 18px #ff9d2f)');
         if (debuffed) filterParts.push('sepia(1)', 'hue-rotate(220deg)', 'saturate(3)');
         if (outlined) filterParts.push(outlineFilter());
+        // 인디가 보유한 보물 등급에 따라 인디 자신의 외곽선 색을 바꾼다(사용자 지정).
+        const indyOutlineColor = occ.heroId === 'm_indy' ? INDY_TREASURE_OUTLINE_COLOR[occ.indyTreasureTier] : null;
+        if (indyOutlineColor) filterParts.push(outlineFilter(indyOutlineColor));
 
         // 공격 모션(위아래로 살짝 늘어났다 줄어드는 스쿼시-스트레치)도 궁 링/몬스터
         // 이동과 같은 이유로 실제 경과 시간 기준 위상을 매 렌더 다시 계산한다 - 예전
@@ -709,6 +741,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
           occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
         ]));
       });
+
+      // 인디 쿨타임 게이지는 칸에 다른 영웅이 같이 쌓여 있어도(보물이 이미 다른
+      // 캐릭터가 있는 칸에 등장할 수 있다는 것과는 별개로, 인디 본인이 서 있는 칸
+      // 기준) 항상 그린다 - 선택 여부와 무관.
+      if (slot.occupants.some((o) => o.heroId === 'm_indy')) {
+        layer.appendChild(renderIndyTreasureGauge(state, rect));
+      }
     }
     return layer;
   }
@@ -788,9 +827,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
       }));
     }
     if (instance.heroId === 'm_indy') {
-      const canDig = state.indyTreasure.slot && state.indyTreasure.slot.row === slot.row && state.indyTreasure.slot.col === slot.col;
+      const onTreasureSlot = state.indyTreasure.slot && state.indyTreasure.slot.row === slot.row && state.indyTreasure.slot.col === slot.col;
+      const digging = state.indyTreasure.digging;
+      const isDiggingHere = digging?.instanceId === instance.instanceId;
       below.push(el('button', {
-        class: 'cell-quick-btn cell-quick-extra', text: '발굴', disabled: !canDig,
+        class: 'cell-quick-btn cell-quick-extra',
+        text: isDiggingHere ? '발굴 중...' : '발굴',
+        disabled: !onTreasureSlot || (!!digging && !isDiggingHere) || isDiggingHere,
         onclick: () => apply(digTreasure(state, instance.instanceId)),
       }));
     }

@@ -71,7 +71,10 @@ export function createGameState(config) {
       immobilizeRounds: rollImmobilizeRounds(),
     },
     bossRaidWindow: null, // 10/20라운드 진입 시에만 세팅
-    indyTreasure: { slot: null, timer: 30 }, // 인디 "보물 발굴"(5-4) - 30초마다 새 칸에 등장
+    indyTreasure: { slot: null, timer: 30, digging: null, completedAt: null }, // 인디 "보물 발굴"(5-4) - 30초마다 새 칸에 등장
+    // digging: {instanceId, timer} - "발굴" 버튼을 누르면 즉시 결과가 나오는 게 아니라
+    // 2초짜리 발굴 시간을 준다(사용자 지정). completedAt: 쿨타임 게이지가 다 차서
+    // 새 보물이 등장한 시각(Date.now()) - "완료" 텍스트를 잠깐 보여주는 용도.
     globalEnhance: { common: 0, hero: 0, legendary: 0, rate: 0 }, // 하단 강화 팝업의 전역 4트랙
     eventLog: {
       deleteEvent: null,
