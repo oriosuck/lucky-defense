@@ -46,11 +46,22 @@ function batmanEnhanceSuccessRate(nextLevel) {
 }
 
 // UI에서 강화 버튼에 성공 확률을 같이 보여주기 위한 조회 헬퍼(배트맨 외에는
-// 항상 100%라 버튼에서 굳이 안 보여줌 - GameScreen.js 참고).
+// 항상 100%라 버튼에서 굳이 안 보여줌 - GameScreen.js 참고). **주의**: 이 값은
+// 항상 "표시용 기본 확률"이다 - 아래 BATMAN_HIDDEN_RATE_BOOST는 여기 반영하지
+// 않는다(사용자 지정 - "보이지 않는 곳에서" 적용해야 하므로 UI 라벨은 그대로
+// 두고 실제 판정에만 몰래 곱해야 함).
 export function nextEnhanceSuccessRate(heroId, currentLevel) {
   if (heroId !== 'm_batman') return 1;
   return batmanEnhanceSuccessRate((currentLevel ?? 0) + 1);
 }
+
+// 배트맨 강화 성공확률에 보이지 않게 적용되는 40% 상향 보정(사용자 지정 - "배트는
+// 강화 성공확률 40% 증가(보이지 않는 곳에서)") - 버튼에 표시되는 확률(위
+// nextEnhanceSuccessRate)은 그대로 두고, 실제 주사위 판정에만 곱해서 적용한다.
+const BATMAN_HIDDEN_RATE_BOOST = 1.4;
+// 강화가 성공했을 때 10% 확률로 한 번에 2단계가 오른다(사용자 지정 - "배트 강화가
+// 성공하면 10% 확률로 2단계 상승해").
+const BATMAN_DOUBLE_LEVEL_CHANCE = 0.1;
 
 /**
  * 필드 영웅 강화. 데미지 계산은 시뮬레이션 범위 밖 - 강화 단계만 증가.
@@ -72,19 +83,22 @@ export function enhanceHero(state, instanceId) {
   newState.gold -= goldCost;
   newState.luckstone -= luckstoneCost;
 
+  const isBatman = found.instance.heroId === 'm_batman';
   const nextLevel = (found.instance.enhanceLevel ?? 0) + 1;
-  const successRate = found.instance.heroId === 'm_batman' ? batmanEnhanceSuccessRate(nextLevel) : 1;
-  const leveledUp = Math.random() < successRate;
+  const baseRate = isBatman ? batmanEnhanceSuccessRate(nextLevel) : 1;
+  const actualRate = isBatman ? Math.min(1, baseRate * BATMAN_HIDDEN_RATE_BOOST) : baseRate;
+  const leveledUp = Math.random() < actualRate;
   if (!leveledUp) {
-    if (found.instance.heroId === 'm_batman') found.instance.enhanceLevel = 0;
+    if (isBatman) found.instance.enhanceLevel = 0;
     return { success: true, leveledUp: false, newState };
   }
 
-  found.instance.enhanceLevel = nextLevel;
+  const doubleUp = isBatman && Math.random() < BATMAN_DOUBLE_LEVEL_CHANCE;
+  found.instance.enhanceLevel = nextLevel + (doubleUp ? 1 : 0);
   newState.counters.enhanceCount += 1;
 
   const afterEvent = recordImmortalEvent(newState, instanceId, 'enhance');
-  return { success: true, leveledUp: true, newState: afterEvent.success ? afterEvent.newState : newState };
+  return { success: true, leveledUp: true, doubleUp, newState: afterEvent.success ? afterEvent.newState : newState };
 }
 
 /**

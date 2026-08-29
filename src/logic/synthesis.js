@@ -1,4 +1,4 @@
-import { HEROES_BY_ID, nextTierOf, heroesByTier } from '../data/heroes.js';
+import { HEROES_BY_ID, nextTierOf, heroesByTier, IMP_HERO_ID } from '../data/heroes.js';
 import {
   createHeroInstance,
   findSlot,
@@ -6,15 +6,17 @@ import {
   placeInstanceAtSlot,
 } from '../state/gameState.js';
 
-// 판매 보상표(기획 확정: 일반 마리당 120코인, 희귀 1행운석, 영웅 2행운석, 전설 4행운석)
-const SELL_GOLD_BY_TIER = { normal: 120 };
+// 판매 보상표(기획 확정: 일반 마리당 120코인, 희귀 1행운석, 영웅 2행운석, 전설 4행운석,
+// 임프 마리당 9코인 - 사용자 지정)
+const SELL_GOLD_BY_TIER = { normal: 120, imp: 9 };
 const SELL_LUCKSTONE_BY_TIER = { rare: 1, hero: 2, legendary: 4 };
-// 일반~전설 판매 시 6% 확률로 행운석 1개 추가 지급(사용자 추가 - 등급 공통 시스템)
+// 일반~전설 판매 시 6% 확률로 행운석 1개 추가 지급(사용자 추가 - 등급 공통 시스템).
+// 임프는 이 보너스 대상이 아니다(별도로 지정받은 적 없음 - 9코인 고정).
 const SELL_BONUS_LUCKSTONE_CHANCE = 0.06;
 
 // 판매 시 받을 보상 미리보기(칸 위 판매 버튼에 표시용) - 실제 지급은 sellHero()가 담당.
 export function sellPreview(heroDef) {
-  if (heroDef.tier === 'normal') return { gold: SELL_GOLD_BY_TIER.normal, luckstone: 0 };
+  if (heroDef.tier === 'normal' || heroDef.tier === 'imp') return { gold: SELL_GOLD_BY_TIER[heroDef.tier], luckstone: 0 };
   return { gold: 0, luckstone: SELL_LUCKSTONE_BY_TIER[heroDef.tier] ?? 0 };
 }
 
@@ -78,7 +80,10 @@ export function synthesize(state, row, col) {
   }
   const heroId = slot.occupants[0].heroId;
   const heroDef = HEROES_BY_ID[heroId];
-  const nextTier = nextTierOf(heroDef.tier);
+  // 임프는 일반 등급 체인(normal->rare->hero->...)에 속하지 않는 별도 등급이라
+  // nextTierOf로는 처리가 안 된다 - 3마리 합성 시 곧바로 희귀 등급 랜덤 1마리로
+  // 특수 처리한다(사용자 지정 - "임프도 합성하게되면 희귀 영웅 랜덤 등장").
+  const nextTier = heroId === IMP_HERO_ID ? 'rare' : nextTierOf(heroDef.tier);
   if (!nextTier || nextTier === 'mythic') {
     return { success: false, reason: 'not-synthesizable', newState: state };
   }
@@ -202,16 +207,17 @@ export function sellHero(state, instanceId) {
   newState.counters.sellCount += 1;
 
   let reward = { gold: 0, luckstone: 0 };
-  if (heroDef.tier === 'normal') {
-    reward.gold = SELL_GOLD_BY_TIER.normal;
+  if (heroDef.tier === 'normal' || heroDef.tier === 'imp') {
+    reward.gold = SELL_GOLD_BY_TIER[heroDef.tier];
     newState.gold += reward.gold;
   } else {
     reward.luckstone = SELL_LUCKSTONE_BY_TIER[heroDef.tier] ?? 0;
     newState.luckstone += reward.luckstone;
   }
 
-  // 일반~전설 판매 공통: 6% 확률로 행운석 1개 추가 지급(사용자 추가 사항).
-  if (Math.random() < SELL_BONUS_LUCKSTONE_CHANCE) {
+  // 일반~전설 판매 공통: 6% 확률로 행운석 1개 추가 지급(사용자 추가 사항) - 임프는
+  // 대상이 아니다(9코인 고정, 별도 지정 없었음).
+  if (heroDef.tier !== 'imp' && Math.random() < SELL_BONUS_LUCKSTONE_CHANCE) {
     reward.luckstone += 1;
     reward.bonus = true;
     newState.luckstone += 1;
@@ -225,28 +231,33 @@ export function sellHero(state, instanceId) {
 }
 
 /**
- * 채드에게 신화 등급 영웅을 먹여 행운석 획득. 채드의 불멸 진행도(기가채드 조건)에도 반영.
+ * 채드에게 신화(불멸은 기가채드만) 등급 영웅을 먹여 행운석 획득. 채드의 불멸
+ * 진행도(기가채드 조건)에도 반영.
  */
 export function feedMythicToChad(state, chadInstanceId, mythicInstanceId) {
   const newState = structuredClone(state);
   const chad = findInstanceRef(newState, chadInstanceId);
   const mythic = findInstanceRef(newState, mythicInstanceId);
-  if (!chad || chad.instance.heroId !== 'm_chad') {
+  if (!chad || (chad.instance.heroId !== 'm_chad' && chad.instance.heroId !== 'i_giga_chad')) {
     return { success: false, reason: 'not-chad', newState: state };
   }
   const fedTier = HEROES_BY_ID[mythic?.instance.heroId]?.tier;
-  if (!mythic || (fedTier !== 'mythic' && fedTier !== 'immortal')) {
+  // 일반 채드는 신화만 먹일 수 있고, 기가채드로 승급해야 불멸까지 먹일 수 있다
+  // (사용자 지정 정정 - "일반 채드는 불멸을 못 팔아. 기가채드만 신화/불멸 다 팔
+  // 수 있어" - 예전엔 반대로 일반 채드가 둘 다 받고 기가채드는 먹이기 자체가
+  // 아예 안 되던 상태였다).
+  const allowedTiers = chad.instance.heroId === 'i_giga_chad' ? ['mythic', 'immortal'] : ['mythic'];
+  if (!mythic || !allowedTiers.includes(fedTier)) {
     return { success: false, reason: 'not-mythic', newState: state };
   }
 
   mythic.slot.occupants = mythic.slot.occupants.filter((o) => o.instanceId !== mythicInstanceId);
   newState.luckstone += CHAD_FEED_LUCKSTONE;
-  // 기가채드 조건은 "판매 5회 누적"이 아니라 능력치 %다(기획서 재확인) - 판매할
-  // 때마다 확률적으로 2%p씩 오르고 총 10%를 채우면 승급 가능. 불멸 등급을 먹였을
-  // 때는 진행도에 반영하지 않는다(행운석 보상만 지급, "신화 판매"로 못박은 조건 문구
-  // 유지).
+  // 기가채드 승급 조건(판매할 때마다 확률적으로 2%p, 총 10% 도달 시 승급)은
+  // 아직 승급 전인 m_chad에게만 적용된다 - 이미 기가채드면 더 진행할 조건이
+  // 없어서 먹이기 보상(행운석)만 받는다.
   let procced = false;
-  if (fedTier === 'mythic') {
+  if (chad.instance.heroId === 'm_chad' && fedTier === 'mythic') {
     const { extra } = HEROES_BY_ID.m_chad.immortalCondition;
     if (Math.random() < extra.procChance) {
       chad.instance.progress = Math.min(10, (chad.instance.progress ?? 0) + extra.procAmount);

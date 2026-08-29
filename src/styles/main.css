@@ -489,15 +489,19 @@ body {
 }
 
 /* 캐릭터 머리 바로 위에 숫자 하나만 항상 띄우는 배지(선택 여부와 무관) - 로카는
-   장전된 탄약 수, 배트맨은 지금 강화 레벨을 이 자리에 보여준다(사용자 지정 -
-   "몇강인지는 배트 머리 위에 로카처럼 적어줘"). 다른 신화들은 PR #27에서 진행도
-   표시를 전부 없앴지만 이 둘만 예외 - stage-hero-layer 안에서 캐릭터 토큰과
-   같은 left/top(%) 좌표계를 쓰고 위로만 살짝 띄운다. */
+   장전된 탄약 수, 배트맨은 지금 강화 레벨, 밤바는 불멸 진행도를 이 자리에
+   보여준다(사용자 지정 - "몇강인지는 배트 머리 위에 로카처럼 적어줘", "밤바
+   강화 수치도 로카처럼 머리에 적어줘"). 다른 신화들은 PR #27에서 진행도 표시를
+   전부 없앴지만 이 셋만 예외 - stage-hero-layer 안에서 캐릭터 토큰과 같은
+   left/top(%) 좌표계를 쓰고 위로만 살짝 띄운다. 처음엔 9px로 너무 작아서 사용자가
+   "글자도 좀 굵게 가시적으로 보이게"라고 정정 - 판매 버튼(.cell-quick-sell) 급으로
+   눈에 띄게 폰트/패딩/테두리를 키웠다. */
 .hero-head-badge {
   position: absolute; transform: translate(-50%, calc(-100% - 4px));
-  color: #ffe066; font-size: 9px; font-weight: 800; white-space: nowrap;
-  background: rgba(0, 0, 0, 0.55); border-radius: 4px; padding: 1px 5px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  color: #ffe066; font-size: 14px; font-weight: 900; white-space: nowrap;
+  background: rgba(0, 0, 0, 0.75); border-radius: 6px; padding: 2px 8px;
+  border: 2px solid #ffe066;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
   pointer-events: none;
 }
 
