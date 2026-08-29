@@ -8,7 +8,7 @@ import {
   tickIndyTreasure,
 } from './waveEvents.js';
 import { tickImmortalProgress, tickMamaImps } from './immortal.js';
-import { checkMissions } from './missions.js';
+import { checkMissions, tickMissionToast } from './missions.js';
 
 /**
  * 게임 화면의 매초 tick. 기술설계서 4장 시퀀스를 그대로 구현.
@@ -28,6 +28,7 @@ export function tick(state, deltaSec) {
   next = tickImmortalProgress(next, deltaSec);
   next = tickMamaImps(next, deltaSec);
   next = checkMissions(next);
+  next = tickMissionToast(next, deltaSec);
 
   return next;
 }

@@ -86,6 +86,7 @@ export function createGameState(config) {
       normalSummonLegendaryCount: 0, // "운빨좋은날" 미션용 - 일반 소환으로 전설을 뽑은 횟수
     },
     claimedMissionIds: [], // 이미 보상을 지급한 미션(missions.js checkMissions 참고, 중복 지급 방지
+    missionToastQueue: [], // 새로 완료된 미션 알림 대기열(missions.js의 checkMissions/tickMissionToast 참고)
     result: null, // 'win' | 'lose' | null
     log: [],
   };
