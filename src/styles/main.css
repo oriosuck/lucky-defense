@@ -117,7 +117,8 @@ body {
 .hero-name { font-size: 13px; font-weight: 600; margin-top: 4px; }
 .hero-tier { font-size: 11px; color: var(--muted); }
 .favorite-toggle { position: absolute; top: 2px; right: 2px; background: none; border: none; color: var(--gold); font-size: 16px; cursor: pointer; z-index: 1; }
-.immortal-check { display: block; font-size: 11px; text-align: center; margin-top: 4px; }
+.hero-card-checks { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.immortal-check, .breakthrough-check { display: block; font-size: 11px; text-align: center; }
 
 /* 프리셋 UI가 너무 작다는 지적(사용자)에 맞춰 다른 옵션 영역보다 크게 - 패딩/폰트를
    키우고, 위쪽으로 옮긴 만큼 눈에 잘 띄도록 강조 테두리도 추가했다. */

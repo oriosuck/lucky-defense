@@ -1,4 +1,4 @@
-import { TIER_LABEL, heroesByTier } from '../data/heroes.js';
+import { TIER_LABEL, heroesByTier, IMMORTAL_CONDITIONS } from '../data/heroes.js';
 import { savePreset, listPresets, loadPreset, deletePreset, PRESET_NAME_MAX_LENGTH, getDefaultPresetId, setDefaultPreset } from '../state/presetStore.js';
 import { el } from './components/dom.js';
 import { heroImage } from './components/heroVisual.js';
@@ -7,11 +7,39 @@ import { heroImage } from './components/heroVisual.js';
 // 홈 화면에서는 이번 판에서 불멸로 취급할지/즐겨찾기할지를 신화 등급 카드에서만 고른다.
 const SELECTABLE_TIERS = ['mythic'];
 
+// "돌파"는 지금 마마(m_mama) 하나만 실제 게임 로직(임프 9→7마리 조건)이 있고
+// 나머지는 아직 돌파 관련 수치/효과가 없다 - 사용자 지정으로 이 13명만 시작
+// 화면에 돌파 체크박스를 먼저 노출한다(UI/저장만, 효과는 나중에 개별 구현
+// 예정 - 사용자 확인 사항). 마마 외 12명을 체크해도 지금은 아무 효과가 없다.
+const BREAKTHROUGH_ELIGIBLE_IDS = new Set([
+  'm_frog_prince', 'm_orc_shaman', 'm_monopoly_man', 'm_ray', 'm_hailey',
+  'm_mama', 'm_ninja', 'm_dragon', 'm_penguin_musician', 'm_chona',
+  'm_gigi', 'm_tar', 'm_lancelot',
+]);
+
+const DEFAULT_HERO_SETTING = { immortal: true, favorite: false, breakthrough: false };
+const DEFAULT_HERO_SETTING_NO_IMMORTAL = { immortal: false, favorite: false, breakthrough: false };
+
+// 불멸로 승급 가능한 신화(사용자가 준 28명 - IMMORTAL_CONDITIONS에 있는 것과
+// 정확히 일치)만 "불멸" 체크된 상태로 시작한다(사용자 지정 - "불멸도 미리 다
+// 체크하고 시작하자") - 매번 28개를 직접 체크할 필요가 없어진다. 신화 등급은
+// 총 31명인데 그중 인디(m_indy)/와트(m_watt)/로켓츄(m_rocketchu) 3명은 애초에
+// 불멸 승급 경로 자체가 없어서(IMMORTAL_CONDITIONS에 없음) 이 3명은 기존처럼
+// 기본 체크 해제 상태로 남겨둔다. 체크 여부 자체는 아직 어느 게임 로직에도
+// 쓰이지 않는 저장용 설정이라(favorite처럼 실제로 소비되는 값이 아님) 기본값만
+// 바꿔도 안전하다.
+function defaultHeroSettingsMap() {
+  return new Map(heroesByTier('mythic').map((h) => [
+    h.id,
+    { ...(IMMORTAL_CONDITIONS[h.id] ? DEFAULT_HERO_SETTING : DEFAULT_HERO_SETTING_NO_IMMORTAL) },
+  ]));
+}
+
 function createLocalState() {
   return {
     gameType: 'delete', // 'no-delete' | 'delete' - 기본값은 삭제 있는 버전(사용자 지정)
     immortalPet: true,
-    settings: new Map(), // heroId -> { immortal, favorite } (신화 등급만 사용)
+    settings: defaultHeroSettingsMap(), // heroId -> { immortal, favorite, breakthrough } (신화 등급만 사용)
   };
 }
 
@@ -33,29 +61,48 @@ export function HeroSelectScreen({ onStart }) {
   }
 
   function toggleImmortal(heroId) {
-    const cur = local.settings.get(heroId) ?? { immortal: false, favorite: false };
+    const cur = local.settings.get(heroId) ?? { ...DEFAULT_HERO_SETTING };
     local.settings.set(heroId, { ...cur, immortal: !cur.immortal });
     update();
   }
 
   function toggleFavorite(heroId) {
-    const cur = local.settings.get(heroId) ?? { immortal: false, favorite: false };
+    const cur = local.settings.get(heroId) ?? { ...DEFAULT_HERO_SETTING };
     local.settings.set(heroId, { ...cur, favorite: !cur.favorite });
     update();
   }
 
+  function toggleBreakthrough(heroId) {
+    const cur = local.settings.get(heroId) ?? { ...DEFAULT_HERO_SETTING };
+    local.settings.set(heroId, { ...cur, breakthrough: !cur.breakthrough });
+    update();
+  }
+
+  // 불멸이 기본 체크 상태로 바뀌면서, "true/false 둘 다 아니면 저장 안 함" 필터를
+  // 그대로 두면 사용자가 명시적으로 체크 해제한 것도 "기본값과 같으니 저장 불필요"로
+  // 오해해 저장을 건너뛰고, 나중에 프리셋을 다시 불러올 때 기본값(체크됨)으로
+  // 되돌아가버리는 버그가 생긴다 - 필터 없이 28개 신화 설정을 항상 전부 저장한다.
   function collectHeroSettings() {
     return [...local.settings.entries()]
-      .filter(([, v]) => v.immortal || v.favorite)
-      .map(([heroId, v]) => ({ heroId, immortal: v.immortal, favorite: v.favorite }));
+      .map(([heroId, v]) => ({ heroId, immortal: v.immortal, favorite: v.favorite, breakthrough: v.breakthrough }));
   }
 
   // 불멸 펫 보유 유무 선택 UI는 없앴다(사용자 지정 - 항상 보유한 것으로 가정).
   // local.immortalPet은 createLocalState()에서 true로 고정되고, 프리셋을 불러와도
   // 이 값은 건드리지 않는다(예전 프리셋에 false가 저장돼 있었더라도 무시).
+  //
+  // 먼저 기본값(전부 불멸 체크)으로 맵을 채운 뒤 프리셋에 저장된 값으로 덮어쓴다 -
+  // 이 기능을 추가하기 전에 저장된 예전 프리셋은 heroId마다 immortal/favorite만
+  // 있고 breakthrough가 없거나, 애초에 즐겨찾기/불멸을 둘 다 안 켰던 영웅은 항목
+  // 자체가 없을 수 있는데, 그런 항목도 새 기본값(불멸 체크)으로 자연스럽게
+  // 채워지도록 한다.
   function applyPreset(preset) {
     local.gameType = preset.gameType;
-    local.settings = new Map((preset.heroSettings ?? []).map((h) => [h.heroId, { immortal: h.immortal, favorite: h.favorite }]));
+    const map = defaultHeroSettingsMap();
+    for (const h of preset.heroSettings ?? []) {
+      map.set(h.heroId, { immortal: h.immortal ?? true, favorite: h.favorite ?? false, breakthrough: h.breakthrough ?? false });
+    }
+    local.settings = map;
     update();
   }
 
@@ -65,7 +112,11 @@ export function HeroSelectScreen({ onStart }) {
     const defaultPreset = loadPreset(defaultPresetId);
     if (defaultPreset) {
       local.gameType = defaultPreset.gameType;
-      local.settings = new Map((defaultPreset.heroSettings ?? []).map((h) => [h.heroId, { immortal: h.immortal, favorite: h.favorite }]));
+      const map = defaultHeroSettingsMap();
+      for (const h of defaultPreset.heroSettings ?? []) {
+        map.set(h.heroId, { immortal: h.immortal ?? true, favorite: h.favorite ?? false, breakthrough: h.breakthrough ?? false });
+      }
+      local.settings = map;
     }
   }
 
@@ -143,14 +194,8 @@ export function HeroSelectScreen({ onStart }) {
   }
 
   function renderHeroCard(heroDef) {
-    const state = local.settings.get(heroDef.id) ?? { immortal: false, favorite: false };
-    return el('div', { class: 'hero-card' }, [
-      el('button', { class: 'favorite-toggle', text: state.favorite ? '★' : '☆', onclick: (e) => { e.stopPropagation(); toggleFavorite(heroDef.id); } }),
-      el('div', { class: 'hero-card-body' }, [
-        heroImage(heroDef, { className: 'hero-card-image' }),
-        el('div', { class: 'hero-name', text: heroDef.name }),
-        el('div', { class: 'hero-tier', text: TIER_LABEL[heroDef.tier] }),
-      ]),
+    const state = local.settings.get(heroDef.id) ?? { ...DEFAULT_HERO_SETTING };
+    const checks = [
       el('label', { class: 'immortal-check' }, [
         el('input', {
           type: 'checkbox',
@@ -159,6 +204,26 @@ export function HeroSelectScreen({ onStart }) {
         }),
         el('span', { text: '불멸' }),
       ]),
+    ];
+    // 돌파는 지금 13명만 우선 노출한다(위 BREAKTHROUGH_ELIGIBLE_IDS 주석 참고).
+    if (BREAKTHROUGH_ELIGIBLE_IDS.has(heroDef.id)) {
+      checks.push(el('label', { class: 'breakthrough-check' }, [
+        el('input', {
+          type: 'checkbox',
+          checked: state.breakthrough,
+          onchange: () => toggleBreakthrough(heroDef.id),
+        }),
+        el('span', { text: '돌파' }),
+      ]));
+    }
+    return el('div', { class: 'hero-card' }, [
+      el('button', { class: 'favorite-toggle', text: state.favorite ? '★' : '☆', onclick: (e) => { e.stopPropagation(); toggleFavorite(heroDef.id); } }),
+      el('div', { class: 'hero-card-body' }, [
+        heroImage(heroDef, { className: 'hero-card-image' }),
+        el('div', { class: 'hero-name', text: heroDef.name }),
+        el('div', { class: 'hero-tier', text: TIER_LABEL[heroDef.tier] }),
+      ]),
+      el('div', { class: 'hero-card-checks' }, checks),
     ]);
   }
 
