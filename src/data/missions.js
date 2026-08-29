@@ -3,17 +3,12 @@
 // - 'resource': gameState[resourceKey](골드/행운석 등 보유량)를 target과 비교
 // - 'tier-collect': 해당 등급의 모든 영웅을 필드에 동시에 1마리 이상씩 보유하는지
 // - 'field-tier-count': 해당 등급 영웅이 필드에 총 몇 마리 있는지를 target과 비교
-// 보상 수치는 사용자가 직접 지정한 확정값이다(PR #35 배포 후 지시).
+// 보상 수치는 사용자가 직접 지정한 확정값이다(PR #39 배포 후 13종 전체 재지정 -
+// 모든 미션에 공통 기본 행운석 3개가 깔려 있고, 등급/자원 계열 미션은 여기에 골드
+// 대신 행운석을 더 얹는 방식이라 순수 행운석 보상(luckstone만 있고 gold가 없는
+// 항목)은 "3(공통) + N(미션별 추가)"로 계산된 값이다 - 예: 영웅 컬렉터는 행운석 1개
+// 추가라 총 4, 3전설은 2개 추가라 총 5).
 export const MISSIONS = [
-  {
-    id: 'mission_enhance_2',
-    name: '대장장이 미션',
-    description: '강화 버튼 2회 사용',
-    checkType: 'counter',
-    counterKey: 'enhanceCount',
-    target: 2,
-    reward: { gold: 100, luckstone: 3 },
-  },
   {
     id: 'mission_collect_normal',
     name: '일반 등급 컬렉터',
@@ -39,22 +34,17 @@ export const MISSIONS = [
     checkType: 'tier-collect',
     tier: 'hero',
     target: 5,
-    reward: { gold: 100, luckstone: 3 },
+    reward: { luckstone: 4 },
   },
   {
-    id: 'mission_collect_legendary',
-    name: '전설 등급 컬렉터',
-    description: '모든 전설 등급 영웅을 필드에 동시에 모으기',
-    checkType: 'tier-collect',
+    id: 'mission_field_legendary_3',
+    name: '3전설',
+    description: '필드에 전설 등급 영웅 3마리 동시 보유',
+    checkType: 'field-tier-count',
     tier: 'legendary',
-    target: 4,
-    reward: { gold: 100, luckstone: 3 },
+    target: 3,
+    reward: { luckstone: 5 },
   },
-  // "운빨좋은날" 미션은 일단 제외한다(사용자 지정 - "일단 제외해줘. 내가 나중에
-  // 정확하게 미션 다시 보고 알려줄게"). 이전엔 "일반 소환으로 전설 획득"으로
-  // 임의 해석해서 넣어뒀었는데, 정확한 조건을 사용자가 다시 확인해주기로 함 -
-  // 그때 여기에 새 항목으로 추가할 것. 카운터(`normalSummonLegendaryCount`,
-  // summon.js)는 그대로 남겨뒀다 - 나중에 그 조건으로 확정되면 바로 재사용 가능.
   {
     id: 'mission_luckstone_10',
     name: '행운석 수집가',
@@ -74,6 +64,51 @@ export const MISSIONS = [
     reward: { gold: 100, luckstone: 3 },
   },
   {
+    id: 'mission_summon_hero_3',
+    name: '영웅 소환가',
+    description: '소환에서 영웅 등급 등장 3번',
+    checkType: 'counter',
+    counterKey: 'normalSummonHeroCount',
+    target: 3,
+    reward: { gold: 50, luckstone: 3 },
+  },
+  {
+    id: 'mission_summon_legendary',
+    name: '천운의 소환',
+    description: '소환에서 전설 등급 등장',
+    checkType: 'counter',
+    counterKey: 'normalSummonLegendaryCount',
+    target: 1,
+    reward: { gold: 100, luckstone: 3 },
+  },
+  {
+    id: 'mission_roulette_attempt_20',
+    name: '룰렛 애호가',
+    description: '룰렛 소환 시도 20번',
+    checkType: 'counter',
+    counterKey: 'rouletteAttemptCount',
+    target: 20,
+    reward: { luckstone: 4 },
+  },
+  {
+    id: 'mission_roulette_fail_10',
+    name: '룰렛 불운아',
+    description: '룰렛 소환 실패 10번',
+    checkType: 'counter',
+    counterKey: 'rouletteFailCount',
+    target: 10,
+    reward: { gold: 50, luckstone: 3 },
+  },
+  {
+    id: 'mission_legendary_roulette_success_3',
+    name: '전설의 손맛',
+    description: '전설 룰렛 소환 성공 3번',
+    checkType: 'counter',
+    counterKey: 'legendaryRouletteSuccessCount',
+    target: 3,
+    reward: { gold: 100, luckstone: 3 },
+  },
+  {
     id: 'mission_legendary_roulette_fail_5',
     name: '날아간 손모가지',
     description: '전설 룰렛에서 해골(실패) 표시 5회 발생',
@@ -83,13 +118,13 @@ export const MISSIONS = [
     reward: { luckstone: 4 },
   },
   {
-    id: 'mission_field_legendary_3',
-    name: '3전설',
-    description: '필드에 전설 등급 영웅 3마리 동시 보유',
-    checkType: 'field-tier-count',
-    tier: 'legendary',
-    target: 3,
-    reward: { luckstone: 5 },
+    id: 'mission_enhance_2',
+    name: '대장장이 미션',
+    description: '강화 버튼 2회 사용',
+    checkType: 'counter',
+    counterKey: 'enhanceCount',
+    target: 2,
+    reward: { gold: 100, luckstone: 3 },
   },
 ];
 
