@@ -441,10 +441,6 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 .cell-quick-btn.is-disabled { opacity: 0.5; cursor: not-allowed; }
-.cell-quick-close {
-  background: rgba(20, 16, 26, 0.85); border-color: rgba(255, 255, 255, 0.3);
-  padding: 1px 6px; font-size: 10px;
-}
 /* 판매/합성 버튼은 다른 cell-quick-btn보다 크게(사용자 지적 - 너무 작았음) */
 .cell-quick-sell, .cell-quick-synth {
   padding: 6px 16px; font-size: 15px; border-radius: 10px; border-width: 3px;
