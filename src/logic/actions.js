@@ -4,11 +4,11 @@ import { INDY_DIG_DURATION_SEC } from './waveEvents.js';
 import { HEROES_BY_ID } from '../data/heroes.js';
 import { GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 
-// 필드 개체별 강화(enhanceHero)에 실제로 골드/행운석 비용이 있는 건 배트맨뿐이다
-// (사용자 정정 - "다른 영웅들은 무슨 골드랑 행운석이야? 그런거 없는데"). 아이언
-// 미야옹처럼 강화 "횟수"가 불멸 조건인 다른 영웅들은 그냥 무료로 눌러서 카운트만
-// 올리면 된다 - 비용이 있던 예전 값(30G 1💎)은 이 기능을 처음 만들 때의 추측성
-// 플레이스홀더였을 뿐 확정된 적이 없었다.
+// enhanceHero()는 이제 배트맨 전용이다. 아이언미야옹은 처음엔 "다른 영웅과 같은
+// 무료 강화" 취급했었는데, 사용자가 실제 기획(1차 변신 5행운석→2차 변신 10행운석
+// →기술 강화 1행운석/회 확률성공)을 알려줘서 완전히 별개의 전용 함수
+// (advanceIronMeyaong, 아래)로 다시 만들었다 - 이제 enhanceHero를 타는 건 배트맨
+// 하나뿐이다.
 const BATMAN_ENHANCE_GOLD_BASE = 30;
 
 // 배트맨 전용 강화 골드 비용 - 승급 확률이 10강부터 강화 레벨에 비례해서 계속
@@ -100,6 +100,51 @@ export function cycleBatmanMode(state, instanceId) {
   const currentIndex = order.indexOf(found.instance.batmanMode ?? null);
   found.instance.batmanMode = order[(currentIndex + 1) % order.length];
   return { success: true, newState };
+}
+
+/**
+ * 아이언미야옹 전용 3단계 진행(사용자 지정 수치, heroes.js의
+ * IMMORTAL_CONDITIONS.m_iron_meyaong.extra 참고): instance.meyaongTransformStage
+ * (0=기본→1차 변신 완료→2=2차 변신 완료)에 따라 지금 눌러야 할 액션이 자동으로
+ * 정해진다 - 0이면 1차 변신(5행운석), 1이면 2차 변신(10행운석), 2가 되고 나서는
+ * "기술 강화" 시도(1행운석/회, 10% 확률로만 성공 - 성공해야 progress+1). 실패해도
+ * 소모한 행운석은 돌려주지 않는다(배트맨 강화 실패와 같은 관례).
+ */
+export function advanceIronMeyaong(state, instanceId) {
+  const newState = structuredClone(state);
+  const found = findInstance(newState, instanceId);
+  if (!found || found.instance.heroId !== 'm_iron_meyaong') {
+    return { success: false, reason: 'not-iron-meyaong', newState: state };
+  }
+  const cond = HEROES_BY_ID.m_iron_meyaong.immortalCondition;
+  const stage = found.instance.meyaongTransformStage ?? 0;
+
+  if (stage === 0) {
+    const cost = cond.extra.transform1LuckstoneCost;
+    if (newState.luckstone < cost) return { success: false, reason: 'not-enough-luckstone', newState: state };
+    newState.luckstone -= cost;
+    found.instance.meyaongTransformStage = 1;
+    newState.counters.enhanceCount += 1;
+    return { success: true, newState };
+  }
+  if (stage === 1) {
+    const cost = cond.extra.transform2LuckstoneCost;
+    if (newState.luckstone < cost) return { success: false, reason: 'not-enough-luckstone', newState: state };
+    newState.luckstone -= cost;
+    found.instance.meyaongTransformStage = 2;
+    newState.counters.enhanceCount += 1;
+    return { success: true, newState };
+  }
+
+  const cost = cond.extra.enhanceLuckstoneCost;
+  if (newState.luckstone < cost) return { success: false, reason: 'not-enough-luckstone', newState: state };
+  newState.luckstone -= cost;
+  newState.counters.enhanceCount += 1;
+  const leveledUp = Math.random() < cond.extra.enhanceSuccessRate;
+  if (leveledUp) {
+    found.instance.progress = Math.min(cond.target, (found.instance.progress ?? 0) + 1);
+  }
+  return { success: true, leveledUp, newState };
 }
 
 /**
