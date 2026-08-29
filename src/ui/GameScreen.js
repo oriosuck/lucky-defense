@@ -18,6 +18,8 @@ import {
   toggleBreakthrough,
   digTreasure,
   upgradeGlobalEnhance,
+  cycleBatmanMode,
+  nextEnhanceGoldCost,
   ENHANCE_GOLD_COST,
   ENHANCE_LUCKSTONE_COST,
 } from '../logic/actions.js';
@@ -767,6 +769,20 @@ export function GameScreen({ getState, dispatch, onExit }) {
           heroImage(heroDef, { className: 'stage-hero-image', instance: occ, style: imgStyle }),
           occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
         ]));
+
+        // 로카(불멸 조건: 시간 기반 자동 누적, 10초마다 1~5)는 누적 진행도(N/160)가
+        // 아니라 "10초마다 한 번씩 얼마나 장전했는지"(방금 굴린 값 그 자체)를
+        // 캐릭터 바로 위에 항상 표시한다(사용자 정정 - "장전 진행도가 아니라...
+        // 몇초동안 한번씩 1~5씩 장전을 하잖아 그 숫자를 적어달라고"). 굴린 값은
+        // immortal.js의 m_roka 틱 핸들러가 매번 instance.lastChargeAmount에
+        // 남긴다 - 첫 틱이 돌기 전(아직 한 번도 장전 안 함)에는 대기 문구를 보여준다.
+        if (occ.heroId === 'm_roka') {
+          layer.appendChild(el('div', {
+            class: 'roka-charge-badge',
+            style: `left:${centerX}%; top:${top}%; z-index:${30 + slot.row};`,
+            text: occ.lastChargeAmount != null ? `장전 +${occ.lastChargeAmount}` : '장전 대기중',
+          }));
+        }
       });
 
       // 이동불능(속박) 사슬 아이콘 - 칸 구석의 작은 아이콘이 아니라 캐릭터 바로
@@ -890,13 +906,26 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 이동은 이제 버튼이 아니라 칸을 직접 드래그하는 방식이라(아래 드래그 핸들러
     // 참고) 탑 베인도 별도 버튼이 필요 없다 - 드래그로 옮겨도 moveHero()가 그대로
     // 호출되어 불멸 진행도가 똑같이 쌓인다. 강화만 버튼으로 남겨둔다(드래그로 대체할
-    // 수 없는 액션이라 아이언미야옹 전용 진행 조건 버튼을 유지).
-    if (heroDef.immortalCondition?.eventType === 'enhance') {
+    // 수 없는 액션이라 아이언미야옹/배트맨 전용 진행 조건 버튼을 유지). 배트맨은
+    // eventType이 'enhance'가 아니라 강화 레벨(extra.minEnhance) 자체가 승급 조건의
+    // 전제라 조건을 넓혀야 버튼이 뜬다(예전엔 이 조건에 안 걸려서 배트맨은 강화 버튼
+    // 자체가 아예 안 떠서 승급 조건을 영원히 만족할 수 없는 버그였음).
+    if (heroDef.immortalCondition?.eventType === 'enhance' || heroDef.immortalCondition?.extra?.minEnhance != null) {
+      const goldCost = nextEnhanceGoldCost(instance.heroId, instance.enhanceLevel);
       below.push(el('button', {
         class: 'cell-quick-btn cell-quick-extra',
-        text: `강화 (${ENHANCE_GOLD_COST}G ${ENHANCE_LUCKSTONE_COST}💎)`,
-        disabled: state.gold < ENHANCE_GOLD_COST || state.luckstone < ENHANCE_LUCKSTONE_COST,
+        text: `강화 (${goldCost}G ${ENHANCE_LUCKSTONE_COST}💎)`,
+        disabled: state.gold < goldCost || state.luckstone < ENHANCE_LUCKSTONE_COST,
         onclick: () => apply(enhanceHero(state, instance.instanceId)),
+      }));
+    }
+    // 에이스 배트맨(불멸) 전용 모드 변신 - 기본/투수모드/타자모드를 순환한다.
+    if (instance.heroId === 'i_ace_batman') {
+      const modeLabel = { pitcher: '투수모드', batter: '타자모드' }[instance.batmanMode] ?? '기본모드';
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra',
+        text: `변신 (현재: ${modeLabel})`,
+        onclick: () => apply(cycleBatmanMode(state, instance.instanceId)),
       }));
     }
 
@@ -1045,12 +1074,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return null;
   }
 
-  // 마마(임프 보유량)/인디(보유 보물 등급) 등 진행도 텍스트 외에 추가로 보여줄 상태 한 줄.
+  // 인디(보유 보물 등급) 등 진행도 텍스트 외에 추가로 보여줄 상태 한 줄. 마마는
+  // 호출부(above 3줄 위)에서 아예 배지 자체를 안 띄우도록 걸러지므로 여기 없다
+  // (임프가 필드에 실제 캐릭터로 보이는 지금은 "임프 N/9" 텍스트가 중복 정보라
+  // 사용자 요청으로 제거됨 - impStock 필드 자체도 더는 존재하지 않는다, 이제
+  // 임프 수는 항상 field에서 실시간으로 세는 전역값이다).
   function extraStatusText(instance, heroDef) {
-    if (instance.heroId === 'm_mama') {
-      const target = instance.breakthrough ? heroDef.immortalCondition.extra.breakthroughCost : heroDef.immortalCondition.extra.normalCost;
-      return `임프: ${instance.impStock ?? 0} / ${target}${instance.breakthrough ? ' (돌파)' : ''}`;
-    }
     if (instance.heroId === 'm_indy') {
       return `보유 보물: ${instance.indyTreasureTier ? TIER_LABEL[instance.indyTreasureTier] : '없음'}`;
     }
