@@ -255,14 +255,26 @@ export function digTreasure(state, instanceId) {
   return { success: true, newState };
 }
 
+// 전설~불멸(legendary) 트랙은 고정 2행운석이 아니라 "다음 레벨만큼" 행운석이
+// 든다(사용자 지정 - "다음 레벨만큼 행운석이 들어. 예를 들어 1→2는 2행운석,
+// 7→8은 8행운석"). state.globalEnhance[track]은 "이미 완료한 업그레이드 횟수"라
+// 화면에 표시되는 현재 레벨은 그 값+1(Lv.1부터 시작) - 다음 레벨(업그레이드 후
+// 도달할 레벨)은 거기서 다시 +1이므로 state.globalEnhance.legendary+2가 곧 비용이
+// 된다(0강일 때 1→2 전환에 2행운석, 6강일 때 7→8 전환에 8행운석과 정확히 일치).
+// 나머지 3트랙(일반~희귀/영웅/소환 확률)은 GLOBAL_ENHANCE_COST의 고정값 그대로.
+export function nextGlobalEnhanceCost(state, track) {
+  if (track === 'legendary') return { luckstone: state.globalEnhance.legendary + 2 };
+  return GLOBAL_ENHANCE_COST[track];
+}
+
 /**
  * 하단 "강화" 팝업의 전역 4트랙(일반~희귀/영웅/전설~불멸/소환 확률) 레벨업.
  * 특정 필드 개체가 아니라 계정 전체에 적용되는 별도 시스템 - 선택된 영웅의 강화는
  * enhanceHero()가 따로 담당한다.
  */
 export function upgradeGlobalEnhance(state, track) {
-  const cost = GLOBAL_ENHANCE_COST[track];
-  if (!cost) return { success: false, reason: 'invalid-track', newState: state };
+  if (!GLOBAL_ENHANCE_COST[track]) return { success: false, reason: 'invalid-track', newState: state };
+  const cost = nextGlobalEnhanceCost(state, track);
   const maxLevel = GLOBAL_ENHANCE_MAX_LEVEL[track];
   if (maxLevel != null && state.globalEnhance[track] + 1 >= maxLevel) {
     return { success: false, reason: 'max-level', newState: state };

@@ -23,6 +23,7 @@ import {
   nextEnhanceGoldCost,
   nextEnhanceLuckstoneCost,
   nextEnhanceSuccessRate,
+  nextGlobalEnhanceCost,
 } from '../logic/actions.js';
 import {
   checkImmortalPromotion,
@@ -35,7 +36,7 @@ import {
   resetRaySwords,
 } from '../logic/immortal.js';
 import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT, INDY_TREASURE_INTERVAL_SEC } from '../logic/waveEvents.js';
-import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
+import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 import { RAY_SWORD_TIER_LABEL, RAY_SWORD_TIER_COLOR, RAY_SWORD_CRAFT_MAX } from '../data/raySwords.js';
 import { fieldOccupantCount, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
 import { el } from './components/dom.js';
@@ -1446,7 +1447,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   function renderEnhancePopup(state) {
     const cols = GLOBAL_ENHANCE_TRACKS.map((track) => {
-      const cost = GLOBAL_ENHANCE_COST[track];
+      const cost = nextGlobalEnhanceCost(state, track);
       const level = state.globalEnhance[track] + 1;
       const maxLevel = GLOBAL_ENHANCE_MAX_LEVEL[track];
       const atMax = maxLevel != null && level >= maxLevel;
@@ -1554,26 +1555,47 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const baseId = immortalDef.baseHeroId;
     const onField = state.field.flatMap((s) => s.occupants).filter((o) => o.heroId === baseId);
     if (!onField.length) return false;
-    const baseDef = HEROES_BY_ID[baseId];
-    const cond = baseDef?.immortalCondition;
     if (SECOND_STAGE_IMMORTAL[baseId]) return true; // 이미 불멸이면 2차 변신은 언제든 시도 가능
-    if (!cond) return false;
-    return onField.some((inst) => inst.immortalEligible || cond.target == null || (inst.progress ?? 0) >= cond.target);
+    // `cond.target == null`을 곧장 "해금"으로 취급하던 예전 로직은 마마/개구리왕자
+    // (둘 다 target이 null)를 실제 진행 상태와 무관하게 필드에 올라오자마자 항상
+    // "해금"으로 잘못 표시했다(임프 몇 마리가 있든, 변신을 했든 안 했든) - 왼쪽 바
+    // "승급 가능!" 아이콘 판정에 이미 쓰는 isImmortalPromotionReady(각 조건별 실제
+    // 준비 상태를 정확히 계산)를 그대로 재사용해서 통일했다.
+    return onField.some((inst) => isImmortalPromotionReady(state, inst.instanceId));
   }
 
   // 필드에 원본(신화) 개체가 있으면 "잠김" 대신 실제 진행도(N/목표)를 보여준다
   // (사용자 지정 - "베인이 소환되었으면 신화 탭에 있는 베인 불멸이... 현재 불멸
-  // 진행 상태를 보여줘야지"). consumeCount형(마마/닌자/지지/초나 등 - 개체 수
-  // 존재를 세는 방식이라 단일 progress/target 숫자가 없음)이나 target이 아예
-  // 없는 조건은 숫자로 보여줄 수 없어 그냥 "잠김"으로 남긴다 - 필드 셀 UI에서
-  // 진행도 표시를 전부 없앤 PR #27 규칙과는 별개다(그건 필드 칸 선택 UI 얘기,
-  // 여기는 불멸 탭 팝업이라 다른 화면).
+  // 진행 상태를 보여줘야지"). 베인 자신은 target(12)이 있고 progress가 정상
+  // 누적되니 아래 범용 분기로 이미 잘 보였는데, 같은 방식으로 다시 확인해보니
+  // 마마/개구리왕자/랜슬롯 셋은 진행도가 진짜로 안 보이고 있었다(사용자 지적 -
+  // "다른 영웅들 중에 안보이는 것들도 있어"):
+  // - 마마/개구리왕자는 cond.target 자체가 null이라(별도 상태로 진행을 관리)
+  //   아래 범용 분기가 항상 null을 반환해 무조건 "잠김"만 떴다.
+  // - 랜슬롯은 target=3이 있지만 실제로는 instance.progress를 어디서도 증가시키지
+  //   않는다(승급 판정 자체가 "10강 달성 개체 수"를 그때그때 세는 방식 -
+  //   promotionHandlers.m_lancelot/isImmortalPromotionReady 참고) - 그래서 항상
+  //   "0/3"만 뜨고 실제 진행 상황을 전혀 반영하지 못했다.
+  // 셋 다 실제 판정에 쓰는 것과 같은 값을 직접 계산해서 보여준다.
   function immortalProgressText(state, immortalDef) {
     const baseId = immortalDef.baseHeroId;
     const onField = state.field.flatMap((s) => s.occupants).filter((o) => o.heroId === baseId);
     if (!onField.length) return null;
     const cond = HEROES_BY_ID[baseId]?.immortalCondition;
-    if (!cond || cond.target == null) return null;
+    if (!cond) return null;
+    if (baseId === 'm_mama') {
+      const target = onField.some((inst) => inst.breakthrough) ? cond.extra.breakthroughCost : cond.extra.normalCost;
+      const impCount = countHeroOnField(state, IMP_HERO_ID).count;
+      return `임프 ${Math.min(target, impCount)}/${target}`;
+    }
+    if (baseId === 'm_frog_prince') {
+      return onField.some((inst) => inst.frogTransformed) ? '변신 완료' : '미변신';
+    }
+    if (baseId === 'm_lancelot') {
+      const maxEnhanced = onField.filter((inst) => (inst.enhanceLevel ?? 0) >= (cond.extra?.maxEnhance ?? 10)).length;
+      return `${Math.min(cond.target, maxEnhanced)}/${cond.target}`;
+    }
+    if (cond.target == null) return null;
     const best = onField.reduce((max, inst) => Math.max(max, inst.progress ?? 0), 0);
     return `${Math.min(cond.target, Math.floor(best))}/${cond.target}`;
   }
