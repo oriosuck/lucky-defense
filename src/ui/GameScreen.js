@@ -1091,7 +1091,16 @@ export function GameScreen({ getState, dispatch, onExit }) {
         }
       }
     }
-    if (targets.length === 0) return null;
+    // 먹일 대상이 하나도 없는 상태(필드에 채드 본인 말고 신화/불멸이 없음)에서
+    // 그냥 return null만 하면 ui.chadSellMode가 계속 켜진 채로 남는다 -
+    // renderCellQuickActions()가 chadSellMode가 켜져 있는 동안 전체를 숨기므로
+    // (line 872 근처 가드), 화살표도 안 뜨고 판매하기/취소 버튼도 다시 안 떠서
+    // 이후 어떤 칸을 눌러도 퀵액션 패널 자체가 영원히 안 나타나는 먹통 상태가
+    // 됐다(사용자 리포트 - "채드한테 먹이를 먹이니까 그 다음에 채드 다시
+    // 클릭하면 클릭이 안돼. 판매를 할 수가 없어" - 마지막 남은 대상을 먹인
+    // 뒤 "판매하기"를 한 번 더 눌렀을 때 재현됨). 위 !chad 케이스와 같은
+    // 패턴으로 여기서도 명시적으로 꺼줘야 한다.
+    if (targets.length === 0) { ui.chadSellMode = null; return null; }
     return el('div', { class: 'chad-arrow-layer' }, targets.map(({ slot, occ }) => {
       const rect = fieldCellRect(slot.row, slot.col);
       return el('button', {
