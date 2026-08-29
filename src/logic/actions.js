@@ -1,8 +1,7 @@
 import { findInstance, findSlot } from '../state/gameState.js';
 import { recordImmortalEvent } from './immortal.js';
-import { rollNormalTier } from './summon.js';
-import { INDY_TREASURE_INTERVAL_SEC } from './waveEvents.js';
-import { TIERS, HEROES_BY_ID } from '../data/heroes.js';
+import { INDY_DIG_DURATION_SEC } from './waveEvents.js';
+import { HEROES_BY_ID } from '../data/heroes.js';
 import { GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 
 export const ENHANCE_GOLD_COST = 30;
@@ -84,8 +83,9 @@ export function toggleBreakthrough(state, instanceId) {
 
 /**
  * 인디 전용 "보물 발굴"(5-4): 인디가 현재 보물이 등장한 칸에 있을 때만 발굴 가능.
- * 등급은 일반 소환과 동일한 고정 확률표를 사용하고, 기존 보유 보물보다 낮은 등급이면
- * 교체하지 않는다. 인디는 1개의 보물만 보유.
+ * 누르는 즉시 결과가 나오는 게 아니라 INDY_DIG_DURATION_SEC(2초) 동안 발굴 중
+ * 상태로 대기한다(사용자 지정) - 실제 등급 판정/지급은 waveEvents.js의
+ * tickIndyDig()가 시간이 다 됐을 때 처리한다. 인디는 1개의 보물만 보유.
  */
 export function digTreasure(state, instanceId) {
   const newState = structuredClone(state);
@@ -93,22 +93,17 @@ export function digTreasure(state, instanceId) {
   if (!found || found.instance.heroId !== 'm_indy') {
     return { success: false, reason: 'not-indy', newState: state };
   }
+  if (newState.indyTreasure.digging) {
+    return { success: false, reason: 'already-digging', newState: state };
+  }
   const treasureSlot = newState.indyTreasure.slot;
   if (!treasureSlot || treasureSlot.row !== found.slot.row || treasureSlot.col !== found.slot.col) {
     return { success: false, reason: 'wrong-position', newState: state };
   }
 
-  const rolledTier = rollNormalTier();
-  const current = found.instance.indyTreasureTier;
-  const upgraded = !current || TIERS.indexOf(rolledTier) > TIERS.indexOf(current);
-  if (upgraded) found.instance.indyTreasureTier = rolledTier;
-  // 발굴은 한 번으로 끝나야 한다(사용자 지적 - 예전엔 자리를 안 비워서 같은 자리에서
-  // 연속으로 계속 발굴할 수 있었음). 자리를 비우고 쿨타임을 다시 꽉 채워서, 발굴한
-  // 시점을 기준으로 정확히 INDY_TREASURE_INTERVAL_SEC 뒤에 새 위치가 등장하게 한다.
-  newState.indyTreasure.slot = null;
-  newState.indyTreasure.timer = INDY_TREASURE_INTERVAL_SEC;
+  newState.indyTreasure.digging = { instanceId, timer: INDY_DIG_DURATION_SEC };
 
-  return { success: true, tier: rolledTier, upgraded, newState };
+  return { success: true, newState };
 }
 
 /**

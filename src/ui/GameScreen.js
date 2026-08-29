@@ -22,7 +22,7 @@ import {
   ENHANCE_LUCKSTONE_COST,
 } from '../logic/actions.js';
 import { checkImmortalPromotion, isImmortalPromotionReady, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
-import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT } from '../logic/waveEvents.js';
+import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT, INDY_TREASURE_INTERVAL_SEC } from '../logic/waveEvents.js';
 import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 import { fieldOccupantCount, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
 import { el } from './components/dom.js';
@@ -69,9 +69,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 바꿔봤었는데, 카카오톡 인앱 브라우저 같은 환경에서 위쪽 UI(상단 배지)가 통째로
   // 잘려나가는 부작용이 나왔다(사용자 스크린샷으로 확인) - "안되면 크기 그냥
   // 원래대로 해야할거 같아"라는 지시대로 "contain"(전체가 다 보이게, 안 맞는
-  // 쪽엔 검은 여백)으로 되돌렸다. 검은 여백 자체는 별도로 추가한 전체화면 버튼
-  // (renderStageControls의 ⛶, Fullscreen API)으로 해결을 시도한다 - 지원 안 되는
-  // 브라우저(iOS 인앱 브라우저 다수)에서는 버튼이 조용히 no-op으로 빠진다.
+  // 쪽엔 검은 여백)으로 되돌렸다. 이때 여백을 우회하려고 추가했던 전체화면 버튼은
+  // 이후 사용자 요청으로 제거했다(renderStageControls 참고).
   function sizeStageToFit(wrap, stage) {
     const availW = wrap.clientWidth;
     const availH = wrap.clientHeight;
@@ -340,26 +339,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return el('div', { class: 'hole-effects' }, nodes);
   }
 
-  // 모바일에서 뷰포트 비율이 안 맞으면 위아래로 검은 여백이 남는 문제(위 sizeStageToFit
-  // 주석 참고)를 브라우저 자체 전체화면 API로 우회해본다 - 동영상 플레이어의
-  // 전체화면 버튼과 같은 개념(사용자 요청). `document.fullscreenEnabled`로 지원
-  // 여부를 확인해서 지원 안 하는 브라우저(iOS 인앱 브라우저 다수 - 카카오톡 포함)
-  // 에서는 버튼 자체를 안 띄운다(눌러도 반응 없는 죽은 버튼을 두지 않기 위해).
-  function isFullscreenSupported() {
-    return !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
-  }
-  function isCurrentlyFullscreen() {
-    return !!(document.fullscreenElement || document.webkitFullscreenElement);
-  }
-  function toggleFullscreen() {
-    if (isCurrentlyFullscreen()) {
-      (document.exitFullscreen ?? document.webkitExitFullscreen)?.call(document);
-    } else {
-      const root = document.documentElement;
-      (root.requestFullscreen ?? root.webkitRequestFullscreen)?.call(root)?.catch?.(() => {});
-    }
-  }
-
+  // 전체화면 버튼은 사용자 요청으로 제거했다(모바일 검은 여백 문제 우회용으로
+  // 넣었던 것 - "전체화면 모드는 제거해줘").
   function renderStageControls(state) {
     const buttons = [
       el('button', {
@@ -372,13 +353,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
         },
       }),
     ];
-    if (isFullscreenSupported()) {
-      buttons.push(el('button', {
-        class: `stage-control-btn ${isCurrentlyFullscreen() ? 'active' : ''}`,
-        text: '⛶', title: '전체화면',
-        onclick: toggleFullscreen,
-      }));
-    }
     buttons.push(el('button', { class: 'stage-control-btn', text: '🚪', onclick: onExit }));
     return el('div', { class: 'stage-controls' }, buttons);
   }
@@ -487,9 +461,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
         // ondragstart를 막아야 하는 이유는 heroVisual.js의 draggable=false 주석 참고.
         ondragstart: (e) => e.preventDefault(),
       });
-      if (isImmobilized(state, slot)) {
-        cell.appendChild(el('div', { class: 'immobilize-mark' }, [el('img', { src: UI_IMAGES.immobilizeIcon, alt: '이동불능' })]));
-      }
+      // 이동불능 사슬 아이콘은 칸 구석의 작은 아이콘이 아니라 캐릭터 앞을 덮는 큰
+      // 아이콘이어야 한다는 사용자 지적(참고 이미지) - renderHeroTokenLayer가 캐릭터
+      // 토큰과 같은 좌표계에서 그린다(여기서는 더 이상 그리지 않음).
       // 보물 위치는 필드 임의의 칸에 랜덤 등장한다(기획서 명시 사항) - 작은 코너 아이콘이
       // 아니라 칸 전체가 노란색으로 빛나야 눈에 띈다는 사용자 지적을 반영해 글로우로 표시.
       if (isTreasureSlot(state, slot)) cell.appendChild(el('div', { class: 'treasure-mark' }, [el('span', { text: '💰' })]));
@@ -571,12 +545,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 일반~전설 기준 비율을 20% 줄이고(0.55/1.0 → 0.44/0.8), 신화/불멸 배율은 기존
   // 절대 크기(1.25배) 대비 20% 더 키웠다 - 신화/불멸 배율은 이 기준 비율에 곱해지는
   // 값이라, 최종 신화 절대 크기가 "예전 신화 크기(0.55×1.25=0.6875)의 120%"가
-  // 되도록 역산하면 0.6875×1.2 / 0.44 = 1.875. 결과적으로 신화/불멸이 일반~전설
-  // 대비 1.875배(예전 1.25배보다 격차가 훨씬 커짐)로 확실히 더 크게 보인다.
+  // 되도록 역산하면 0.6875×1.2 / 0.44 = 1.875. 이후 사용자 요청으로 그 1.875배에서
+  // 다시 10%를 줄였다(1.875 × 0.9 = 1.6875).
   const HERO_TOKEN_HEIGHT_RATIO = 0.8;
   const HERO_TOKEN_WIDTH_RATIO = 0.44;
   const IMP_TOKEN_SCALE = 0.5; // 마마 임프는 다른 캐릭터의 절반 크기(사용자 지적 - 너무 컸음)
-  const MYTHIC_TOKEN_SCALE = 1.875;
+  const MYTHIC_TOKEN_SCALE = 1.6875;
   const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
   const ATTACK_CYCLE_MS = 900; // 공격 모션(위아래 스쿼시-스트레치) 반복 주기
 
@@ -620,11 +594,40 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 1.5px로 다시 키워서 눈에 띄면서도 예전(2px/8방향)처럼 뭉개지지 않는 지점을
   // 찾았다(Playwright 스크린샷으로 직접 눈으로 확인하며 맞춤).
   const OUTLINE_OFFSET_PX = 1.5;
-  function outlineFilter() {
+  function outlineFilter(color = '#fff') {
     const offsets = [
       [OUTLINE_OFFSET_PX, 0], [-OUTLINE_OFFSET_PX, 0], [0, OUTLINE_OFFSET_PX], [0, -OUTLINE_OFFSET_PX],
     ];
-    return offsets.map(([x, y]) => `drop-shadow(${x}px ${y}px 0 #fff)`).join(' ');
+    return offsets.map(([x, y]) => `drop-shadow(${x}px ${y}px 0 ${color})`).join(' ');
+  }
+
+  // 인디가 보유한 보물 등급에 따라 인디 본인의 외곽선 색을 바꾼다(사용자 지정) -
+  // 등급 색은 기존 팔레트(main.css의 --tier-color 변수들)와 맞춰뒀다.
+  const INDY_TREASURE_OUTLINE_COLOR = {
+    normal: '#8b93a8', rare: '#4fc3f7', hero: '#9b6df0', legendary: '#f5a623',
+  };
+
+  const INDY_GAUGE_FLASH_MS = 1500; // "완료" 텍스트가 잠깐 떠 있는 시간(1회성)
+
+  // 인디의 보물 발굴 쿨타임(30초)을 인디 캐릭터 바로 밑에 항상 보여주는 게이지
+  // (사용자 지정 - "이건 클릭 안 해도 보여지게"). 칸을 선택했는지와 무관하게 항상
+  // 그린다(renderHeroTokenLayer에서 인디가 있는 칸마다 호출). 게이지가 다 차서 새
+  // 보물이 등장한 순간(indyTreasure.completedAt)부터 INDY_GAUGE_FLASH_MS 동안만
+  // "완료" 텍스트를 한 번 보여준다 - 궁극기 링/공격 모션과 같은 이유로 고정 delay가
+  // 아니라 실제 경과 시간으로 판정한다(0.2초마다 DOM이 재생성되는 구조라 매 렌더
+  // 새로 계산해야 멈추지 않고 자연스럽게 사라진다).
+  function renderIndyTreasureGauge(state, rect) {
+    const fillRatio = Math.max(0, Math.min(1, 1 - state.indyTreasure.timer / INDY_TREASURE_INTERVAL_SEC));
+    const completedElapsedMs = state.indyTreasure.completedAt ? Date.now() - state.indyTreasure.completedAt : Infinity;
+    const showComplete = completedElapsedMs < INDY_GAUGE_FLASH_MS;
+    const gaugeTop = rect.top + rect.height + 1.2;
+    return el('div', {
+      class: 'indy-treasure-gauge',
+      style: `left:${rect.left}%; top:${gaugeTop}%; width:${rect.width}%;`,
+    }, [
+      el('div', { class: 'indy-treasure-gauge-fill', style: `width:${fillRatio * 100}%;` }),
+      showComplete ? el('div', { class: 'indy-treasure-gauge-complete', text: '완료' }) : null,
+    ]);
   }
 
   function renderHeroTokenLayer(state) {
@@ -670,8 +673,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
         // 디버프는 개체 하나가 아니라 칸 전체에 적용되고(사용자 지적 - 한 칸에 3마리가
         // 있으면 그 중 1마리만이 아니라 칸에 있는 전원이 대상이어야 한다), 칸도 한 번에
         // 6개까지 동시에 물든다(사용자 지정 - 이동불능 게이지형과 동일).
+        // 디버프는 칸이 아니라 개체(instanceId) 기준 - 캐릭터를 다른 칸으로 옮기면
+        // 보라색도 같이 따라가야 한다(사용자 지적).
         const debuffEv = state.eventLog.debuffEvent;
-        const debuffed = debuffEv && debuffEv.slots.some((s) => s.row === slot.row && s.col === slot.col);
+        const debuffed = debuffEv && debuffEv.instanceIds.includes(occ.instanceId);
         // 탑 베인이 방금 궁극기 환산 임계치(이동 왕복 15~20회 랜덤)를 넘겼으면 잠깐
         // 이펙트를 준다(사용자 요청 - immortal.js의 recordImmortalEvent가 남긴
         // 타임스탬프 확인). 게임 루프가 0.2초마다 전체 DOM을 다시 그리는 구조라
@@ -691,6 +696,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
         if (usingUltimate) filterParts.push('drop-shadow(0 0 10px #ffd54a)', 'drop-shadow(0 0 18px #ff9d2f)');
         if (debuffed) filterParts.push('sepia(1)', 'hue-rotate(220deg)', 'saturate(3)');
         if (outlined) filterParts.push(outlineFilter());
+        // 인디가 보유한 보물 등급에 따라 인디 자신의 외곽선 색을 바꾼다(사용자 지정).
+        const indyOutlineColor = occ.heroId === 'm_indy' ? INDY_TREASURE_OUTLINE_COLOR[occ.indyTreasureTier] : null;
+        if (indyOutlineColor) filterParts.push(outlineFilter(indyOutlineColor));
 
         // 공격 모션(위아래로 살짝 늘어났다 줄어드는 스쿼시-스트레치)도 궁 링/몬스터
         // 이동과 같은 이유로 실제 경과 시간 기준 위상을 매 렌더 다시 계산한다 - 예전
@@ -709,6 +717,28 @@ export function GameScreen({ getState, dispatch, onExit }) {
           occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
         ]));
       });
+
+      // 이동불능(속박) 사슬 아이콘 - 칸 구석의 작은 아이콘이 아니라 캐릭터 바로
+      // 앞(위)을 덮는 큰 아이콘으로 표시해달라는 사용자 지적(참고 이미지: 캐릭터
+      // 크기만큼 큰 사슬 X가 캐릭터 앞에 겹쳐 보임). 캐릭터 토큰과 같은 좌표계
+      // (cellCenterX/baseTop/tokenWidth/tokenHeight)를 그대로 재사용해 칸 전체(3마리
+      // 스택 포함)를 덮도록 살짝 더 키우고, z-index를 캐릭터 토큰보다 위로 둬서
+      // "캐릭터 앞"에 오게 한다.
+      if (isImmobilized(state, slot)) {
+        const chainWidth = tokenWidth * 1.6;
+        const chainHeight = tokenHeight * 1.15;
+        layer.appendChild(el('div', {
+          class: 'stage-immobilize-mark',
+          style: `left:${cellCenterX}%; top:${baseTop + tokenHeight / 2}%; width:${chainWidth}%; height:${chainHeight}%; z-index:${20 + slot.row};`,
+        }, [el('img', { src: UI_IMAGES.immobilizeIcon, alt: '이동불능' })]));
+      }
+
+      // 인디 쿨타임 게이지는 칸에 다른 영웅이 같이 쌓여 있어도(보물이 이미 다른
+      // 캐릭터가 있는 칸에 등장할 수 있다는 것과는 별개로, 인디 본인이 서 있는 칸
+      // 기준) 항상 그린다 - 선택 여부와 무관.
+      if (slot.occupants.some((o) => o.heroId === 'm_indy')) {
+        layer.appendChild(renderIndyTreasureGauge(state, rect));
+      }
     }
     return layer;
   }
@@ -788,9 +818,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
       }));
     }
     if (instance.heroId === 'm_indy') {
-      const canDig = state.indyTreasure.slot && state.indyTreasure.slot.row === slot.row && state.indyTreasure.slot.col === slot.col;
+      const onTreasureSlot = state.indyTreasure.slot && state.indyTreasure.slot.row === slot.row && state.indyTreasure.slot.col === slot.col;
+      const digging = state.indyTreasure.digging;
+      const isDiggingHere = digging?.instanceId === instance.instanceId;
       below.push(el('button', {
-        class: 'cell-quick-btn cell-quick-extra', text: '발굴', disabled: !canDig,
+        class: 'cell-quick-btn cell-quick-extra',
+        text: isDiggingHere ? '발굴 중...' : '발굴',
+        disabled: !onTreasureSlot || (!!digging && !isDiggingHere) || isDiggingHere,
         onclick: () => apply(digTreasure(state, instance.instanceId)),
       }));
     }

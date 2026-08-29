@@ -155,7 +155,9 @@ export const IMMORTAL_CONDITIONS = {
   },
   m_bamba: {
     id: 'i_primal_bamba', name: '원시 밤바', type: 'hybrid', target: 30,
-    tickIntervalSec: [1, 5], incrementPerTick: 1,
+    // 스택(30) 쌓이는 속도가 너무 빠르다는 사용자 지적(원래 1~5초 랜덤 간격) -
+    // 5~15초 랜덤으로 늦췄다(사용자 지정 수치).
+    tickIntervalSec: [5, 15], incrementPerTick: 1,
     extra: { postCapChance: 0.001, postCapIntervalSec: [1, 5] },
   },
   m_ato: {

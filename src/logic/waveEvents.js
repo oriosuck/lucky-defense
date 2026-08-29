@@ -1,6 +1,8 @@
 import { waveDuration, TOTAL_WAVES, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
-import { fieldOccupantCount } from '../state/gameState.js';
+import { fieldOccupantCount, findInstance } from '../state/gameState.js';
 import { countHeroOnField } from './synthesis.js';
+import { rollNormalTier } from './summon.js';
+import { TIERS } from '../data/heroes.js';
 import {
   MONSTER_MAX,
   MONSTER_PER_ROUND,
@@ -40,6 +42,7 @@ const DEBUFF_MARK_SEC = 20;
 
 // ---- 인디 "보물 발굴" (5-4) ----
 export const INDY_TREASURE_INTERVAL_SEC = 30;
+export const INDY_DIG_DURATION_SEC = 2; // "발굴" 버튼을 눌렀을 때 실제 발굴에 걸리는 시간(사용자 지정)
 
 // 몬스터 처치 속도 - 데미지 계산이 시뮬레이션 범위 밖이라 임시로 둔 플레이스홀더 수치.
 // 예전 값(2/초)은 일반 라운드(30초)의 트리클 스폰 속도(40/30≈1.33/초)보다 빨라서
@@ -72,11 +75,14 @@ function pickRandomSlots(state, count) {
 
 // 디버프는 이동불능(게이지형)과 마찬가지로 한 칸이 아니라 6칸을 한 번에 대상으로
 // 삼는다(사용자 지정). 빈 칸을 물들여봐야 의미가 없으니(디버프는 캐릭터 색조
-// 변경 연출이라) 점유된 칸 중에서만 뽑는다.
-function pickRandomOccupiedSlots(state, count) {
+// 변경 연출이라) 점유된 칸 중에서만 뽑는다. 발동 시점의 "칸"이 아니라 그 칸에 있던
+// "개체"를 대상으로 기록한다(사용자 지적 - 디버프 걸린 캐릭터를 다른 칸으로 옮기면
+// 보라색도 같이 따라가야 한다, 칸에 눌러붙어 있으면 안 됨) - 그래서 좌표가 아니라
+// instanceId 목록을 뽑아 반환한다.
+function pickDebuffTargetInstanceIds(state, slotCount) {
   const occupied = state.field.filter((s) => s.occupants.length > 0);
   const shuffled = [...occupied].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count).map((s) => ({ row: s.row, col: s.col }));
+  return shuffled.slice(0, slotCount).flatMap((s) => s.occupants.map((o) => o.instanceId));
 }
 
 /**
@@ -173,13 +179,13 @@ function onWaveStart(state) {
   }
 
   // 보스 일반공격(디버프) 스케줄 - 이동불능과 별개로, 예정된 라운드마다 발동하고 다음
-  // 예정 라운드를 다시 주사위(1~2)로 굴린다. 대상은 개체 하나가 아니라 칸 단위다
-  // (사용자 지적 - 한 칸에 3마리가 쌓여 있으면 그 중 1마리만 아니라 칸 전체가 디버프
-  // 대상이어야 한다). 칸도 하나가 아니라 이동불능(게이지형)과 똑같이 6칸을 한 번에
-  // 물들인다(사용자 지정).
+  // 예정 라운드를 다시 주사위(1~2)로 굴린다. 대상은 칸이 아니라 그 칸에 있던 개체
+  // (인스턴스)다(사용자 지적 - 칸에 고정되면 안 되고, 옮기면 디버프가 캐릭터를
+  // 따라가야 한다). 칸 자체는 이동불능(게이지형)과 똑같이 6칸을 한 번에 골라 그
+  // 안의 개체를 전부 대상으로 삼는다(사용자 지정).
   if (state.wave === state.bossAttackSchedule.nextAttackRound) {
-    const targets = pickRandomOccupiedSlots(state, 6);
-    state.eventLog.debuffEvent = targets.length ? { slots: targets, timer: DEBUFF_MARK_SEC } : null;
+    const targetIds = pickDebuffTargetInstanceIds(state, 6);
+    state.eventLog.debuffEvent = targetIds.length ? { instanceIds: targetIds, timer: DEBUFF_MARK_SEC } : null;
     state.bossAttackSchedule.nextAttackRound = state.wave + 1 + randomInt(2);
   }
 
@@ -313,6 +319,9 @@ export function tickIndyTreasure(state, deltaSec) {
     newState.indyTreasure.slot = null;
     return newState;
   }
+  // 발굴 중(digging)일 때는 쿨타임을 멈춘다 - 안 그러면 발굴 결과가 나오기 전에
+  // 자연 만료로 새 자리가 뽑혀서 발굴 중이던 자리가 바뀌어 보일 수 있다.
+  if (state.indyTreasure.digging) return state;
   const newState = structuredClone(state);
   const t = newState.indyTreasure;
   t.timer -= deltaSec;
@@ -320,6 +329,34 @@ export function tickIndyTreasure(state, deltaSec) {
     t.timer += INDY_TREASURE_INTERVAL_SEC;
     const slot = newState.field[randomInt(newState.field.length)];
     t.slot = { row: slot.row, col: slot.col };
+    t.completedAt = Date.now(); // 게이지가 다 찬 순간 - UI가 "완료" 텍스트를 잠깐 보여주는 기준
   }
+  return newState;
+}
+
+/**
+ * "발굴" 버튼을 누르면 즉시 결과가 나오지 않고 INDY_DIG_DURATION_SEC(2초) 동안
+ * digging 상태로 대기한 뒤 이 함수가 실제 결과를 확정한다(사용자 지정 - "보물
+ * 발굴 누르고 발굴하는 시간 2초 부여"). 판정 로직 자체는 예전 즉시 처리 로직과
+ * 동일(일반 소환과 같은 확률표, 기존 보유 등급보다 낮으면 교체하지 않음) - 시작을
+ * actions.js의 digTreasure()가 맡고, 여기서는 시간이 다 됐을 때의 확정만 담당한다.
+ */
+export function tickIndyDig(state, deltaSec) {
+  if (!state.indyTreasure.digging) return state;
+  const newState = structuredClone(state);
+  const digging = newState.indyTreasure.digging;
+  digging.timer -= deltaSec;
+  if (digging.timer > 0) return newState;
+
+  const found = findInstance(newState, digging.instanceId);
+  newState.indyTreasure.digging = null;
+  if (found) {
+    const rolledTier = rollNormalTier();
+    const current = found.instance.indyTreasureTier;
+    const upgraded = !current || TIERS.indexOf(rolledTier) > TIERS.indexOf(current);
+    if (upgraded) found.instance.indyTreasureTier = rolledTier;
+  }
+  newState.indyTreasure.slot = null;
+  newState.indyTreasure.timer = INDY_TREASURE_INTERVAL_SEC;
   return newState;
 }
