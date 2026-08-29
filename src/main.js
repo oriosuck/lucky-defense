@@ -5,25 +5,6 @@ import { GameScreen } from './ui/GameScreen.js';
 
 const appEl = document.getElementById('app');
 
-// 더블탭 확대 방지의 최종 방어선(JS 레벨) - 뷰포트 meta(user-scalable=no)와 CSS의
-// `touch-action:manipulation`(main.css `*` 규칙)을 이미 걸어뒀는데도 태블릿에서
-// 여전히 더블탭하면 화면이 확대된다는 재지적을 받았다(user-scalable=no는 iOS가
-// 접근성 이유로 여러 버전째 무시하고 있고, touch-action도 기기/브라우저에 따라
-// double-tap-to-zoom 제스처 인식 자체를 완전히 못 막는 경우가 있다). 연속된
-// touchend 사이 간격이 짧으면(더블탭으로 판정, 300ms) 그 두 번째 touchend의
-// 기본 동작(확대)을 직접 막는 고전적인 방식을 추가한다 - preventDefault는 그
-// 제스처의 확대 판정만 막을 뿐 각 터치의 click 이벤트는 그대로 발생하므로, 버튼을
-// 빠르게 두 번 눌러 두 번의 독립된 클릭으로 처리되던 기존 동작엔 영향이 없다.
-// `{ passive: false }`가 필수 - 없으면 preventDefault가 무시된다.
-let lastTouchEndAt = 0;
-document.addEventListener('touchend', (e) => {
-  const now = Date.now();
-  if (now - lastTouchEndAt <= 300) {
-    e.preventDefault();
-  }
-  lastTouchEndAt = now;
-}, { passive: false });
-
 function swapRoot(node) {
   appEl.innerHTML = '';
   appEl.appendChild(node);
