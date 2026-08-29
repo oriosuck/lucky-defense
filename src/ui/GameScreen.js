@@ -146,7 +146,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
       }
       return;
     }
-    if (ui.popup) return;
+    // 룰렛 팝업은 전체화면을 덮는 모달이 아니라 하단 시트라 필드가 여전히 보이는데도
+    // 조작이 막혀 있었다(사용자 지적 - "룰렛 팝업이 떠있을 때에도 필드에 있는 캐릭터
+    // 조작 가능하게"). 다른 팝업(신화/강화/미션)은 기존대로 필드 조작을 막는다.
+    if (ui.popup && ui.popup !== 'roulette') return;
     const row = Number(cellEl.dataset.row);
     const col = Number(cellEl.dataset.col);
     const state = getState();
