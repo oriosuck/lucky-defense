@@ -190,9 +190,12 @@ export const IMMORTAL_CONDITIONS = {
     tickIntervalSec: 1, incrementPerTick: 60,
   },
   m_bane: {
-    // 궁극기 이펙트(연출용, 실질 데미지 없음)는 고정 11회가 아니라 왕복 이동
-    // 15~20회(매번 랜덤) 사이마다 한 번씩 터진다(사용자 재확인 사항).
-    id: 'i_top_bane', name: '탑 베인', type: 'real-event', target: 132,
+    // 불멸 조건은 "이동 132회"가 아니라 "필살기(궁극기) 12번 사용"이다(사용자 지정
+    // - "베인 불멸 기준은 필살기 12번 사용하는거야"). 궁극기 자체는 여전히 이동
+    // 왕복 15~20회(매번 랜덤)마다 한 번씩 터진다(사용자 재확인 사항) - target(12)은
+    // 그 "궁극기 사용 횟수"를 센 값이고, 원본 이동 누적치는 별도로
+    // instance.moveProgress에 보관한다(immortal.js recordImmortalEvent 참고).
+    id: 'i_top_bane', name: '탑 베인', type: 'real-event', target: 12,
     eventType: 'move', extra: { ultimateThresholdMin: 15, ultimateThresholdMax: 20 },
   },
   m_roka: {
@@ -202,9 +205,9 @@ export const IMMORTAL_CONDITIONS = {
   m_batman: {
     id: 'i_ace_batman', name: '에이스 배트맨', type: 'hybrid', target: 1,
     // "궁극기 사용 시" 판정인데 실제 궁극기 발동 이벤트가 없어서 주기적 판정으로
-    // 근사한다 - 5초마다는 너무 잦다는 사용자 지적으로 10초에 1회로 늦췄다(사용자
-    // 지정 수치, 권장안 채택).
-    tickIntervalSec: 10, eventType: 'ultimateAttempt',
+    // 근사한다 - 처음 5초는 너무 잦다는 지적으로 10초로 늦췄다가, 다시 20초로
+    // 한 번 더 늦춰달라는 사용자 지정을 반영했다.
+    tickIntervalSec: 20, eventType: 'ultimateAttempt',
     extra: { minEnhance: 10, baseChance: 0.01, perEnhanceBonus: 0.025 },
   },
   m_mama: {
@@ -212,7 +215,7 @@ export const IMMORTAL_CONDITIONS = {
     eventType: 'consumeImp',
     // 임프 생성 간격은 원래 상태(돌파/라운드/강화)별로 따로 뒀었는데 "너무 빠르다"는
     // 사용자 지적으로 전부 걷어내고 1~10초 랜덤 하나로 단순화했다(사용자 지정).
-    extra: { impIntervalSec: [1, 10], stopRound: 10, normalCost: 9, breakthroughCost: 7 },
+    extra: { impIntervalSec: [1, 10], stopRound: 9, normalCost: 9, breakthroughCost: 7 },
   },
   m_ninja: {
     id: 'i_ghost_ninja', name: '귀신 닌자', type: 'hybrid', target: 11,

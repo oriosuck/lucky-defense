@@ -716,9 +716,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 좌표(centerX/footY/tokenWidth)를 기준으로 다시 그려서 실제 발밑 바로 아래에
   // 오도록 고쳤다.
   function renderBaneUltimateGauge(occ, centerX, footY, width) {
+    // 불멸 승급 판정에 쓰이는 occ.progress는 이제 "궁극기 사용 횟수"(target 12)라서
+    // 이 게이지(다음 궁극기까지 남은 이동량)는 별도로 쌓이는 occ.moveProgress
+    // 기준으로 계산해야 한다(immortal.js recordImmortalEvent 참고).
     const start = occ.ultimateWindowStart ?? 0;
     const end = occ.nextUltimateAt ?? start;
-    const fillRatio = end > start ? Math.max(0, Math.min(1, ((occ.progress ?? 0) - start) / (end - start))) : 0;
+    const fillRatio = end > start ? Math.max(0, Math.min(1, ((occ.moveProgress ?? 0) - start) / (end - start))) : 0;
     return el('div', {
       class: 'indy-treasure-gauge',
       style: `left:${centerX - width / 2}%; top:${footY}%; width:${width}%;`,
@@ -1131,9 +1134,16 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return heroDef.name;
   }
 
+  // 실제로 속박되는 건 칸 좌표가 아니라 active 전환 시점에 스냅샷 뜬 개체
+  // (targetInstanceIds)다(사용자 지적 - "원을 피했으면 캐릭터가 없는 자리는
+  // 속박이 안되는게 맞아... 피한애를 다시 그 칸에 들여다놓으면 피했는데도
+  // 속박되어버려"). 그 칸에 지금 있는 개체 중 스냅샷에 있는 게 하나라도 있으면
+  // 그 칸을 속박 상태로 표시한다 - 필링 단계에서 도망친 개체나, active 이후에
+  // 새로 들어온 개체는 스냅샷에 없으므로 자연히 제외된다.
   function isImmobilized(state, slot) {
     const ev = state.eventLog.immobilizeEvent;
-    return ev && ev.phase === 'active' && ev.targetSlots.some((t) => t.row === slot.row && t.col === slot.col);
+    if (!ev || ev.phase !== 'active' || !ev.targetInstanceIds) return false;
+    return slot.occupants.some((o) => ev.targetInstanceIds.includes(o.instanceId));
   }
   function isImmobilizeFilling(state, slot) {
     const ev = state.eventLog.immobilizeEvent;
