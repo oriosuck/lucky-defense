@@ -30,15 +30,6 @@ function createEmptyField() {
   return slots;
 }
 
-// 이동불능 이벤트가 발생할 라운드 2개를 게임 시작 시 한 번만 뽑는다.
-// (기획서: 게임당 정확히 2회 - 1~9라운드 중 랜덤 1회 + 11~19라운드 중 랜덤 1회.
-// 보스 일반공격(디버프) 스케줄과는 별개로 강제 발생한다)
-function rollImmobilizeRounds() {
-  const first = 1 + Math.floor(Math.random() * 9); // 1~9
-  const second = 11 + Math.floor(Math.random() * 9); // 11~19
-  return [first, second];
-}
-
 // 보스 일반공격(디버프) 스케줄: 1~2 사이 주사위를 굴려 다음 발동 라운드를 정한다
 // (기술설계서 4장 scheduleNextBossAttack 의사코드).
 function rollNextBossAttackRound(fromRound) {
@@ -68,7 +59,6 @@ export function createGameState(config) {
     missions: createMissionProgress(),
     bossAttackSchedule: {
       nextAttackRound: rollNextBossAttackRound(0),
-      immobilizeRounds: rollImmobilizeRounds(),
     },
     bossRaidWindow: null, // 10/20라운드 진입 시에만 세팅
     indyTreasure: { slot: null, timer: 30, digging: null, completedAt: null }, // 인디 "보물 발굴"(5-4) - 30초마다 새 칸에 등장
