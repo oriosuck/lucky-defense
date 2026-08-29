@@ -690,14 +690,19 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // "완료" 텍스트를 한 번 보여준다 - 궁극기 링/공격 모션과 같은 이유로 고정 delay가
   // 아니라 실제 경과 시간으로 판정한다(0.2초마다 DOM이 재생성되는 구조라 매 렌더
   // 새로 계산해야 멈추지 않고 자연스럽게 사라진다).
-  function renderIndyTreasureGauge(state, rect) {
+  // **주의**: 처음엔 칸(rect) 하단 기준으로 그렸는데, 인디는 신화 등급이라 토큰
+  // 박스가 칸보다 훨씬 커서(위쪽으로 크게 튀어나옴) 실제 캐릭터 발밑과 칸 하단이
+  // 안 맞아 게이지가 멀리 떨어져 보였다(사용자 지적 - "인디도 바가 지금 너무
+  // 멀어") - 베인 궁 게이지와 같은 이유/같은 방식으로, 칸이 아니라 토큰 자신의
+  // 좌표(centerX/footY/tokenWidth)를 기준으로 다시 그려서 실제 발밑 바로 아래에
+  // 오도록 고쳤다.
+  function renderIndyTreasureGauge(state, centerX, footY, width) {
     const fillRatio = Math.max(0, Math.min(1, 1 - state.indyTreasure.timer / INDY_TREASURE_INTERVAL_SEC));
     const completedElapsedMs = state.indyTreasure.completedAt ? Date.now() - state.indyTreasure.completedAt : Infinity;
     const showComplete = completedElapsedMs < INDY_GAUGE_FLASH_MS;
-    const gaugeTop = rect.top + rect.height + 1.2;
     return el('div', {
       class: 'indy-treasure-gauge',
-      style: `left:${rect.left}%; top:${gaugeTop}%; width:${rect.width}%;`,
+      style: `left:${centerX - width / 2}%; top:${footY}%; width:${width}%;`,
     }, [
       el('div', { class: 'indy-treasure-gauge-fill', style: `width:${fillRatio * 100}%;` }),
       showComplete ? el('div', { class: 'indy-treasure-gauge-complete', text: '완료' }) : null,
@@ -878,7 +883,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
       // 캐릭터가 있는 칸에 등장할 수 있다는 것과는 별개로, 인디 본인이 서 있는 칸
       // 기준) 항상 그린다 - 선택 여부와 무관.
       if (slot.occupants.some((o) => o.heroId === 'm_indy')) {
-        layer.appendChild(renderIndyTreasureGauge(state, rect));
+        layer.appendChild(renderIndyTreasureGauge(state, cellCenterX, baseTop + tokenHeight + 1, tokenWidth));
       }
     }
     return layer;
@@ -1149,15 +1154,32 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const ev = state.eventLog.immobilizeEvent;
     return ev && ev.phase === 'filling' && ev.targetSlots.some((t) => t.row === slot.row && t.col === slot.col);
   }
+  // 보물 위치 글로우는 상시 노출이 아니라 "새로 등장한 순간"과 "인디를 다시
+  // 클릭한 순간"에만 잠깐(1초) 반짝이고 사라진다(사용자 지정 - "쿨타임 찼을때
+  // 한번 1초 보여주고 사라졌다가 인디 다시 클릭하면 한 1초 보여줬다 사라지는거야.
+  // 지금처럼 계속 보이는 게 아니라"). 보물 자체(state.indyTreasure.slot)와
+  // "발굴 가능" 여부는 계속 유효하지만(칸 버튼 활성화 등 다른 로직은 그대로),
+  // 화면에 노란 글로우로 보여주는 것만 두 트리거의 1초 플래시로 제한한다 -
+  // 궁극기 링/공격 모션과 같은 이유로 고정 delay가 아니라 실제 경과 시간을
+  // 매 렌더 다시 계산한다.
+  const INDY_TREASURE_MARK_FLASH_MS = 1000;
   function isTreasureSlot(state, slot) {
     const t = state.indyTreasure.slot;
-    return t && t.row === slot.row && t.col === slot.col;
+    if (!t || t.row !== slot.row || t.col !== slot.col) return false;
+    const spawnedElapsedMs = state.indyTreasure.completedAt ? Date.now() - state.indyTreasure.completedAt : Infinity;
+    const clickedElapsedMs = ui.indyMarkerFlashAt ? Date.now() - ui.indyMarkerFlashAt : Infinity;
+    return spawnedElapsedMs < INDY_TREASURE_MARK_FLASH_MS || clickedElapsedMs < INDY_TREASURE_MARK_FLASH_MS;
   }
 
   function onSlotClick(state, slot) {
     // 선택 기준은 개체 하나가 아니라 칸 자체다(사용자 지정 규칙) - 판매 등 액션을
     // 눌러도 그 칸에 뭔가 남아있는 한 선택이 계속 유지된다.
     ui.selectedSlot = slot.occupants.length ? { row: slot.row, col: slot.col } : null;
+    // 인디를 클릭하면 보물이 있는 칸(인디가 서 있는 칸과 다를 수 있음)의 글로우를
+    // 1초간 다시 보여준다(isTreasureSlot 참고).
+    if (slot.occupants.some((o) => o.heroId === 'm_indy')) {
+      ui.indyMarkerFlashAt = Date.now();
+    }
     render(getState());
   }
 

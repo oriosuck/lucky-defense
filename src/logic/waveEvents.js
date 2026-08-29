@@ -346,9 +346,12 @@ export function tickIndyTreasure(state, deltaSec) {
     newState.indyTreasure.slot = null;
     return newState;
   }
-  // 발굴 중(digging)일 때는 쿨타임을 멈춘다 - 안 그러면 발굴 결과가 나오기 전에
-  // 자연 만료로 새 자리가 뽑혀서 발굴 중이던 자리가 바뀌어 보일 수 있다.
-  if (state.indyTreasure.digging) return state;
+  // 발굴 중(digging)일 때는 물론이고, 보물이 이미 등장했지만 아직 발굴 전인
+  // 동안(slot이 있음)에도 쿨타임을 멈춘다(사용자 지정 - "인디 보물 찾기 전이면
+  // 쿨타임 멈춰야해") - 안 그러면 플레이어가 30초 안에 못 찾았을 때 발굴도
+  // 안 됐는데 자리가 자동으로 다른 칸으로 옮겨가버린다. 다음 타이머는 실제로
+  // 발굴에 성공(tickIndyDig)했을 때만 다시 시작된다.
+  if (state.indyTreasure.digging || state.indyTreasure.slot) return state;
   const newState = structuredClone(state);
   const t = newState.indyTreasure;
   t.timer -= deltaSec;
