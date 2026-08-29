@@ -1,5 +1,5 @@
 import { createMissionProgress } from '../data/missions.js';
-import { HEROES_BY_ID } from '../data/heroes.js';
+import { HEROES_BY_ID, IMP_HERO_ID } from '../data/heroes.js';
 import { STARTING_GOLD, FIELD_MAX_CAPACITY, MONSTER_MAX, NORMAL_SUMMON_INITIAL_COST } from '../data/constants.js';
 
 export const FIELD_ROWS = 4;
@@ -99,8 +99,17 @@ export function createGameState(config) {
   };
 }
 
+// 마마가 만드는 임프(x_imp)는 실제 필드 토큰으로 존재하긴 하지만 "캐릭터 카운트"
+// (인원 X/30, 소환/조합 필드 꽉 참 판정)에는 안 잡혀야 한다(사용자 지정 - 임프가
+// 쌓이면서 30칸이 금방 차버려 정작 진짜 영웅을 소환/조합할 자리가 없어지는 문제였음).
+// 임프도 물리적으로는 칸을 차지하므로(findAutoPlaceSlot이 실제 빈 칸/스택 여유를
+// 그대로 확인) 필드가 진짜로 꽉 차면 임프도 더 못 놓이는 건 그대로다 - 여기서
+// 빼는 건 "인원수 상한(30)" 판정에서만이다.
 export function fieldOccupantCount(state) {
-  return state.field.reduce((sum, slot) => sum + slot.occupants.length, 0);
+  return state.field.reduce(
+    (sum, slot) => sum + slot.occupants.filter((o) => o.heroId !== IMP_HERO_ID).length,
+    0,
+  );
 }
 
 export function findSlot(state, row, col) {
@@ -140,7 +149,12 @@ export function createHeroInstance(heroId, overrides = {}) {
 
 // 동일 종류가 쌓여있는 칸을 우선하고, 없으면 빈 칸을 찾는다.
 export function findAutoPlaceSlot(state, heroId) {
-  if (fieldOccupantCount(state) >= state.fieldMaxCapacity) return null;
+  // 임프는 캐릭터 카운트(인원 30 상한)에 안 잡히니(fieldOccupantCount 참고) 이
+  // 상한 체크도 임프 배치에는 적용하면 안 된다 - 그렇지 않으면 진짜 영웅이 이미
+  // 30마리로 꽉 찬 상태에서는(물리적 빈 칸이 있어도) 임프가 하나도 못 나오게
+  // 막혀버려서, "임프는 캐릭터 카운트에 안 들어간다"는 의도와 반대로 인원 상한에
+  // 여전히 종속되는 셈이 된다.
+  if (heroId !== IMP_HERO_ID && fieldOccupantCount(state) >= state.fieldMaxCapacity) return null;
   const heroDef = HEROES_BY_ID[heroId];
   if (!heroDef) return null;
   if (heroDef.tier !== 'mythic' && heroDef.tier !== 'immortal') {

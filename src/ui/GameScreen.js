@@ -18,6 +18,8 @@ import {
   toggleBreakthrough,
   digTreasure,
   upgradeGlobalEnhance,
+  cycleBatmanMode,
+  nextEnhanceGoldCost,
   ENHANCE_GOLD_COST,
   ENHANCE_LUCKSTONE_COST,
 } from '../logic/actions.js';
@@ -767,6 +769,19 @@ export function GameScreen({ getState, dispatch, onExit }) {
           heroImage(heroDef, { className: 'stage-hero-image', instance: occ, style: imgStyle }),
           occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
         ]));
+
+        // 로카(불멸 조건: 시간 기반 자동 누적, 10초마다 1~5, 목표 160)의 "장전"
+        // 진행도를 캐릭터 바로 위에 항상 표시(사용자 지정 - 선택 여부와 무관, 다른
+        // 신화들은 PR #27에서 진행도 표시를 전부 없앴지만 로카는 예외로 다시 요청받음).
+        if (occ.heroId === 'm_roka') {
+          const target = heroDef.immortalCondition?.target ?? 0;
+          const progress = Math.min(target, Math.floor(occ.progress ?? 0));
+          layer.appendChild(el('div', {
+            class: 'roka-charge-badge',
+            style: `left:${centerX}%; top:${top}%; z-index:${30 + slot.row};`,
+            text: `장전 ${progress}/${target}`,
+          }));
+        }
       });
 
       // 이동불능(속박) 사슬 아이콘 - 칸 구석의 작은 아이콘이 아니라 캐릭터 바로
@@ -890,13 +905,26 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 이동은 이제 버튼이 아니라 칸을 직접 드래그하는 방식이라(아래 드래그 핸들러
     // 참고) 탑 베인도 별도 버튼이 필요 없다 - 드래그로 옮겨도 moveHero()가 그대로
     // 호출되어 불멸 진행도가 똑같이 쌓인다. 강화만 버튼으로 남겨둔다(드래그로 대체할
-    // 수 없는 액션이라 아이언미야옹 전용 진행 조건 버튼을 유지).
-    if (heroDef.immortalCondition?.eventType === 'enhance') {
+    // 수 없는 액션이라 아이언미야옹/배트맨 전용 진행 조건 버튼을 유지). 배트맨은
+    // eventType이 'enhance'가 아니라 강화 레벨(extra.minEnhance) 자체가 승급 조건의
+    // 전제라 조건을 넓혀야 버튼이 뜬다(예전엔 이 조건에 안 걸려서 배트맨은 강화 버튼
+    // 자체가 아예 안 떠서 승급 조건을 영원히 만족할 수 없는 버그였음).
+    if (heroDef.immortalCondition?.eventType === 'enhance' || heroDef.immortalCondition?.extra?.minEnhance != null) {
+      const goldCost = nextEnhanceGoldCost(instance.heroId, instance.enhanceLevel);
       below.push(el('button', {
         class: 'cell-quick-btn cell-quick-extra',
-        text: `강화 (${ENHANCE_GOLD_COST}G ${ENHANCE_LUCKSTONE_COST}💎)`,
-        disabled: state.gold < ENHANCE_GOLD_COST || state.luckstone < ENHANCE_LUCKSTONE_COST,
+        text: `강화 (${goldCost}G ${ENHANCE_LUCKSTONE_COST}💎)`,
+        disabled: state.gold < goldCost || state.luckstone < ENHANCE_LUCKSTONE_COST,
         onclick: () => apply(enhanceHero(state, instance.instanceId)),
+      }));
+    }
+    // 에이스 배트맨(불멸) 전용 모드 변신 - 기본/투수모드/타자모드를 순환한다.
+    if (instance.heroId === 'i_ace_batman') {
+      const modeLabel = { pitcher: '투수모드', batter: '타자모드' }[instance.batmanMode] ?? '기본모드';
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra',
+        text: `변신 (현재: ${modeLabel})`,
+        onclick: () => apply(cycleBatmanMode(state, instance.instanceId)),
       }));
     }
 

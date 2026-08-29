@@ -1,5 +1,5 @@
 import { el } from './dom.js';
-import { TAR_STAGE_IMAGES, DRAGON_DRAIN_IMAGE, UI_IMAGES } from '../../data/assets.js';
+import { TAR_STAGE_IMAGES, DRAGON_DRAIN_IMAGE, ACE_BATMAN_TRANSFORM_IMAGES, UI_IMAGES } from '../../data/assets.js';
 
 // 필드에 배치된 개체(instance)의 상태에 따라 이미지가 달라지는 영웅 전용 처리.
 // 그 외에는 heroDef.image(고정 초상화)를 그대로 사용한다.
@@ -8,6 +8,8 @@ export function resolveHeroImage(heroDef, instance) {
   if (instance) {
     if (heroDef.id === 'm_tar') return TAR_STAGE_IMAGES[instance.tarStage ?? 1];
     if (heroDef.id === 'm_dragon' && instance.immortalEligible) return DRAGON_DRAIN_IMAGE;
+    // 에이스 배트맨(불멸) 전용 "모드 변신" - actions.js의 cycleBatmanMode()로 순환.
+    if (heroDef.id === 'i_ace_batman' && instance.batmanMode) return ACE_BATMAN_TRANSFORM_IMAGES[instance.batmanMode];
   }
   return heroDef.image;
 }

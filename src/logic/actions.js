@@ -7,22 +7,54 @@ import { GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants
 export const ENHANCE_GOLD_COST = 30;
 export const ENHANCE_LUCKSTONE_COST = 1;
 
+// 배트맨(신화 m_batman) 전용 강화 골드 비용 - 승급 확률이 10강부터 강화 레벨에
+// 비례해서 계속 오르는 구조라(heroes.js IMMORTAL_CONDITIONS.m_batman), 승급 RNG가
+// 안 터지는 동안 10강 이후로도 계속 강화를 밀어붙이는 경우가 흔하다 - 사용자가
+// 지정한 구간별 고정값(1~5강 30, 6~10강 60, 11~15강 120)을 "5강마다 2배"로
+// 일반화해서 명시되지 않은 그 이상 구간(16~20강 240...)에도 같은 패턴을 이어간다.
+// 승급 후(i_ace_batman)에는 enhanceLevel이 0으로 리셋되고 더 강화할 이유(승급
+// 조건은 이미 끝남, 데미지 계산도 범위 밖)가 없어서 강화 버튼 자체를 노출하지
+// 않는다(GameScreen.js) - 이 비용표는 승급 전 m_batman에만 적용된다.
+function nextEnhanceGoldCost(heroId, currentLevel) {
+  if (heroId !== 'm_batman') return ENHANCE_GOLD_COST;
+  const nextLevel = (currentLevel ?? 0) + 1;
+  return ENHANCE_GOLD_COST * 2 ** Math.floor((nextLevel - 1) / 5);
+}
+export { nextEnhanceGoldCost };
+
 /** 필드 영웅 강화. 데미지 계산은 시뮬레이션 범위 밖 - 강화 단계만 증가. */
 export function enhanceHero(state, instanceId) {
   const newState = structuredClone(state);
   const found = findInstance(newState, instanceId);
   if (!found) return { success: false, reason: 'not-found', newState: state };
-  if (newState.gold < ENHANCE_GOLD_COST || newState.luckstone < ENHANCE_LUCKSTONE_COST) {
+  const goldCost = nextEnhanceGoldCost(found.instance.heroId, found.instance.enhanceLevel);
+  if (newState.gold < goldCost || newState.luckstone < ENHANCE_LUCKSTONE_COST) {
     return { success: false, reason: 'not-enough-resource', newState: state };
   }
 
-  newState.gold -= ENHANCE_GOLD_COST;
+  newState.gold -= goldCost;
   newState.luckstone -= ENHANCE_LUCKSTONE_COST;
   found.instance.enhanceLevel += 1;
   newState.counters.enhanceCount += 1;
 
   const afterEvent = recordImmortalEvent(newState, instanceId, 'enhance');
   return { success: true, newState: afterEvent.success ? afterEvent.newState : newState };
+}
+
+/**
+ * 에이스 배트맨(불멸) 전용 "모드 변신" - 기본/투수모드/타자모드를 순환한다.
+ * 데미지 계산 범위 밖이라 실질 효과는 없는 연출용 전환(다른 변신들과 같은 패턴).
+ */
+export function cycleBatmanMode(state, instanceId) {
+  const newState = structuredClone(state);
+  const found = findInstance(newState, instanceId);
+  if (!found || found.instance.heroId !== 'i_ace_batman') {
+    return { success: false, reason: 'not-ace-batman', newState: state };
+  }
+  const order = [null, 'pitcher', 'batter'];
+  const currentIndex = order.indexOf(found.instance.batmanMode ?? null);
+  found.instance.batmanMode = order[(currentIndex + 1) % order.length];
+  return { success: true, newState };
 }
 
 /**
