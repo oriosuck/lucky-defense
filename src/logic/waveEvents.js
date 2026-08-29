@@ -172,7 +172,24 @@ function onWaveStart(state) {
   // 위 tickWave에서 경과 시간에 비례해 처리).
   state.roundMonsterSpawnedSoFar = 0;
 
-  if (state.bossAttackSchedule.immobilizeRounds.includes(state.wave)) {
+  // 13라운드("삭제 있는 버전"에서만)는 삭제 공격 직전에 게이지형(원형) 이동불능이
+  // 100% 확정으로 발생해야 한다(사용자 지정 - "13라운드 삭제 직전에 동그라미로 그
+  // 속박 공격하는거 한번 있어야해") - 게임당 정확히 2회인 기존 랜덤 스케줄과는
+  // 별개의 강제 이벤트라, 13라운드가 그 랜덤 스케줄에 우연히 뽑혀 있었어도 이
+  // 강제 버전이 우선한다. 삭제 공격 게이지가 waveTimeLeft<=15부터 차기 시작하므로
+  // 라운드 시작(waveTimeLeft=30) 즉시 발동시켜 겹치는 시간을 최대한 줄인다 -
+  // 게이지형 총 소요시간(5초 채움+20초 잠금=25초)이 라운드 길이(30초)보다 짧아서
+  // 완전히 안 겹치게 할 수는 없다(약 1초 정도만 걸침, 사용자에게 확인받은 절충안).
+  if (state.gameType === 'delete' && state.wave === 13) {
+    state.eventLog.immobilizeEvent = {
+      round: state.wave,
+      type: 'gauge',
+      phase: 'idle',
+      triggerAtTimeLeft: waveDuration(state.wave),
+      timer: 0,
+      targetSlots: [],
+    };
+  } else if (state.bossAttackSchedule.immobilizeRounds.includes(state.wave)) {
     const duration = waveDuration(state.wave);
     const type = Math.random() < 0.5 ? 'instant' : 'gauge';
     state.eventLog.immobilizeEvent = {

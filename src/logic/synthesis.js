@@ -4,6 +4,7 @@ import {
   findSlot,
   findAutoPlaceSlot,
   placeInstanceAtSlot,
+  fieldOccupantCount,
 } from '../state/gameState.js';
 
 // 판매 보상표(기획 확정: 일반 마리당 120코인, 희귀 1행운석, 영웅 2행운석, 전설 4행운석,
@@ -86,6 +87,17 @@ export function synthesize(state, row, col) {
   const nextTier = heroId === IMP_HERO_ID ? 'rare' : nextTierOf(heroDef.tier);
   if (!nextTier || nextTier === 'mythic') {
     return { success: false, reason: 'not-synthesizable', newState: state };
+  }
+
+  // 임프는 캐릭터 카운트(인원 30 상한)에 안 잡히는데(fieldOccupantCount 참고) 합성
+  // 결과(희귀 등급)는 잡히므로, 임프 3마리를 합성하는 순간 카운트가 +1 될 수 있다 -
+  // 필드가 이미 30/30으로 꽉 차 있으면 이 조합으로 상한을 넘겨버리는 버그가 있었다
+  // (사용자 지적 - "임프 하나를 합성하니까 30마리 꽉 찼는데 합성이 되더라"). 일반~전설
+  // 체인은 3마리를 소모하고 1마리만 남기므로 카운트가 항상 줄어들어(-2) 이 문제가 없지만,
+  // 범용적으로 "합성 후 카운트가 상한을 넘기면 막는다"는 조건으로 검사한다.
+  const consumedCount = heroId === IMP_HERO_ID ? 0 : 3;
+  if (fieldOccupantCount(newState) - consumedCount + 1 > newState.fieldMaxCapacity) {
+    return { success: false, reason: 'field-full', newState: state };
   }
 
   const candidates = heroesByTier(nextTier);

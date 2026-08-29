@@ -191,12 +191,13 @@ export const IMMORTAL_CONDITIONS = {
   },
   m_bane: {
     // 불멸 조건은 "이동 132회"가 아니라 "필살기(궁극기) 12번 사용"이다(사용자 지정
-    // - "베인 불멸 기준은 필살기 12번 사용하는거야"). 궁극기 자체는 여전히 이동
-    // 왕복 15~20회(매번 랜덤)마다 한 번씩 터진다(사용자 재확인 사항) - target(12)은
-    // 그 "궁극기 사용 횟수"를 센 값이고, 원본 이동 누적치는 별도로
-    // instance.moveProgress에 보관한다(immortal.js recordImmortalEvent 참고).
+    // - "베인 불멸 기준은 필살기 12번 사용하는거야"). target(12)은 그 "궁극기 사용
+    // 횟수"를 센 값이고, 원본 이동 누적치는 별도로 instance.moveProgress에
+    // 보관한다(immortal.js recordImmortalEvent 참고). 궁극기 발동 간격은 왕복
+    // 15~20회 랜덤이었다가, 사용자 지정으로 고정 17회로 확정했다(min===max로
+    // 두면 rollValue가 항상 17을 반환 - recordImmortalEvent의 랜덤 로직 재사용).
     id: 'i_top_bane', name: '탑 베인', type: 'real-event', target: 12,
-    eventType: 'move', extra: { ultimateThresholdMin: 15, ultimateThresholdMax: 20 },
+    eventType: 'move', extra: { ultimateThresholdMin: 17, ultimateThresholdMax: 17 },
   },
   m_roka: {
     id: 'i_captain_roka', name: '캡틴 로카', type: 'time-based', target: 160,
