@@ -45,9 +45,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
     spinningTier: null, // 룰렛 스핀 연출 중인 등급
     rouletteFailTier: null, // 방금 실패해서 해골을 잠깐 보여줄 등급
     rouletteSuccessHero: null, // 방금 성공해서 나온 영웅 그림을 잠깐 보여줄 heroId
-    monsters: [], // 좌->우 굴을 지나가는 장식용 몬스터 애니메이션 상태
-    monsterSpawnWave: null, // 아래 두 필드가 몇 라운드 기준인지(라운드 바뀌면 리셋)
-    monsterSpawnedCount: 0, // 이번 라운드에 지금까지 스폰한 장식용 몬스터 수
     // 채드/기가채드 "판매하기" 버튼을 눌러 화살표 선택 모드에 들어간 상태 - 어느 채드가
     // 먹이는 쪽인지(m_chad는 신화만, i_giga_chad는 신화+불멸) 구분해야 해서 boolean이
     // 아니라 그 채드의 instanceId를 담는다(null이면 꺼진 상태).
@@ -115,7 +112,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
   }
 
   function render(state) {
-    updateMonsterAnimation(state);
     // 0.2초마다 전체 DOM을 갈아엎다 보니 신화 팝업의 등급 그리드(.mythic-grid,
     // overflow-y:auto)도 매번 새 엘리먼트로 다시 생겨서 scrollTop이 계속 0으로
     // 리셋됐다 - 사용자가 스크롤을 내려도 다음 렌더에서 바로 맨 위로 튕겨 보이니
@@ -280,8 +276,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
   window.addEventListener('pointerup', handlePointerUp);
   window.addEventListener('pointercancel', handlePointerCancel);
 
-  const MONSTER_TRAVEL_MS = 10400; // 기존 2600ms의 4배로 느리게(사용자 요청)
-
   // 화면에 표시할 몬스터 수는 Math.floor가 아니라 Math.ceil로 반올림한다 - 필드
   // 영웅이 많으면 처치 속도가 스폰 속도를 거의 항상 앞질러서 실제 monsterCount가
   // 정수 1에 못 미치는 소수(예: 0.3)로 계속 맴돌 수 있는데, floor를 쓰면 이런
@@ -296,34 +290,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return Math.ceil(state.monsterCount);
   }
 
-  // 장식용 몬스터 스프라이트 개수를 몬스터 카운트 바에 표시되는 값(state.monsterCount)과
-  // 항상 정확히 같게 유지한다 - 예전엔 몬스터가 한 바퀴(MONSTER_TRAVEL_MS) 돌고 나면
-  // 사라지는 "1회성 애니메이션"이라 화면에 몇 마리가 보이든 카운트 숫자와 무관하게
-  // 항상 비슷한 수(약 4마리)만 떠 있었다 - 이제는 스프라이트가 사라지지 않고 계속
-  // 경로를 무한 반복하며, 개수 자체가 카운트를 그대로 따라간다(카운트가 늘면 새
-  // 스프라이트 추가, 줄면 제거).
-  //
-  // 각 몬스터는 고정 delayMs가 아니라 실제 스폰 시각(spawnTime, performance.now()
-  // 기준)을 저장해둔다 - 게임 루프가 0.2초마다 전체 DOM을 다시 그리는데(main.js
-  // RENDER_INTERVAL_SEC), 고정 delayMs를 매번 그대로 animation-delay에 넣으면 새로
-  // 생성된 <div>의 CSS 애니메이션이 항상 그 "같은 지점"에서부터 다시 0.2초만 재생되고
-  // 리셋되기를 반복해서, 경로 전체(10.4초)를 도는 대신 제자리에서 아주 짧은 구간만
-  // 왔다갔다하며 깜빡이는 것처럼 보였다("몬스터가 제자리에서 좌우로 왔다갔다하고
-  // 중간에서 튀어나온다"는 리포트의 원인). 실제 경과 시간을 매 렌더마다 다시 계산해서
-  // animation-delay를 그때그때 갱신해야 재생성되어도 애니메이션이 끊기지 않고
-  // 이어진다.
-  function updateMonsterAnimation(state) {
-    const active = state.wave >= 1 && !state.result;
-    const target = active ? displayMonsterCount(state) : 0;
-    while (ui.monsters.length < target) {
-      // 전부 같은 타이밍에 나오면 한 덩어리로 뭉쳐 보이므로, 경로 한 바퀴(MONSTER_TRAVEL_MS)
-      // 안에서 랜덤한 시점부터 시작한 것처럼 스폰 시각을 과거로 흩뿌린다.
-      const staggerMs = Math.random() * MONSTER_TRAVEL_MS;
-      ui.monsters.push({ id: `mon_${Date.now()}_${Math.random()}`, spawnTime: performance.now() - staggerMs });
-    }
-    if (ui.monsters.length > target) ui.monsters.length = target;
-  }
-
   function renderStage(state) {
     const stage = el('div', { class: 'game-stage' });
     stage.appendChild(renderTopBadge(state));
@@ -331,15 +297,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
     stage.appendChild(renderBoss(state));
     const holeEffects = renderHoleEffects(state);
     if (holeEffects) stage.appendChild(holeEffects);
-    for (const m of ui.monsters) {
-      const phaseMs = (performance.now() - m.spawnTime) % MONSTER_TRAVEL_MS;
-      stage.appendChild(
-        el('div', {
-          class: 'stage-monster',
-          style: `top:${STAGE_LAYOUT.leftHole.y}%; left:${STAGE_LAYOUT.leftHole.x}%; animation: monster-travel ${MONSTER_TRAVEL_MS}ms linear infinite; animation-delay: -${phaseMs}ms;`,
-        }, [el('img', { src: UI_IMAGES.monsterIcon, alt: '몬스터' })]),
-      );
-    }
     stage.appendChild(renderField(state));
     const deleteLine = renderDeleteLineEffect(state);
     if (deleteLine) stage.appendChild(deleteLine);
@@ -399,27 +356,24 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return boss;
   }
 
-  // 좌우 굴에 보라색 소용돌이(몬스터 등장 지점 강조)를 항상 띄우고, 라운드 종료
-  // 5초 전부터는 왼쪽 굴 위에 카운트다운 배지를 추가로 띄운다. 0라운드(1웨이브
+  // 좌우 굴 보라색 소용돌이는 성능 문제로 제거했다(사용자 요청 - conic-gradient
+  // 회전 애니메이션이 항상 켜져 있는 게 렉의 상당 부분을 차지한다고 실측 확인,
+  // CLAUDE.md 참고). 라운드 종료 5초 전 카운트다운 배지만 남긴다 - 0라운드(1웨이브
   // 시작 전 5초 대기 구간)에도 이미 waveTimeLeft가 5→0으로 카운트다운 중이라
-  // 똑같이 보여준다(사용자 요청 - "0라운드부터 보라색이 나타나야 함").
+  // 똑같이 보여준다.
   function renderHoleEffects(state) {
     if (state.wave < 0 || state.result) return null;
-    const nodes = [
-      el('div', { class: 'hole-vortex', style: `left:${STAGE_LAYOUT.leftHole.x}%; top:${STAGE_LAYOUT.leftHole.y}%;` }),
-      el('div', { class: 'hole-vortex', style: `left:${STAGE_LAYOUT.rightHole.x}%; top:${STAGE_LAYOUT.rightHole.y}%;` }),
-    ];
     const secLeft = Math.ceil(state.waveTimeLeft);
-    if (secLeft >= 1 && secLeft <= 5) {
-      nodes.push(el('div', {
+    if (secLeft < 1 || secLeft > 5) return null;
+    return el('div', { class: 'hole-effects' }, [
+      el('div', {
         class: 'hole-countdown',
         style: `left:${STAGE_LAYOUT.leftHole.x}%; top:${STAGE_LAYOUT.leftHole.y}%;`,
       }, [
         el('span', { class: 'hole-countdown-icon', text: '⏱️' }),
         el('span', { class: 'hole-countdown-num', text: String(secLeft) }),
-      ]));
-    }
-    return el('div', { class: 'hole-effects' }, nodes);
+      ]),
+    ]);
   }
 
   // 전체화면 버튼은 사용자 요청으로 제거했다(모바일 검은 여백 문제 우회용으로
