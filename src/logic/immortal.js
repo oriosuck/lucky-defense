@@ -224,6 +224,13 @@ function isEligible(state, slot, instance, cond) {
   if (cond.target == null) return false; // 그랜드 마마 등: 별도 판정
   if (instance.heroId === 'm_hailey') return instance.ultimateSucceeded === true;
   if (instance.heroId === 'm_ray') return instance.progress >= cond.target;
+  // 원시 밤바: progress가 target(30)에 도달해도 그 자체로는 승급 자격이 아니다 -
+  // 이후엔 postCapChance(0.1%) 낮은 확률 판정을 계속 통과해야만 승급 가능해진다
+  // (tickOverrides.m_bamba가 성공 시 instance.immortalEligible을 직접 true로
+  // 세팅함). 여기서 제네릭 target 도달 체크를 그대로 썼다면 progress가 딱
+  // 30이 되는 그 틱에 즉시(확률과 무관하게 100%) 자격이 생겨버려서 "30 도달
+  // 후엔 낮은 확률로만 승급 가능"이라는 의도된 게이팅이 완전히 무력화된다.
+  if (instance.heroId === 'm_bamba') return instance.immortalEligible === true;
   return (instance.progress ?? 0) >= effectiveTarget(state, instance, cond);
 }
 

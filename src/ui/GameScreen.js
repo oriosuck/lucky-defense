@@ -626,7 +626,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 위에 뜨면 좋겠는데 지금 너무 멀어"). 박스 안쪽으로 내려서 실제 머리 근처에
   // 오도록 비율을 잡았다(스크린샷으로 확인하며 튜닝한 값 - 나중에 토큰 크기
   // 배율이 또 바뀌면 다시 확인해야 한다).
-  const HEAD_BADGE_TOP_RATIO = 0.86;
+  const HEAD_BADGE_TOP_RATIO = 0.68;
 
   // 한 칸에 쌓인 마리 수별 배치 오프셋(토큰 폭/높이 대비 비율). 3마리는 일렬이 아니라
   // 뒤 2마리 + 앞 1마리의 삼각형 대열로 배치한다(사용자 참고 이미지). 인덱스 순서가
@@ -1443,13 +1443,31 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return onField.some((inst) => inst.immortalEligible || cond.target == null || (inst.progress ?? 0) >= cond.target);
   }
 
+  // 필드에 원본(신화) 개체가 있으면 "잠김" 대신 실제 진행도(N/목표)를 보여준다
+  // (사용자 지정 - "베인이 소환되었으면 신화 탭에 있는 베인 불멸이... 현재 불멸
+  // 진행 상태를 보여줘야지"). consumeCount형(마마/닌자/지지/초나 등 - 개체 수
+  // 존재를 세는 방식이라 단일 progress/target 숫자가 없음)이나 target이 아예
+  // 없는 조건은 숫자로 보여줄 수 없어 그냥 "잠김"으로 남긴다 - 필드 셀 UI에서
+  // 진행도 표시를 전부 없앤 PR #27 규칙과는 별개다(그건 필드 칸 선택 UI 얘기,
+  // 여기는 불멸 탭 팝업이라 다른 화면).
+  function immortalProgressText(state, immortalDef) {
+    const baseId = immortalDef.baseHeroId;
+    const onField = state.field.flatMap((s) => s.occupants).filter((o) => o.heroId === baseId);
+    if (!onField.length) return null;
+    const cond = HEROES_BY_ID[baseId]?.immortalCondition;
+    if (!cond || cond.target == null) return null;
+    const best = onField.reduce((max, inst) => Math.max(max, inst.progress ?? 0), 0);
+    return `${Math.min(cond.target, Math.floor(best))}/${cond.target}`;
+  }
+
   function renderImmortalGrid(state) {
     const allImmortals = sortFavoriteFirst(state, heroesByTier('immortal'), (h) => h.baseHeroId);
     return el('div', { class: 'mythic-grid' }, allImmortals.map((heroDef) => {
       const unlocked = immortalUnlockStatus(state, heroDef);
+      const statusText = unlocked ? '해금' : (immortalProgressText(state, heroDef) ?? '잠김');
       return el('div', { class: `mythic-cell ${unlocked ? 'ready' : 'locked'}` }, [
         heroImage(heroDef, { className: 'mythic-cell-image' }),
-        el('div', { class: 'mythic-progress', text: unlocked ? '해금' : '잠김' }),
+        el('div', { class: 'mythic-progress', text: statusText }),
       ]);
     }));
   }
