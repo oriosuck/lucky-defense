@@ -71,7 +71,8 @@ export function summonNormal(state) {
 
   const tier = rollNormalTier();
   const heroDef = pickRandomHeroOfTier(tier);
-  if (tier === 'legendary') newState.counters.normalSummonLegendaryCount += 1; // "운빨좋은날" 미션용
+  if (tier === 'legendary') newState.counters.normalSummonLegendaryCount += 1; // "소환에서 전설 등급 등장" 미션용
+  if (tier === 'hero') newState.counters.normalSummonHeroCount += 1; // "소환에서 영웅 등급 등장 3번" 미션용
 
   const slot = findAutoPlaceSlot(newState, heroDef.id);
   if (slot) {
@@ -108,14 +109,17 @@ export function summonRoulette(state, tier, slotPosition = 'left') {
     return { success: false, reason: 'not-enough-luckstone', newState: state };
   }
   newState.luckstone -= cost;
+  newState.counters.rouletteAttemptCount += 1; // "룰렛 소환 시도 20번" 미션용 - 등급/성공 여부와 무관하게 실제로 돈 시도만 센다
 
   const successRoll = Math.random() < ROULETTE_SUCCESS_RATE[tier];
   if (!successRoll) {
+    newState.counters.rouletteFailCount += 1; // "룰렛 소환 실패 10번" 미션용 - 등급 무관 전체 실패 횟수
     if (tier === 'legendary') {
       newState.counters.legendaryRouletteFailCount += 1;
     }
     return { success: false, reason: 'roulette-fail', newState };
   }
+  if (tier === 'legendary') newState.counters.legendaryRouletteSuccessCount += 1; // "전설 룰렛 소환 성공 3번" 미션용
 
   // 실패 시 하위 등급으로 드랍, 성공 시 해당 등급 그대로 드랍
   const heroDef = pickRandomHeroOfTier(tier);

@@ -86,7 +86,11 @@ export function createGameState(config) {
       sellCount: 0,
       legendaryRouletteFailCount: 0,
       moveCount: 0,
-      normalSummonLegendaryCount: 0, // "운빨좋은날" 미션용 - 일반 소환으로 전설을 뽑은 횟수
+      normalSummonLegendaryCount: 0, // "소환에서 전설 등급 등장" 미션용 - 일반 소환으로 전설을 뽑은 횟수
+      normalSummonHeroCount: 0, // "소환에서 영웅 등급 등장 3번" 미션용 - 일반 소환으로 영웅을 뽑은 횟수
+      rouletteAttemptCount: 0, // "룰렛 소환 시도 20번" 미션용 - 등급/성공 무관 전체 룰렛 시도 횟수
+      rouletteFailCount: 0, // "룰렛 소환 실패 10번" 미션용 - 등급 무관 전체 룰렛 실패 횟수
+      legendaryRouletteSuccessCount: 0, // "전설 룰렛 소환 성공 3번" 미션용
     },
     claimedMissionIds: [], // 이미 보상을 지급한 미션(missions.js checkMissions 참고, 중복 지급 방지
     missionToastQueue: [], // 새로 완료된 미션 알림 대기열(missions.js의 checkMissions/tickMissionToast 참고)

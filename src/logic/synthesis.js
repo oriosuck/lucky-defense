@@ -89,19 +89,27 @@ export function synthesize(state, row, col) {
   slot.occupants = [];
   const newInstance = createHeroInstance(resultDef.id);
   // 조합 결과가 이미 다른 칸에 있던 영웅이면(예: 산적 1마리가 다른 칸에 남아있는 상태에서
-  // 조합으로 산적이 또 나온 경우) 자동으로 한 칸에 모은다 - 단, 방금 조합이 일어난
-  // 이 칸이 아니라 "원래 있던 자리"로 새로 만들어진 개체가 옮겨가야 한다(사용자 지적 -
-  // 반대로 동작하고 있었음). 새 개체를 방금 비운 이 칸(slot)에 먼저 넣고
-  // consolidateHeroStacks에게 병합을 맡긴다 - 예전엔 다른 칸(existingHolder)에 바로
-  // push한 뒤 정리를 불렀는데, 그 칸이 이미 3마리 꽉 찬 상태면 push로 4마리가 되고
-  // consolidateHeroStacks가 "holder가 1개뿐이면 이미 정리된 것"으로 착각해 그대로
-  // 넘어가버려서(그 함수 자체의 버그이기도 해서 이제 방어적으로도 고쳤다) 4마리짜리
-  // 칸이 그대로 남았다 - 다음 렌더에서 stackOffsets(n)이 3자리 좌표만 반환해 4번째
-  // 개체를 그리려다 그대로 튕기는 크래시로 이어졌다("합성 누르면 팅긴다" 리포트의
-  // 원인). slot에 먼저 넣으면 항상 holders가 2개 이상인 상태로 시작하므로 이 경로
-  // 자체가 발생하지 않는다.
-  slot.occupants.push(newInstance);
-  consolidateHeroStacks(newState, resultDef.id);
+  // 조합으로 산적이 또 나온 경우) 자동으로 한 칸에 모은다 - 방금 조합이 일어난 이
+  // 칸(slot)이 아니라 "원래 있던 자리"(existingHolder)로 새로 만들어진 개체가
+  // 옮겨가야 한다(사용자 지적 - "기존에 있던 캐릭터 자리로 가는 게 아니라 다른
+  // 자리에 있던 애가 합성 자리로 오는거" - 방향이 반대로 동작하면 잘못된 것).
+  // **주의**: 한때 이 순서를 반대로(새 개체를 방금 비운 slot에 먼저 넣고
+  // consolidateHeroStacks에게 병합을 맡기는 방식) 바꿨던 적이 있는데, 그건 "합성
+  // 누르면 팅긴다" 크래시(existingHolder가 이미 3마리 꽉 찬 상태에서 push로 4마리가
+  // 되고 consolidateHeroStacks가 "holder 1개면 이미 정리된 것"으로 착각해 그대로
+  // 넘어가버리던 버그)를 피하려던 것이었는데, 그 대신 "새 개체가 기존 자리로 안 가고
+  // 기존 개체가 합성 자리로 오는" 이 리포트의 원인이 됐다 - 방향이 사용자 기대와
+  // 반대였다. 크래시 자체는 `consolidateHeroStacks`(아래) 쪽을 "holder가 1개뿐이어도
+  // 3마리를 넘으면 재분배"하도록 방어적으로 고쳐서 이미 해결했으므로, 여기서는 다시
+  // "existingHolder에 직접 push" 방식으로 되돌려 방향을 바로잡는다 - 오버플로우가
+  // 생겨도 consolidateHeroStacks가 안전하게 처리한다.
+  const existingHolder = newState.field.find((s) => s !== slot && s.occupants.some((o) => o.heroId === resultDef.id));
+  if (existingHolder) {
+    existingHolder.occupants.push(newInstance);
+    consolidateHeroStacks(newState, resultDef.id);
+  } else {
+    slot.occupants.push(newInstance);
+  }
 
   return { success: true, resultHero: resultDef, newState };
 }
