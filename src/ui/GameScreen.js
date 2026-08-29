@@ -77,10 +77,28 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 원래대로 해야할거 같아"라는 지시대로 "contain"(전체가 다 보이게, 안 맞는
   // 쪽엔 검은 여백)으로 되돌렸다. 이때 여백을 우회하려고 추가했던 전체화면 버튼은
   // 이후 사용자 요청으로 제거했다(renderStageControls 참고).
+  // CDP 프로파일링으로 실측해보니(사용자 렉 리포트 조사) `wrap.clientWidth`/
+  // `clientHeight` 읽기 단 두 줄이 8초 샘플 중 327ms(약 4%)를 먹고 있었다 - 원인은
+  // 이 함수가 render()에서 매번(초당 5회) `root.innerHTML=''`로 DOM을 통째로 갈아엎은
+  // 직후에 곧바로 호출되는데, 그 직후의 clientWidth 읽기는 브라우저가 지금까지 쌓인
+  // 레이아웃 변경을 동기적으로 강제 계산(forced synchronous reflow)해야만 정확한 값을
+  // 반환할 수 있어서 초당 5번씩 레이아웃 스래싱이 발생하고 있었다. 실제로는 뷰포트
+  // 크기(wrap의 가용 공간)가 매 렌더마다 바뀌는 게 아니라 브라우저 창 크기가 실제로
+  // 바뀔 때만 바뀌므로, 계산 결과를 캐시해두고 `window resize` 이벤트가 왔을 때만
+  // 다시 측정하도록 바꿨다 - 매번 새로 생성되는 stage 노드에는 캐시된 값을 그대로
+  // 적용만 하면 되므로 시각적으로는 완전히 동일하게 동작한다.
+  let cachedStageSize = null;
+  let needsStageRemeasure = true;
+
   function sizeStageToFit(wrap, stage) {
+    if (!needsStageRemeasure && cachedStageSize) {
+      stage.style.width = `${cachedStageSize.w}px`;
+      stage.style.height = `${cachedStageSize.h}px`;
+      return;
+    }
     const availW = wrap.clientWidth;
     const availH = wrap.clientHeight;
-    if (!availW || !availH) return;
+    if (!availW || !availH) return; // 아직 DOM에 안 붙은 최초 렌더 - 다음 재렌더(0.2초 뒤)에 재시도
     let w;
     let h;
     if (availW / availH > STAGE_RATIO) {
@@ -90,6 +108,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
       w = availW;
       h = w / STAGE_RATIO;
     }
+    cachedStageSize = { w, h };
+    needsStageRemeasure = false;
     stage.style.width = `${w}px`;
     stage.style.height = `${h}px`;
   }
@@ -125,6 +145,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 누적되는 전형적인 메모리/리스너 누수 패턴이다. 함수 참조를 변수로 잡아뒀다가
   // destroy()에서 명시적으로 해제한다(main.js가 onExit 시 호출).
   const handleResize = () => {
+    needsStageRemeasure = true; // 실제 창 크기 변경 시에만 sizeStageToFit()이 다시 측정하도록
     if (root.isConnected) render(getState());
   };
   window.addEventListener('resize', handleResize);
