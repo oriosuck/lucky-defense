@@ -4,41 +4,86 @@ import { INDY_DIG_DURATION_SEC } from './waveEvents.js';
 import { HEROES_BY_ID } from '../data/heroes.js';
 import { GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 
-export const ENHANCE_GOLD_COST = 30;
-export const ENHANCE_LUCKSTONE_COST = 1;
+// enhanceHero()는 이제 배트맨 전용이다. 아이언미야옹은 처음엔 "다른 영웅과 같은
+// 무료 강화" 취급했었는데, 사용자가 실제 기획(1차 변신 5행운석→2차 변신 10행운석
+// →기술 강화 1행운석/회 확률성공)을 알려줘서 완전히 별개의 전용 함수
+// (advanceIronMeyaong, 아래)로 다시 만들었다 - 이제 enhanceHero를 타는 건 배트맨
+// 하나뿐이다.
+const BATMAN_ENHANCE_GOLD_BASE = 30;
 
-// 배트맨(신화 m_batman) 전용 강화 골드 비용 - 승급 확률이 10강부터 강화 레벨에
-// 비례해서 계속 오르는 구조라(heroes.js IMMORTAL_CONDITIONS.m_batman), 승급 RNG가
-// 안 터지는 동안 10강 이후로도 계속 강화를 밀어붙이는 경우가 흔하다 - 사용자가
-// 지정한 구간별 고정값(1~5강 30, 6~10강 60, 11~15강 120)을 "5강마다 2배"로
-// 일반화해서 명시되지 않은 그 이상 구간(16~20강 240...)에도 같은 패턴을 이어간다.
-// 승급 후(i_ace_batman)에는 enhanceLevel이 0으로 리셋되고 더 강화할 이유(승급
-// 조건은 이미 끝남, 데미지 계산도 범위 밖)가 없어서 강화 버튼 자체를 노출하지
-// 않는다(GameScreen.js) - 이 비용표는 승급 전 m_batman에만 적용된다.
+// 배트맨 전용 강화 골드 비용 - 승급 확률이 10강부터 강화 레벨에 비례해서 계속
+// 오르는 구조라(heroes.js IMMORTAL_CONDITIONS.m_batman), 승급 RNG가 안 터지는
+// 동안 10강 이후로도 계속 강화를 밀어붙이는 경우가 흔하다 - 사용자가 지정한
+// 구간별 고정값(1~5강 30, 6~10강 60, 11~15강 120)을 "5강마다 2배"로 일반화해서
+// 명시되지 않은 그 이상 구간(16~20강 240...)에도 같은 패턴을 이어간다. 승급
+// 후(i_ace_batman)에는 enhanceLevel이 0으로 리셋되고 더 강화할 이유(승급 조건은
+// 이미 끝남, 데미지 계산도 범위 밖)가 없어서 강화 버튼 자체를 노출하지 않는다
+// (GameScreen.js) - 이 비용표는 승급 전 m_batman에만 적용된다. 다른 영웅은 0(무료).
 function nextEnhanceGoldCost(heroId, currentLevel) {
-  if (heroId !== 'm_batman') return ENHANCE_GOLD_COST;
+  if (heroId !== 'm_batman') return 0;
   const nextLevel = (currentLevel ?? 0) + 1;
-  return ENHANCE_GOLD_COST * 2 ** Math.floor((nextLevel - 1) / 5);
+  return BATMAN_ENHANCE_GOLD_BASE * 2 ** Math.floor((nextLevel - 1) / 5);
 }
 export { nextEnhanceGoldCost };
 
-/** 필드 영웅 강화. 데미지 계산은 시뮬레이션 범위 밖 - 강화 단계만 증가. */
+// 배트맨 강화는 행운석이 안 든다(사용자 지정 - "배트 강화 비용에 행운석은 안들어가").
+// 다른 영웅도 애초에 강화 자체가 무료라 항상 0.
+function nextEnhanceLuckstoneCost() {
+  return 0;
+}
+export { nextEnhanceLuckstoneCost };
+
+// 배트맨 강화 성공 확률(사용자 지정 수치) - 10강까지는 100%(무조건 성공), 11강부터
+// 급격히 떨어진다. 11~15강 구간만 명시적으로 받았고(강화 비용 구간표의 마지막
+// 구간과 정확히 일치), 그 이상(16강+)은 데이터가 없어 마지막 값(28%)을 그대로
+// 유지하는 플레이스홀더로 둔다 - 나중에 더 높은 강화를 실제로 시도하는 유저가
+// 나오면 사용자에게 재확인이 필요하다.
+const BATMAN_ENHANCE_SUCCESS_RATE = { 11: 0.83, 12: 0.69, 13: 0.55, 14: 0.41, 15: 0.28 };
+function batmanEnhanceSuccessRate(nextLevel) {
+  if (nextLevel <= 10) return 1;
+  if (nextLevel in BATMAN_ENHANCE_SUCCESS_RATE) return BATMAN_ENHANCE_SUCCESS_RATE[nextLevel];
+  return BATMAN_ENHANCE_SUCCESS_RATE[15];
+}
+
+// UI에서 강화 버튼에 성공 확률을 같이 보여주기 위한 조회 헬퍼(배트맨 외에는
+// 항상 100%라 버튼에서 굳이 안 보여줌 - GameScreen.js 참고).
+export function nextEnhanceSuccessRate(heroId, currentLevel) {
+  if (heroId !== 'm_batman') return 1;
+  return batmanEnhanceSuccessRate((currentLevel ?? 0) + 1);
+}
+
+/**
+ * 필드 영웅 강화. 데미지 계산은 시뮬레이션 범위 밖 - 강화 단계만 증가.
+ * 배트맨만 골드를 쓰고 확률적으로 실패할 수 있다(실패해도 시도한 골드는 그대로
+ * 소모됨 - 일반적인 강화 게임 관례를 따른 가정, 실패 시 레벨 하락/개체 소멸 같은
+ * 페널티는 없음). 다른 영웅은 비용 없이 항상 성공(레벨 카운트만 올리면 되는
+ * 용도라 실패 개념 자체가 없음).
+ */
 export function enhanceHero(state, instanceId) {
   const newState = structuredClone(state);
   const found = findInstance(newState, instanceId);
   if (!found) return { success: false, reason: 'not-found', newState: state };
   const goldCost = nextEnhanceGoldCost(found.instance.heroId, found.instance.enhanceLevel);
-  if (newState.gold < goldCost || newState.luckstone < ENHANCE_LUCKSTONE_COST) {
+  const luckstoneCost = nextEnhanceLuckstoneCost(found.instance.heroId);
+  if (newState.gold < goldCost || newState.luckstone < luckstoneCost) {
     return { success: false, reason: 'not-enough-resource', newState: state };
   }
 
   newState.gold -= goldCost;
-  newState.luckstone -= ENHANCE_LUCKSTONE_COST;
-  found.instance.enhanceLevel += 1;
+  newState.luckstone -= luckstoneCost;
+
+  const nextLevel = (found.instance.enhanceLevel ?? 0) + 1;
+  const successRate = found.instance.heroId === 'm_batman' ? batmanEnhanceSuccessRate(nextLevel) : 1;
+  const leveledUp = Math.random() < successRate;
+  if (!leveledUp) {
+    return { success: true, leveledUp: false, newState };
+  }
+
+  found.instance.enhanceLevel = nextLevel;
   newState.counters.enhanceCount += 1;
 
   const afterEvent = recordImmortalEvent(newState, instanceId, 'enhance');
-  return { success: true, newState: afterEvent.success ? afterEvent.newState : newState };
+  return { success: true, leveledUp: true, newState: afterEvent.success ? afterEvent.newState : newState };
 }
 
 /**
@@ -55,6 +100,51 @@ export function cycleBatmanMode(state, instanceId) {
   const currentIndex = order.indexOf(found.instance.batmanMode ?? null);
   found.instance.batmanMode = order[(currentIndex + 1) % order.length];
   return { success: true, newState };
+}
+
+/**
+ * 아이언미야옹 전용 3단계 진행(사용자 지정 수치, heroes.js의
+ * IMMORTAL_CONDITIONS.m_iron_meyaong.extra 참고): instance.meyaongTransformStage
+ * (0=기본→1차 변신 완료→2=2차 변신 완료)에 따라 지금 눌러야 할 액션이 자동으로
+ * 정해진다 - 0이면 1차 변신(5행운석), 1이면 2차 변신(10행운석), 2가 되고 나서는
+ * "기술 강화" 시도(1행운석/회, 10% 확률로만 성공 - 성공해야 progress+1). 실패해도
+ * 소모한 행운석은 돌려주지 않는다(배트맨 강화 실패와 같은 관례).
+ */
+export function advanceIronMeyaong(state, instanceId) {
+  const newState = structuredClone(state);
+  const found = findInstance(newState, instanceId);
+  if (!found || found.instance.heroId !== 'm_iron_meyaong') {
+    return { success: false, reason: 'not-iron-meyaong', newState: state };
+  }
+  const cond = HEROES_BY_ID.m_iron_meyaong.immortalCondition;
+  const stage = found.instance.meyaongTransformStage ?? 0;
+
+  if (stage === 0) {
+    const cost = cond.extra.transform1LuckstoneCost;
+    if (newState.luckstone < cost) return { success: false, reason: 'not-enough-luckstone', newState: state };
+    newState.luckstone -= cost;
+    found.instance.meyaongTransformStage = 1;
+    newState.counters.enhanceCount += 1;
+    return { success: true, newState };
+  }
+  if (stage === 1) {
+    const cost = cond.extra.transform2LuckstoneCost;
+    if (newState.luckstone < cost) return { success: false, reason: 'not-enough-luckstone', newState: state };
+    newState.luckstone -= cost;
+    found.instance.meyaongTransformStage = 2;
+    newState.counters.enhanceCount += 1;
+    return { success: true, newState };
+  }
+
+  const cost = cond.extra.enhanceLuckstoneCost;
+  if (newState.luckstone < cost) return { success: false, reason: 'not-enough-luckstone', newState: state };
+  newState.luckstone -= cost;
+  newState.counters.enhanceCount += 1;
+  const leveledUp = Math.random() < cond.extra.enhanceSuccessRate;
+  if (leveledUp) {
+    found.instance.progress = Math.min(cond.target, (found.instance.progress ?? 0) + 1);
+  }
+  return { success: true, leveledUp, newState };
 }
 
 /**

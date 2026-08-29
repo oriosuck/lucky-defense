@@ -19,9 +19,10 @@ import {
   digTreasure,
   upgradeGlobalEnhance,
   cycleBatmanMode,
+  advanceIronMeyaong,
   nextEnhanceGoldCost,
-  ENHANCE_GOLD_COST,
-  ENHANCE_LUCKSTONE_COST,
+  nextEnhanceLuckstoneCost,
+  nextEnhanceSuccessRate,
 } from '../logic/actions.js';
 import { checkImmortalPromotion, isImmortalPromotionReady, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
 import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT, INDY_TREASURE_INTERVAL_SEC } from '../logic/waveEvents.js';
@@ -905,18 +906,45 @@ export function GameScreen({ getState, dispatch, onExit }) {
     }
     // 이동은 이제 버튼이 아니라 칸을 직접 드래그하는 방식이라(아래 드래그 핸들러
     // 참고) 탑 베인도 별도 버튼이 필요 없다 - 드래그로 옮겨도 moveHero()가 그대로
-    // 호출되어 불멸 진행도가 똑같이 쌓인다. 강화만 버튼으로 남겨둔다(드래그로 대체할
-    // 수 없는 액션이라 아이언미야옹/배트맨 전용 진행 조건 버튼을 유지). 배트맨은
-    // eventType이 'enhance'가 아니라 강화 레벨(extra.minEnhance) 자체가 승급 조건의
-    // 전제라 조건을 넓혀야 버튼이 뜬다(예전엔 이 조건에 안 걸려서 배트맨은 강화 버튼
-    // 자체가 아예 안 떠서 승급 조건을 영원히 만족할 수 없는 버그였음).
-    if (heroDef.immortalCondition?.eventType === 'enhance' || heroDef.immortalCondition?.extra?.minEnhance != null) {
+    // 호출되어 불멸 진행도가 똑같이 쌓인다. 배트맨 전용 강화 버튼(강화 레벨
+    // 자체가 승급 조건의 전제라 extra.minEnhance로 판정 - 예전엔 이 조건에 안
+    // 걸려서 배트맨은 강화 버튼 자체가 아예 안 떠서 승급 조건을 영원히 만족할 수
+    // 없는 버그였음)만 여기 남긴다 - 아이언미야옹은 완전히 다른 3단계 진행
+    // 방식이라 아래 별도 블록으로 뺐다.
+    if (heroDef.immortalCondition?.extra?.minEnhance != null) {
       const goldCost = nextEnhanceGoldCost(instance.heroId, instance.enhanceLevel);
+      const luckstoneCost = nextEnhanceLuckstoneCost(instance.heroId);
+      const successRate = nextEnhanceSuccessRate(instance.heroId, instance.enhanceLevel);
+      const parts = [];
+      if (goldCost > 0) parts.push(`${goldCost}G`);
+      if (luckstoneCost > 0) parts.push(`${luckstoneCost}💎`);
+      if (successRate < 1) parts.push(`성공 ${Math.round(successRate * 100)}%`);
+      const costLabel = parts.length ? ` (${parts.join(' ')})` : '';
       below.push(el('button', {
         class: 'cell-quick-btn cell-quick-extra',
-        text: `강화 (${goldCost}G ${ENHANCE_LUCKSTONE_COST}💎)`,
-        disabled: state.gold < goldCost || state.luckstone < ENHANCE_LUCKSTONE_COST,
+        text: `강화${costLabel}`,
+        disabled: state.gold < goldCost || state.luckstone < luckstoneCost,
         onclick: () => apply(enhanceHero(state, instance.instanceId)),
+      }));
+    }
+    // 아이언미야옹 전용 3단계 진행(사용자 지정 수치) - 1차 변신(5💎) → 2차 변신
+    // (10💎) → 기술 강화(1💎/회, 10% 확률로만 성공, 누적 10 성공 시 승급). 승급
+    // 조건을 다 채우면(왼쪽 즉시소환 바에 "승급 가능!"으로 이미 노출) 더 눌러도
+    // 의미가 없으니 마마의 "돌파" 버튼과 같은 패턴으로 숨긴다.
+    if (instance.heroId === 'm_iron_meyaong' && !isImmortalPromotionReady(state, instance.instanceId)) {
+      const cond = heroDef.immortalCondition;
+      const stage = instance.meyaongTransformStage ?? 0;
+      const cost = stage === 0 ? cond.extra.transform1LuckstoneCost
+        : stage === 1 ? cond.extra.transform2LuckstoneCost
+          : cond.extra.enhanceLuckstoneCost;
+      const label = stage === 0 ? `1차 변신 (${cost}💎)`
+        : stage === 1 ? `2차 변신 (${cost}💎)`
+          : `기술 강화 (${cost}💎 성공 ${Math.round(cond.extra.enhanceSuccessRate * 100)}%)`;
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra',
+        text: label,
+        disabled: state.luckstone < cost,
+        onclick: () => apply(advanceIronMeyaong(state, instance.instanceId)),
       }));
     }
     // 에이스 배트맨(불멸) 전용 모드 변신 - 기본/투수모드/타자모드를 순환한다.

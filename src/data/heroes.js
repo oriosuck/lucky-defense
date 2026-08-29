@@ -171,7 +171,17 @@ export const IMMORTAL_CONDITIONS = {
     extra: { adjacentRobotMultiplier: 1.1, robotIds: ['h_electric_robot', 'r_shock_robot', 'l_warmachine'] },
   },
   m_iron_meyaong: {
-    id: 'i_im_meyaong', name: '아이엠 미야옹', type: 'real-event', target: 10, eventType: 'enhance',
+    // 3단계 진행(사용자 지정 - 기획서_v4.md에는 이 비용이 안 적혀 있어서 별도로
+    // 확인받은 수치): 1차 변신(5행운석) → 2차 변신(10행운석) → 기술 강화(1행운석/회,
+    // 10% 확률로만 성공, 성공할 때마다 진행도 +1, 10 도달 시 승급). actions.js의
+    // advanceIronMeyaong()이 instance.meyaongTransformStage(0~2)를 보고 이 세
+    // 단계 중 지금 해야 할 걸 처리한다 - 실패해도 소모한 행운석은 돌려주지 않음
+    // (배트맨 강화 실패와 같은 관례).
+    id: 'i_im_meyaong', name: '아이엠 미야옹', type: 'real-event', target: 10, eventType: 'ironMeyaongEnhance',
+    extra: {
+      transform1LuckstoneCost: 5, transform2LuckstoneCost: 10,
+      enhanceLuckstoneCost: 1, enhanceSuccessRate: 0.1,
+    },
   },
   m_cat_mage: {
     id: 'i_grand_cat_mage', name: '대냥법사', type: 'time-based', target: 2400,
