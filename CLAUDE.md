@@ -2889,6 +2889,50 @@ Playwright로 (a) `monsterCount=0.4`일 때 카운트 텍스트가 "0 / 110"이 
 속도) 문제라는 뜻이니 그때는 "10라운드 4초 전멸" 요구사항과 다시 맞춰가며 처치
 속도 수치 자체를 사용자와 상의해서 조정해야 한다.
 
+## 몬스터 이동 애니메이션 + 좌우 굴 보라색 소용돌이 완전 제거 (렉 개선)
+
+"이거 몬스터 이동이랑 보라색 모션 빼면 렉 좀 줄어드려나? 리펙토링 전에도?"라는
+질문에, 추측 대신 먼저 실측했다 - CDP `Emulation.setCPUThrottlingRate(4)`로
+중저가 모바일 기기를 근사하고, 30마리 풀 필드+몬스터 60마리+디버프 활성 상태로
+`requestAnimationFrame` 프레임 시간을 6초씩 측정해서 "몬스터 이동 애니메이션
+(`.stage-monster`, `@keyframes monster-travel`)"과 "좌우 굴 보라색 소용돌이
+(`.hole-vortex`, `hole-vortex-pulse`/`hole-vortex-spin`)"만 CSS `!important`
+오버라이드로 무력화한 전/후를 대조했다 - 평균 프레임 시간이 169.8ms → 80.2ms로
+52.8% 줄었다(체감 프레임레이트 약 2배). 이 두 효과는 게임플레이에 영향이 전혀
+없는 순수 장식(몬스터 존재 자체는 상단 카운트 바 "N / 110"으로 이미 확인
+가능하고, 좌우 굴 위치는 카운트다운 배지로 이미 표시됨)이라 "완전히 없애"라는
+사용자 지시를 받아 실제로 제거했다.
+
+**원인**: 몬스터 이동은 화면에 표시되는 몬스터 수(`Math.ceil(monsterCount)`,
+최근 라운드에 floor→ceil로 바꾸면서 표시 개수 자체가 늘어난 참이었음)만큼
+스프라이트 `<div>`가 각각 무한 반복 애니메이션을 돌리는데, 0.2초마다 전체 DOM이
+재생성되면서 매번 `animation-delay`를 실제 경과 시간 기준으로 다시 계산해 넣어야
+했다(끊김 방지 - CLAUDE.md 반복 패턴). 좌우 굴 소용돌이는 `conic-gradient` 회전 +
+`blur` 필터가 걸린 애니메이션 2개가 게임 진행 중 항상 켜져 있었는데, conic-gradient
+회전은 브라우저가 매 프레임 다시 페인트해야 하는 costly한 효과다. 이 두 비용은
+전부 페인트/컴포지트 스레드에서 발생해서, 이전 라운드에 CDP JS Profiler로 잡았던
+`(program)`/`setAttribute` 등 순수 JS 실행 시간 프로파일에는 전혀 안 잡혔다 -
+`requestAnimationFrame` 프레임 시간(JS+스타일+레이아웃+페인트+컴포지트 전체를
+포함하는 종단간 지표)으로 측정해야만 보이는 종류의 비용이었다는 게 이번에 새로
+확인된 교훈.
+
+**구현**: `GameScreen.js`에서 `updateMonsterAnimation()`/`ui.monsters` 상태/
+`MONSTER_TRAVEL_MS`/`renderStage()`의 몬스터 스프라이트 루프를 전부 삭제하고,
+`renderHoleEffects()`에서 `.hole-vortex` 두 개를 제거하되 별개 기능인 라운드 종료
+카운트다운 배지(`.hole-countdown`)는 그대로 남겼다(같은 `nodes` 배열 안에 같이
+있었어서 헷갈리지 않게 분리). CSS도 `.stage-monster`/`@keyframes monster-travel`/
+`.hole-vortex`(및 `::before`/`::after`)/`@keyframes hole-vortex-pulse`/
+`hole-vortex-spin`을 전부 삭제(`.hole-effects`/`.hole-countdown`은 유지 - 카운트다운
+배지가 여전히 그 컨테이너를 씀). 죽은 `ui.monsterSpawnWave`/`monsterSpawnedCount`
+필드(이미 예전부터 어디서도 안 읽히던 죽은 코드)도 같이 정리했다.
+
+**검증**: 실제 제거 후(CSS 오버라이드가 아니라 진짜 코드/CSS 삭제) 같은 4배
+스로틀 조건으로 재측정하니 평균 프레임 시간이 52.8ms까지 더 내려갔다(오버라이드
+테스트의 80.2ms보다도 빠름 - DOM 노드 자체가 줄어든 효과까지 더해진 것으로
+추정). Playwright로 `.stage-monster`/`.hole-vortex`가 DOM에 전혀 없는 것, 몬스터
+카운트 텍스트는 여전히 정상 표시되는 것(존재 정보 손실 없음), 라운드 종료
+카운트다운 배지는 회귀 없이 그대로 동작하는 것까지 확인했다.
+
 ## CSS/레이아웃에서 배운 것
 
 1. **배경 이미지 비율 유지는 JS로 실측해서 픽셀로 박아라.** `.game-stage`를

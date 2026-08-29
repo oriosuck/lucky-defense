@@ -247,61 +247,13 @@ body {
 }
 .raid-window-badge.open { color: #000; background: var(--gold); }
 
-.stage-monster {
-  position: absolute;
-  width: 3.5%; aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.6));
-  pointer-events: none;
-}
-.stage-monster img { width: 100%; height: 100%; object-fit: contain; }
-/* 전장 박스(left:12.5%~86.92%, top:43.63%~62.07%) 바깥쪽 왼쪽/아래/오른쪽 세 변을
-   둘러서 이동한다(사용자가 준 참고 이미지의 빨간 경로 그대로). 굴 좌표를 배경 원화의
-   실제 톱니바퀴 허브 위치로 실측했더니 애초에 전장 박스 바깥(x도 12.5~86.92% 밖,
-   y도 43.63% 밖)이라, 예전처럼 굴 근처를 투명 처리해서 가릴 필요가 아예 없어졌다 -
-   경로 전체가 항상 전장 박스 밖이라 시작부터 끝까지 계속 보여도 캐릭터 칸을
-   가로지르지 않는다.
-   좌표는 src/data/assets.js의 STAGE_LAYOUT.leftHole/rightHole과 맞춰져 있음 -
-   이 값이 바뀌면 여기도 같이 고쳐야 한다(CSS keyframe이라 JS 상수를 직접 참조하지
-   못해서 수동 동기화가 필요함). */
-@keyframes monster-travel {
-  0% { left: 7.3%; top: 41.4%; opacity: 0; }
-  4% { opacity: 1; }
-  20% { left: 7%; top: 65%; }
-  70% { left: 93%; top: 65%; }
-  86% { left: 93.4%; top: 42%; }
-  96% { opacity: 1; }
-  100% { left: 93.4%; top: 42%; opacity: 0; }
-}
-
-/* 좌우 굴 자리에 보라색 소용돌이 효과 - 몬스터가 나오는 위치라는 걸 시각적으로
-   분명히 보여주기 위한 장식(항상 노출, 게임 진행 중일 때). 방사형 보라 광원(펄스)
-   위에 회전하는 conic-gradient 무늬를 겹쳐서 소용돌이처럼 보이게 한다. */
+/* 몬스터 이동 애니메이션(장식용 스프라이트)과 좌우 굴 보라색 소용돌이는 실측
+   결과 렉의 상당 부분을 차지하는 것으로 확인되어 완전히 제거했다(사용자 요청 -
+   CDP 프로파일링으로 4배 CPU 스로틀 기준 평균 프레임 시간이 52.8% 줄어드는 것까지
+   확인, CLAUDE.md 참고) - 몬스터가 존재한다는 정보는 여전히 상단 카운트 바
+   ("N / 110")로 확인 가능하고, 좌우 굴 위치 자체는 카운트다운 배지로 여전히
+   표시된다. */
 .hole-effects { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
-.hole-vortex {
-  position: absolute;
-  width: 11%; aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-}
-.hole-vortex::before {
-  content: ''; position: absolute; inset: 0; border-radius: 50%;
-  background: radial-gradient(circle, rgba(168, 85, 247, 0.6) 0%, rgba(124, 58, 237, 0.4) 45%, transparent 75%);
-  animation: hole-vortex-pulse 1.6s ease-in-out infinite;
-}
-.hole-vortex::after {
-  content: ''; position: absolute; inset: 12%; border-radius: 50%;
-  background: conic-gradient(from 0deg, rgba(216, 180, 254, 0.9), rgba(88, 28, 135, 0.15), rgba(216, 180, 254, 0.9), rgba(88, 28, 135, 0.15), rgba(216, 180, 254, 0.9));
-  filter: blur(1px);
-  animation: hole-vortex-spin 1.8s linear infinite;
-}
-@keyframes hole-vortex-pulse {
-  0%, 100% { opacity: 0.7; transform: scale(0.9); }
-  50% { opacity: 1; transform: scale(1.05); }
-}
-@keyframes hole-vortex-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
 /* 라운드 종료 5초 전부터 왼쪽 굴 위에 카운트다운 배지를 띄운다(사용자 참고 이미지:
    시계 아이콘 + 큰 숫자, 어두운 배경에 보라 테두리/글로우). */
 .hole-countdown {
