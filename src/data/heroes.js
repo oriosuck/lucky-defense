@@ -136,9 +136,13 @@ export const IMMORTAL_CONDITIONS = {
     },
   },
   m_ray: {
+    // 마나(tickOverrides.m_ray)가 다 차면 instance.manaReady=true - "검 부르기"
+    // 버튼(immortal.js의 callRaySword)이 활성화되고, 누르면 RAY_SWORD_TABLE
+    // (src/data/raySwords.js, 사용자 지정 확률표)에서 검 하나를 뽑아 이전 검을
+    // 대체한다(사용자 지정 - "매번 교체"). 전설 등급을 뽑으면 그 즉시 승급
+    // 자격이 생긴다.
     id: 'i_hero_ray', name: '용사 레이', type: 'hybrid', target: 1,
     tickIntervalSec: [1, 10], eventType: 'summonSword',
-    extra: { rates: { normal: 0.4, rare: 0.3, hero: 0.2, legendary: 0.1 }, note: '마나 가득 시 검 소환 버튼 클릭 → 전설 등급 1회 획득 시 승급' },
   },
   m_monopoly_man: {
     id: 'i_devil_monopoly', name: '악마 모노폴리', type: 'time-based', target: 15,

@@ -905,6 +905,26 @@ button.is-disabled.side-btn, button.is-disabled.summon-btn-wrap { opacity: 0.45;
 .mission-toast-reward-item { display: flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 700; color: var(--gold); }
 .mission-toast-reward-item img { width: 14px; height: 14px; object-fit: contain; }
 
+/* 용사 레이(신화)/불멸 용사 레이의 검 정보 - 화면 상단 고정 배너, 그 레이를
+   선택했을 때만 노출된다(사용자 지정). 그림 없이 등급별 색상 텍스트만. */
+.ray-sword-banner {
+  position: absolute; top: 2%; left: 50%; transform: translateX(-50%); z-index: 16;
+  display: flex; flex-direction: column; gap: 4px; width: 84%; max-width: 340px;
+  pointer-events: none;
+}
+.ray-sword-banner-item {
+  background: linear-gradient(180deg, rgba(42, 36, 56, 0.92), rgba(26, 22, 38, 0.92));
+  border: 2px solid currentColor; border-radius: 10px; padding: 6px 10px;
+  display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+.ray-sword-tier-tag {
+  flex-shrink: 0; border: 1px solid currentColor; border-radius: 6px; padding: 1px 6px;
+  font-size: 10px; font-weight: 800;
+}
+.ray-sword-name { flex-shrink: 0; font-weight: 800; }
+.ray-sword-effect { color: #fff; font-weight: 600; overflow-wrap: anywhere; }
+
 .result-overlay {
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
   display: flex; align-items: center; justify-content: center;

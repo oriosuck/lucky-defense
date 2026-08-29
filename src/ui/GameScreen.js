@@ -24,9 +24,19 @@ import {
   nextEnhanceLuckstoneCost,
   nextEnhanceSuccessRate,
 } from '../logic/actions.js';
-import { checkImmortalPromotion, isImmortalPromotionReady, cannibalizeTar, attemptSecondStageEvolution, attemptFrogTransform } from '../logic/immortal.js';
+import {
+  checkImmortalPromotion,
+  isImmortalPromotionReady,
+  cannibalizeTar,
+  attemptSecondStageEvolution,
+  attemptFrogTransform,
+  callRaySword,
+  craftRaySword,
+  resetRaySwords,
+} from '../logic/immortal.js';
 import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT, INDY_TREASURE_INTERVAL_SEC } from '../logic/waveEvents.js';
 import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
+import { RAY_SWORD_TIER_LABEL, RAY_SWORD_TIER_COLOR, RAY_SWORD_CRAFT_MAX } from '../data/raySwords.js';
 import { fieldOccupantCount, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
 import { el } from './components/dom.js';
 import { heroImage } from './components/heroVisual.js';
@@ -325,6 +335,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
     stage.appendChild(renderSideControls(state));
     stage.appendChild(renderActionRow(state));
     stage.appendChild(renderEnhanceOpenBtn(state));
+    const raySwordBanner = renderRaySwordBanner(state);
+    if (raySwordBanner) stage.appendChild(raySwordBanner);
     const missionToast = renderMissionToast(state);
     if (missionToast) stage.appendChild(missionToast);
     if (ui.popup === 'roulette') stage.appendChild(renderRoulettePopup(state));
@@ -992,6 +1004,37 @@ export function GameScreen({ getState, dispatch, onExit }) {
         onclick: () => apply(attemptFrogTransform(state, instance.instanceId)),
       }));
     }
+    // 용사 레이(신화) 전용 "검 부르기" - 마나(instance.manaReady)가 다 찼을 때만
+    // 무료로 누를 수 있다(사용자 지정). 전설 검을 뽑으면 승급 자격이 생겨 왼쪽
+    // 즐겨찾기 바에 "승급 가능!"이 뜨므로, 그 이후엔 마마/아이언미야옹과 같은
+    // 패턴으로 이 버튼을 숨긴다.
+    if (heroDef.id === 'm_ray' && !isImmortalPromotionReady(state, instance.instanceId)) {
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra',
+        text: '검 부르기',
+        disabled: !instance.manaReady,
+        onclick: () => apply(callRaySword(state, instance.instanceId)),
+      }));
+    }
+    // 불멸 용사 레이 전용 "검 제작"(희귀 등급 아무 영웅 1마리 소모, 최대
+    // RAY_SWORD_CRAFT_MAX개 누적) / "초기화"(전부 제거 후 처음부터 다시) -
+    // 사용자 지정.
+    if (heroDef.id === 'i_hero_ray') {
+      const raySwords = instance.raySwords ?? [];
+      const hasRareMaterial = state.field.some((s) => s.occupants.some((o) => HEROES_BY_ID[o.heroId]?.tier === 'rare'));
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra',
+        text: `검 제작(희귀 1) ${raySwords.length}/${RAY_SWORD_CRAFT_MAX}`,
+        disabled: raySwords.length >= RAY_SWORD_CRAFT_MAX || !hasRareMaterial,
+        onclick: () => apply(craftRaySword(state, instance.instanceId)),
+      }));
+      below.push(el('button', {
+        class: 'cell-quick-btn cell-quick-extra',
+        text: '초기화',
+        disabled: raySwords.length === 0,
+        onclick: () => apply(resetRaySwords(state, instance.instanceId)),
+      }));
+    }
     // 이동은 이제 버튼이 아니라 칸을 직접 드래그하는 방식이라(아래 드래그 핸들러
     // 참고) 탑 베인도 별도 버튼이 필요 없다 - 드래그로 옮겨도 moveHero()가 그대로
     // 호출되어 불멸 진행도가 똑같이 쌓인다. 배트맨 전용 강화 버튼(강화 레벨
@@ -1530,6 +1573,27 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 고정 delay를 쓰면 매번 처음부터 재생되며 끊겨 보인다(CLAUDE.md의 반복되는
   // 함정 - 몬스터 이동/공격 모션과 동일) - missionToastQueue[0].timer(남은 시간)를
   // 거꾸로 계산해 실제 경과 시간 기준 animation-delay를 매 렌더 다시 넣는다.
+  // 용사 레이(신화)/불멸 용사 레이 둘 다 검을 보유할 수 있다 - 화면 상단 고정
+  // 배너로 보여주되, 그 레이를 선택했을 때만 노출한다(사용자 지정 - "화면 상단에
+  // 고정하는데 레이를 눌렀을 때만 보이게 해줘"). 그림은 필요 없고 등급별 색상
+  // (RAY_SWORD_TIER_COLOR - 일반 흰색/희귀 파랑/영웅 보라/전설 노랑)으로만 구분한다.
+  function renderRaySwordBanner(state) {
+    const found = selectedInstance(state);
+    if (!found) return null;
+    const { instance } = found;
+    if (instance.heroId !== 'm_ray' && instance.heroId !== 'i_hero_ray') return null;
+    const swords = instance.raySwords ?? [];
+    if (swords.length === 0) return null;
+    return el('div', { class: 'ray-sword-banner' }, swords.map((sword) => el('div', {
+      class: 'ray-sword-banner-item',
+      style: `color:${RAY_SWORD_TIER_COLOR[sword.tier]};`,
+    }, [
+      el('span', { class: 'ray-sword-tier-tag', text: RAY_SWORD_TIER_LABEL[sword.tier] }),
+      el('span', { class: 'ray-sword-name', text: `[${sword.name}]` }),
+      el('span', { class: 'ray-sword-effect', text: sword.effect }),
+    ])));
+  }
+
   function renderMissionToast(state) {
     const entry = state.missionToastQueue?.[0];
     if (!entry) return null;
