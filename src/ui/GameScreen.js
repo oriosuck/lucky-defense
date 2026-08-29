@@ -608,7 +608,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 전용 배율을 별도로 둬서 다른 등급과 비슷한 존재감이 나도록 50% 키웠다.
   const LEGENDARY_TOKEN_SCALE = 1.5;
   const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
-  const ATTACK_CYCLE_MS = 900; // 공격 모션(위아래 스쿼시-스트레치) 반복 주기
   // 머리 위 숫자 배지(로카 탄약/배트맨 강화 레벨 공용) 위치 - 토큰 박스
   // top(box top)을 그대로 쓰면 신화 박스가 실제 그림보다 훨씬 커서(object-fit:
   // contain 여백) 머리 위에서 한참 떨어져 보였다(사용자 지적 - "로카 바로 머리
@@ -634,15 +633,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
       { dx: 0.3, dy: 0 }, // 뒤-오른쪽(밑선이 칸 중앙)
       { dx: 0, dy: 0.2 }, // 앞-중앙(그 아래 추가)
     ];
-  }
-
-  // 인스턴스마다 애니메이션 시작 위상을 다르게 흩뿌리기 위한 안정적 해시 - 같은
-  // 개체는 항상 같은 위상을 가져야 렌더마다(0.2초마다 DOM이 통째로 재생성돼도)
-  // 애니메이션이 튀지 않는다.
-  function hashPhase(id, mod) {
-    let h = 0;
-    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-    return h % mod;
   }
 
   // "합성 가능" 표시는 칸을 감싸는 사각 테두리가 아니라(사용자 지적 - "누가
@@ -795,13 +785,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
         const indyOutlineColor = occ.heroId === 'm_indy' ? INDY_TREASURE_OUTLINE_COLOR[occ.indyTreasureTier] : null;
         if (indyOutlineColor) filterParts.push(outlineFilter(indyOutlineColor));
 
-        // 공격 모션(위아래로 살짝 늘어났다 줄어드는 스쿼시-스트레치)도 궁 링/몬스터
-        // 이동과 같은 이유로 실제 경과 시간 기준 위상을 매 렌더 다시 계산한다 - 예전
-        // token-pop 팝인 애니메이션은 고정 delay라 0.2초 재렌더마다 처음부터 다시
-        // 재생되며 "깜빡이는" 것처럼 보였다(사용자 지적으로 제거, main.css 참고).
-        const attackStagger = hashPhase(occ.instanceId, ATTACK_CYCLE_MS);
-        const attackPhase = (Date.now() + attackStagger) % ATTACK_CYCLE_MS;
-        const imgStyle = `filter:${filterParts.join(' ')}; animation-delay:-${attackPhase}ms;`;
+        // 공격 모션(위아래 스쿼시-스트레치)은 렉 개선을 위해 제거했다(사용자 요청 -
+        // 몬스터 이동/보라색 소용돌이 제거와 같은 이유로 실측 확인, CLAUDE.md 참고).
+        const imgStyle = `filter:${filterParts.join(' ')};`;
 
         layer.appendChild(el('div', {
           class: `stage-hero-token${usingUltimate ? ' ultimate-flash' : ''}`,

@@ -336,20 +336,14 @@ body {
 /* filter는 선택 외곽선/디버프/궁극기 발광 상태에 따라 GameScreen.js가 매번 직접
    합성해서 인라인 style로 넣는다(CSS 클래스 여러 개를 동시에 걸면 filter가
    합쳐지지 않고 마지막 것만 적용되는 문제가 있었음) - 여기선 기본값을 두지 않는다.
-   공격 모션(위아래 스쿼시-스트레치)은 "캐릭터가 깜빡인다"던 예전 token-pop
-   팝인 애니메이션(고정 delay라 0.2초 재렌더마다 리셋됨)을 대신한다 - animation-delay는
-   GameScreen.js가 실제 경과 시간 기준으로 매 렌더 다시 계산해서 인라인으로 넣는다
-   (몬스터 이동/궁 링과 같은 패턴, CLAUDE.md 참고). */
+   공격 모션(위아래 스쿼시-스트레치)은 필드에 있는 모든 캐릭터 토큰마다 걸리는
+   무한 반복 애니메이션이라 렉의 상당 부분을 차지하는 것으로 확인되어 제거했다
+   (사용자 요청 - 4배 CPU 스로틀 기준 평균 프레임 시간 63.2% 감소 실측,
+   CLAUDE.md 참고). */
 .stage-hero-image {
   position: relative; display: block; width: 100%; height: 100%;
   object-fit: contain; object-position: bottom center;
   transform-origin: bottom center;
-  animation: stage-hero-attack 900ms ease-in-out infinite;
-}
-@keyframes stage-hero-attack {
-  0%, 100% { transform: scaleY(1); }
-  40% { transform: scaleY(0.94); }
-  70% { transform: scaleY(1.06); }
 }
 /* 탑 베인 궁극기(이동 왕복 15~20회 랜덤 환산) 이펙트 - 데미지 계산은 범위 밖이라
    순수 연출용 글로우+링 확산 애니메이션만 잠깐 보여준다(사용자 요청). 발광 자체는
