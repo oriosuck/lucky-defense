@@ -190,7 +190,19 @@ export function craftMythic(state, mythicHeroId) {
     return { success: false, reason: 'field-full', newState: state };
   }
 
-  placeInstanceAtSlot(targetSlot, createHeroInstance(mythicHeroId, { isImmortalPath: true }));
+  // 시작 화면 "돌파" 체크박스(heroSettings[].breakthrough)는 예전엔 저장만 되고
+  // 실제 개체 생성에는 전혀 반영되지 않는 죽은 설정이었다(사용자 리포트 - "지금
+  // 돌파를 클릭하고 필드에 들어왔는데 돌파 7마리 적용이 안돼") - instance.breakthrough는
+  // 필드에서 마마를 선택했을 때 뜨는 "돌파" 버튼(toggleBreakthrough)으로만 켜지는
+  // 완전히 별개의 인스턴스별 필드였다. 신화는 오직 craftMythic()으로만 새로
+  // 생성되므로(synthesize()는 legendary가 합성 대상에서 제외돼 있어 mythic까지
+  // 못 올라감 - GameScreen.js의 "합성" 버튼 조건 참고) 여기서 시작 설정을 찾아
+  // 초기값으로 넘겨주면 모든 생성 경로를 커버한다.
+  const startSetting = newState.heroSettings.find((h) => h.heroId === mythicHeroId);
+  placeInstanceAtSlot(targetSlot, createHeroInstance(mythicHeroId, {
+    isImmortalPath: true,
+    breakthrough: startSetting?.breakthrough === true,
+  }));
 
   return { success: true, resultHero: heroDef, newState };
 }
