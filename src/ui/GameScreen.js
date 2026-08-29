@@ -18,7 +18,7 @@ import {
   toggleBreakthrough,
   digTreasure,
   upgradeGlobalEnhance,
-  cycleBatmanMode,
+  chooseBatmanMode,
   advanceIronMeyaong,
   nextEnhanceGoldCost,
   nextEnhanceLuckstoneCost,
@@ -617,12 +617,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
   const LEGENDARY_TOKEN_SCALE = 1.5;
   const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
   const ATTACK_CYCLE_MS = 900; // 공격 모션(위아래 스쿼시-스트레치) 반복 주기
-  // 로카 탄약 배지 위치 - 토큰 박스 top(box top)을 그대로 쓰면 신화 박스가 실제
-  // 그림보다 훨씬 커서(object-fit:contain 여백) 머리 위에서 한참 떨어져 보였다
-  // (사용자 지적 - "로카 바로 머리 위에 뜨면 좋겠는데 지금 너무 멀어"). 박스
-  // 안쪽으로 내려서 실제 머리 근처에 오도록 비율을 잡았다(스크린샷으로 확인하며
-  // 튜닝한 값 - 나중에 토큰 크기 배율이 또 바뀌면 다시 확인해야 한다).
-  const ROKA_BADGE_TOP_RATIO = 0.86;
+  // 머리 위 숫자 배지(로카 탄약/배트맨 강화 레벨 공용) 위치 - 토큰 박스
+  // top(box top)을 그대로 쓰면 신화 박스가 실제 그림보다 훨씬 커서(object-fit:
+  // contain 여백) 머리 위에서 한참 떨어져 보였다(사용자 지적 - "로카 바로 머리
+  // 위에 뜨면 좋겠는데 지금 너무 멀어"). 박스 안쪽으로 내려서 실제 머리 근처에
+  // 오도록 비율을 잡았다(스크린샷으로 확인하며 튜닝한 값 - 나중에 토큰 크기
+  // 배율이 또 바뀌면 다시 확인해야 한다).
+  const HEAD_BADGE_TOP_RATIO = 0.86;
 
   // 한 칸에 쌓인 마리 수별 배치 오프셋(토큰 폭/높이 대비 비율). 3마리는 일렬이 아니라
   // 뒤 2마리 + 앞 1마리의 삼각형 대열로 배치한다(사용자 참고 이미지). 인덱스 순서가
@@ -697,6 +698,25 @@ export function GameScreen({ getState, dispatch, onExit }) {
     }, [
       el('div', { class: 'indy-treasure-gauge-fill', style: `width:${fillRatio * 100}%;` }),
       showComplete ? el('div', { class: 'indy-treasure-gauge-complete', text: '완료' }) : null,
+    ]);
+  }
+
+  // 탑 베인의 궁극기(이동 15~20회 랜덤 환산) 쿨타임을 캐릭터 바로 밑에 항상
+  // 보여주는 게이지(사용자 요청 - "베인 궁 쿨타임 차는거 밑에 바로 보여주면
+  // 좋겠어"). immortal.js의 recordImmortalEvent가 매번 남기는
+  // ultimateWindowStart(이번 구간 시작 시점의 누적 이동수)~nextUltimateAt(이번
+  // 구간이 끝나는 누적 이동수) 사이에서 progress가 어디쯤 왔는지로 채움 비율을
+  // 계산한다 - 인디 게이지와 같은 시각 스타일을 재사용.
+  function renderBaneUltimateGauge(occ, rect) {
+    const start = occ.ultimateWindowStart ?? 0;
+    const end = occ.nextUltimateAt ?? start;
+    const fillRatio = end > start ? Math.max(0, Math.min(1, ((occ.progress ?? 0) - start) / (end - start))) : 0;
+    const gaugeTop = rect.top + rect.height + 1.2;
+    return el('div', {
+      class: 'indy-treasure-gauge',
+      style: `left:${rect.left}%; top:${gaugeTop}%; width:${rect.width}%;`,
+    }, [
+      el('div', { class: 'indy-treasure-gauge-fill', style: `width:${fillRatio * 100}%;` }),
     ]);
   }
 
@@ -794,10 +814,35 @@ export function GameScreen({ getState, dispatch, onExit }) {
         // 적으라고"). 탄약 0이어도 그냥 0으로 보여준다(별도 문구 없음).
         if (occ.heroId === 'm_roka') {
           layer.appendChild(el('div', {
-            class: 'roka-charge-badge',
-            style: `left:${centerX}%; top:${top + tokenHeight * ROKA_BADGE_TOP_RATIO}%; z-index:${30 + slot.row};`,
+            class: 'hero-head-badge',
+            style: `left:${centerX}%; top:${top + tokenHeight * HEAD_BADGE_TOP_RATIO}%; z-index:${30 + slot.row};`,
             text: `${occ.ammo ?? 0}`,
           }));
+        }
+        // 배트맨(승급 전 m_batman)도 같은 자리에 지금 강화 레벨을 숫자만 보여준다
+        // (사용자 지정 - "몇강인지는 배트 머리 위에 로카처럼 적어줘"). 승급 후
+        // (i_ace_batman)는 enhanceLevel이 0으로 리셋되고 더는 의미가 없어서 표시하지
+        // 않는다.
+        if (occ.heroId === 'm_batman') {
+          layer.appendChild(el('div', {
+            class: 'hero-head-badge',
+            style: `left:${centerX}%; top:${top + tokenHeight * HEAD_BADGE_TOP_RATIO}%; z-index:${30 + slot.row};`,
+            text: `${occ.enhanceLevel ?? 0}`,
+          }));
+        }
+        // 원시 밤바도 같은 자리에 지금 쌓인 스택 수(불멸 조건 진행도, 목표 30)를
+        // 숫자만 보여준다(사용자 요청 - "밤바 강화 수치도 로카처럼 머리에 적어줘").
+        if (occ.heroId === 'm_bamba') {
+          layer.appendChild(el('div', {
+            class: 'hero-head-badge',
+            style: `left:${centerX}%; top:${top + tokenHeight * HEAD_BADGE_TOP_RATIO}%; z-index:${30 + slot.row};`,
+            text: `${occ.progress ?? 0}`,
+          }));
+        }
+        // 탑 베인 궁극기 쿨타임 게이지는 캐릭터 바로 밑에 항상 표시(선택 여부와
+        // 무관 - 인디 발굴 게이지와 같은 패턴, 칸 좌표 rect 기준).
+        if (occ.heroId === 'm_bane') {
+          layer.appendChild(renderBaneUltimateGauge(occ, rect));
         }
       });
 
@@ -962,15 +1007,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
         onclick: () => apply(advanceIronMeyaong(state, instance.instanceId)),
       }));
     }
-    // 에이스 배트맨(불멸) 전용 모드 변신 - 기본/투수모드/타자모드를 순환한다.
-    if (instance.heroId === 'i_ace_batman') {
-      const modeLabel = { pitcher: '투수모드', batter: '타자모드' }[instance.batmanMode] ?? '기본모드';
-      below.push(el('button', {
-        class: 'cell-quick-btn cell-quick-extra',
-        text: `변신 (현재: ${modeLabel})`,
-        onclick: () => apply(cycleBatmanMode(state, instance.instanceId)),
-      }));
-    }
 
     // 부가 정보는 큰 카드 대신 작은 배지 한 줄로만 보여준다. 불멸 진행도("불멸
     // N/target")는 어떤 신화 캐릭터를 클릭하든 아예 노출하지 않는다(사용자 지정 -
@@ -1009,7 +1045,30 @@ export function GameScreen({ getState, dispatch, onExit }) {
       style: `left:${centerX}%; top:${rect.top + rect.height / 2}%; width:${rect.width * 1.35}%; height:${rect.height * 1.7}%;`,
     });
 
-    return el('div', { class: 'cell-quick-actions' }, [selectRing, aboveWrap, belowWrap].filter(Boolean));
+    // 에이스 배트맨(불멸) 전용 모드 선택 - 순환 버튼이 아니라 캐릭터 좌우에
+    // "투수"/"타자" 버튼을 각각 띄운다(사용자 지정 - "지금처럼 하지 말고").
+    // 한 번 고르면 그걸로 끝, 다시 못 바꾼다(사용자 지정 - "한번 변신하면
+    // 못바꿔") - batmanMode가 이미 정해져 있으면 두 버튼 다 안 뜬다.
+    let batmanModeButtons = null;
+    if (instance.heroId === 'i_ace_batman' && !instance.batmanMode) {
+      const sideOffset = rect.width * 0.75;
+      batmanModeButtons = el('div', { class: 'batman-mode-buttons' }, [
+        el('button', {
+          class: 'batman-mode-btn',
+          style: `left:${centerX - sideOffset}%; top:${rect.top + rect.height / 2}%;`,
+          text: '투수',
+          onclick: () => apply(chooseBatmanMode(state, instance.instanceId, 'pitcher')),
+        }),
+        el('button', {
+          class: 'batman-mode-btn',
+          style: `left:${centerX + sideOffset}%; top:${rect.top + rect.height / 2}%;`,
+          text: '타자',
+          onclick: () => apply(chooseBatmanMode(state, instance.instanceId, 'batter')),
+        }),
+      ]);
+    }
+
+    return el('div', { class: 'cell-quick-actions' }, [selectRing, aboveWrap, belowWrap, batmanModeButtons].filter(Boolean));
   }
 
   // 채드의 "판매하기" 버튼을 누르면(ui.chadSellMode) 필드의 신화/불멸(채드/기가채드

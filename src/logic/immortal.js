@@ -254,10 +254,16 @@ export function recordImmortalEvent(state, instanceId, eventType, payload = {}) 
   if (found.instance.heroId === 'm_bane' && cond.extra?.ultimateThresholdMin) {
     const { ultimateThresholdMin: min, ultimateThresholdMax: max } = cond.extra;
     if (found.instance.nextUltimateAt == null) {
+      // ultimateWindowStart는 "지금 채우는 중인 구간이 어디서부터 시작했는지"
+      // 기록해둔다 - 화면에 궁 쿨타임 게이지를 보여줄 때
+      // (progress-windowStart)/(nextUltimateAt-windowStart)로 진행률을 계산하는 데
+      // 쓴다(사용자 요청 - "베인 궁 쿨타임 차는거 밑에 바로 보여주면 좋겠어").
+      found.instance.ultimateWindowStart = before;
       found.instance.nextUltimateAt = before + min + Math.floor(Math.random() * (max - min + 1));
     }
     if (found.instance.progress >= found.instance.nextUltimateAt) {
       found.instance.ultimateFlashAt = Date.now();
+      found.instance.ultimateWindowStart = found.instance.progress;
       found.instance.nextUltimateAt = found.instance.progress + min + Math.floor(Math.random() * (max - min + 1));
     }
   }

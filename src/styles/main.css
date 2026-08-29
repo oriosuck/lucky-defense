@@ -488,11 +488,12 @@ body {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
-/* 로카의 불멸 진행도("장전 N/160")를 캐릭터 바로 위에 항상 띄우는 배지 - 다른
-   신화들은 PR #27에서 진행도 표시를 전부 없앴지만 로카만 예외로 다시 요청받음
-   (선택 여부와 무관하게 항상 노출, stage-hero-layer 안에서 캐릭터 토큰과 같은
-   left/top(%) 좌표계를 쓰고 위로만 살짝 띄운다). */
-.roka-charge-badge {
+/* 캐릭터 머리 바로 위에 숫자 하나만 항상 띄우는 배지(선택 여부와 무관) - 로카는
+   장전된 탄약 수, 배트맨은 지금 강화 레벨을 이 자리에 보여준다(사용자 지정 -
+   "몇강인지는 배트 머리 위에 로카처럼 적어줘"). 다른 신화들은 PR #27에서 진행도
+   표시를 전부 없앴지만 이 둘만 예외 - stage-hero-layer 안에서 캐릭터 토큰과
+   같은 left/top(%) 좌표계를 쓰고 위로만 살짝 띄운다. */
+.hero-head-badge {
   position: absolute; transform: translate(-50%, calc(-100% - 4px));
   color: #ffe066; font-size: 9px; font-weight: 800; white-space: nowrap;
   background: rgba(0, 0, 0, 0.55); border-radius: 4px; padding: 1px 5px;
@@ -537,6 +538,20 @@ body {
   50% { opacity: 1; }
 }
 
+/* 에이스 배트맨 전용 모드 선택 - 순환 버튼이 아니라 캐릭터 좌우에 "투수"/"타자"
+   버튼을 각각 띄운다(사용자 지정). 한 번 고르면 이 레이어 자체가 다시 안
+   뜬다(GameScreen.js에서 instance.batmanMode가 있으면 렌더 자체를 건너뜀). */
+.batman-mode-buttons { position: absolute; inset: 0; pointer-events: none; }
+.batman-mode-btn {
+  position: absolute; transform: translate(-50%, -50%);
+  padding: 5px 10px; border-radius: 8px;
+  background: linear-gradient(180deg, #3a3a5c, #22223a);
+  border: 2px solid #6b6bb8;
+  color: #e8e8ff; font-weight: 800; font-size: 12px;
+  pointer-events: auto; cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
 /* 채드 "판매하기" 화살표 선택 모드 - 대상이 될 수 있는 신화/불멸 머리 위에만 뜬다 */
 .chad-arrow-layer { position: absolute; inset: 0; z-index: 7; }
 .chad-sell-arrow {
@@ -550,11 +565,6 @@ body {
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   box-shadow: 0 0 10px rgba(78, 224, 106, 0.85);
-  animation: chad-arrow-bounce 0.7s ease-in-out infinite;
-}
-@keyframes chad-arrow-bounce {
-  0%, 100% { transform: translate(-50%, -100%); }
-  50% { transform: translate(-50%, -130%); }
 }
 
 /* 이동불능(게이지형) - 빨간 원이 5초 동안 차오르는 연출. 이미지가 아니라 conic-gradient +

@@ -14,7 +14,7 @@ export function resolveHeroImage(heroDef, instance) {
   if (instance) {
     if (heroDef.id === 'm_tar') return TAR_STAGE_IMAGES[instance.tarStage ?? 1];
     if (heroDef.id === 'm_dragon' && instance.immortalEligible) return DRAGON_DRAIN_IMAGE;
-    // 에이스 배트맨(불멸) 전용 "모드 변신" - actions.js의 cycleBatmanMode()로 순환.
+    // 에이스 배트맨(불멸) 전용 "모드 선택" - actions.js의 chooseBatmanMode()로 결정(한 번 정하면 고정).
     if (heroDef.id === 'i_ace_batman' && instance.batmanMode) return ACE_BATMAN_TRANSFORM_IMAGES[instance.batmanMode];
     // 아이언미야옹 1차/2차 변신 - actions.js의 advanceIronMeyaong()이 stage를 올린다
     // (stage 1 → transform1 이미지, stage 2 → transform2 이미지, 0은 기본 초상화).
