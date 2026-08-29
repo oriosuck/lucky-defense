@@ -250,29 +250,31 @@ export function recordImmortalEvent(state, instanceId, eventType, payload = {}) 
   }
 
   const amount = cond.incrementPerTick != null ? rollValue(cond.incrementPerTick) : (payload.amount ?? 1);
-  const before = found.instance.progress ?? 0;
-  found.instance.progress = before + amount;
 
-  // 탑 베인은 이동 왕복 15~20회(매번 랜덤)마다 "궁극기 1회 사용"으로 환산된다
-  // (사용자 재확인 사항). 실제 데미지 계산은 범위 밖이라, 그 순간을 넘길 때마다
-  // 필드에서 잠깐 궁 이펙트를 보여주는 용도로만 타임스탬프를 남긴다. 고정 비율
-  // 대신 "다음 임계치"를 개체에 저장해두고, 넘길 때마다 다시 랜덤으로 다음
-  // 임계치를 뽑는다.
+  // 탑 베인은 불멸 조건 자체가 "이동 횟수"가 아니라 "궁극기(필살기) 사용
+  // 12회"다(사용자 지정) - 원본 이동 누적치(moveProgress)는 궁극기 발동
+  // 임계치(15~20회 왕복마다 랜덤)를 계산하는 내부용으로만 쓰고, 승급 판정에
+  // 쓰이는 progress는 궁극기가 실제로 터진 횟수만 센다.
   if (found.instance.heroId === 'm_bane' && cond.extra?.ultimateThresholdMin) {
     const { ultimateThresholdMin: min, ultimateThresholdMax: max } = cond.extra;
+    const beforeMove = found.instance.moveProgress ?? 0;
+    found.instance.moveProgress = beforeMove + amount;
     if (found.instance.nextUltimateAt == null) {
       // ultimateWindowStart는 "지금 채우는 중인 구간이 어디서부터 시작했는지"
       // 기록해둔다 - 화면에 궁 쿨타임 게이지를 보여줄 때
-      // (progress-windowStart)/(nextUltimateAt-windowStart)로 진행률을 계산하는 데
-      // 쓴다(사용자 요청 - "베인 궁 쿨타임 차는거 밑에 바로 보여주면 좋겠어").
-      found.instance.ultimateWindowStart = before;
-      found.instance.nextUltimateAt = before + min + Math.floor(Math.random() * (max - min + 1));
+      // (moveProgress-windowStart)/(nextUltimateAt-windowStart)로 진행률을 계산하는
+      // 데 쓴다(사용자 요청 - "베인 궁 쿨타임 차는거 밑에 바로 보여주면 좋겠어").
+      found.instance.ultimateWindowStart = beforeMove;
+      found.instance.nextUltimateAt = beforeMove + min + Math.floor(Math.random() * (max - min + 1));
     }
-    if (found.instance.progress >= found.instance.nextUltimateAt) {
+    if (found.instance.moveProgress >= found.instance.nextUltimateAt) {
       found.instance.ultimateFlashAt = Date.now();
-      found.instance.ultimateWindowStart = found.instance.progress;
-      found.instance.nextUltimateAt = found.instance.progress + min + Math.floor(Math.random() * (max - min + 1));
+      found.instance.progress = (found.instance.progress ?? 0) + 1; // 궁극기 사용 횟수(승급 판정용)
+      found.instance.ultimateWindowStart = found.instance.moveProgress;
+      found.instance.nextUltimateAt = found.instance.moveProgress + min + Math.floor(Math.random() * (max - min + 1));
     }
+  } else {
+    found.instance.progress = (found.instance.progress ?? 0) + amount;
   }
 
   return { success: true, newState };
@@ -509,7 +511,8 @@ export function cannibalizeTar(state, eaterInstanceId) {
 // 간격은 원래 돌파/라운드/강화 상태별로 따로 뒀었는데(3단계 고정값 + 전설강화
 // 시 2배) "너무 빠르다"는 사용자 지적으로 전부 걷어내고 1~10초 랜덤 하나로
 // 단순화했다(사용자 지정 - "마마 임프 생성 속도 1~10초 사이로 랜덤 적용하자").
-const IMMORTAL_MAMA_STOP_ROUND = 10;
+// 임프 생성 중단 라운드 - 사용자 지정: "임프는 9라운드 이후로 생성하지 마라".
+const IMMORTAL_MAMA_STOP_ROUND = 9;
 // 마마 승급에 필요한 최대 임프 수(돌파 안 한 경우 9마리) - 실제 필드 토큰으로 무한정
 // 쌓이지 않도록 이 값에서 생성을 멈춘다(어차피 그 이상은 승급 조건에 필요 없음).
 const MAX_IMP_STOCK = 9;
@@ -517,6 +520,11 @@ const MAX_IMP_STOCK = 9;
 export function tickMamaImps(state, deltaSec) {
   const newState = structuredClone(state);
   if (newState.wave > IMMORTAL_MAMA_STOP_ROUND) return newState;
+  // 맵에 몬스터가 없을 때도 생성하면 안 된다는 사용자 지정 - 몬스터가 0마리인
+  // 동안은 타이머도 진행시키지 않는다(그냥 건너뛰는 게 아니라 elapsed 자체를
+  // 멈춰서, 몬스터가 다시 나타났을 때 그 순간부터 정상적으로 카운트가 이어지게
+  // 한다).
+  if (newState.monsterCount <= 0) return newState;
   // 임프는 필드에 있는 마마 전부가 공유하는 전역 자원이다(승급 판정도 이제 이
   // 전역 수를 기준으로 함 - promotionHandlers.m_mama 참고) - 필드에 실존하는
   // 임프 개수를 그때그때 세서 9마리를 넘지 않도록 생성을 멈춘다. 마마가 여러

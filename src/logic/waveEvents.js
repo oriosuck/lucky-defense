@@ -208,6 +208,22 @@ function onWaveStart(state) {
   state.bossRaidWindow = RAID_ROUNDS.includes(state.wave) ? { open: false, delayRemaining: null } : null;
 }
 
+// 실제로 속박되는 대상은 칸 좌표가 아니라 "잠기는 순간(active 전환 시점)에 그
+// 칸에 실제로 있던 개체"다(사용자 지적 - "그 원을 다 피했으면 캐릭터가 없는
+// 자리는 속박이 안되는게 맞아. 지금은 칸에 그냥 속박이 남아있어서 내가 피한애를
+// 다시 그 칸에 들여다놓으면 피했는데도 속박되어버려"). filling 단계(5초 게이지)
+// 동안은 아직 아무도 잠기지 않았으니 targetSlots(좌표, 게이지 연출용)만 갖고
+// 있다가, active로 전환되는 그 순간에만 실제 점유 개체를 스냅샷 떠서
+// targetInstanceIds에 담는다 - 그래서 그 전에 칸을 비웠으면 애초에 스냅샷에
+//안 잡히고, active 이후에 다른(또는 같은) 개체를 그 칸에 새로 들여놔도 스냅샷에
+// 없는 instanceId라 속박되지 않는다.
+function snapshotOccupantInstanceIds(state, slots) {
+  return slots.flatMap(({ row, col }) => {
+    const slot = state.field.find((s) => s.row === row && s.col === col);
+    return slot ? slot.occupants.map((o) => o.instanceId) : [];
+  });
+}
+
 /** 이동불능 공격(즉시형: 즉시 속박 5초 / 게이지형: 6칸 5초 채워진 뒤 10초간 이동불가) */
 export function handleImmobilizeEvent(state) {
   const ev = state.eventLog.immobilizeEvent;
@@ -218,6 +234,7 @@ export function handleImmobilizeEvent(state) {
   if (e.phase === 'idle' && newState.waveTimeLeft <= e.triggerAtTimeLeft) {
     if (e.type === 'instant') {
       e.targetSlots = pickRandomSlots(newState, 1);
+      e.targetInstanceIds = snapshotOccupantInstanceIds(newState, e.targetSlots);
       e.phase = 'active';
       e.timer = IMMOBILIZE_INSTANT_SEC;
     } else {
@@ -226,6 +243,7 @@ export function handleImmobilizeEvent(state) {
       e.timer = IMMOBILIZE_GAUGE_FILL_SEC;
     }
   } else if (e.phase === 'filling' && e.timer <= 0) {
+    e.targetInstanceIds = snapshotOccupantInstanceIds(newState, e.targetSlots);
     e.phase = 'active';
     e.timer = IMMOBILIZE_GAUGE_LOCK_SEC;
   } else if (e.phase === 'active' && e.timer <= 0) {
