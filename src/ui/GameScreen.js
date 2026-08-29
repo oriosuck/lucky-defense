@@ -909,10 +909,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const above = [];
     const below = [];
 
-    above.push(el('button', {
-      class: 'cell-quick-btn cell-quick-close', text: '✕',
-      onclick: () => { ui.selectedSlot = null; render(state); },
-    }));
+    // 선택 해제용 ✕ 버튼은 모든 캐릭터에서 일괄 제거했다(사용자 지적 - 배트맨
+    // 강화 배지("+15", "강화 240G 성공 28%")와 겹쳐서 가렸음). 빈 칸 클릭이나
+    // 다른 칸 클릭으로도 이미 선택이 해제되므로(PR #40 "빈 칸 탭 시 즉시 해제"
+    // 참고) 기능 손실은 없다.
 
     // 일반~전설은 판매/합성 외에 다른 기능이 없다(이동/강화 버튼 없음). 신화~불멸은
     // 일반 판매가 안 되고, 채드의 "판매하기" 버튼으로 화살표 모드에 들어가야만 처분할
