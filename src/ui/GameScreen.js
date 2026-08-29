@@ -48,7 +48,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
     monsters: [], // 좌->우 굴을 지나가는 장식용 몬스터 애니메이션 상태
     monsterSpawnWave: null, // 아래 두 필드가 몇 라운드 기준인지(라운드 바뀌면 리셋)
     monsterSpawnedCount: 0, // 이번 라운드에 지금까지 스폰한 장식용 몬스터 수
-    chadSellMode: false, // 채드 "판매하기" 버튼을 눌러 화살표 선택 모드에 들어간 상태
+    // 채드/기가채드 "판매하기" 버튼을 눌러 화살표 선택 모드에 들어간 상태 - 어느 채드가
+    // 먹이는 쪽인지(m_chad는 신화만, i_giga_chad는 신화+불멸) 구분해야 해서 boolean이
+    // 아니라 그 채드의 instanceId를 담는다(null이면 꺼진 상태).
+    chadSellMode: null,
   };
 
   function apply(result) {
@@ -706,15 +709,19 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 좋겠어"). immortal.js의 recordImmortalEvent가 매번 남기는
   // ultimateWindowStart(이번 구간 시작 시점의 누적 이동수)~nextUltimateAt(이번
   // 구간이 끝나는 누적 이동수) 사이에서 progress가 어디쯤 왔는지로 채움 비율을
-  // 계산한다 - 인디 게이지와 같은 시각 스타일을 재사용.
-  function renderBaneUltimateGauge(occ, rect) {
+  // 계산한다 - 인디 게이지와 같은 시각 스타일을 재사용. **주의**: 처음엔 칸(rect)
+  // 하단 기준으로 그렸는데, 신화 등급은 토큰 박스가 칸보다 훨씬 커서(위쪽으로
+  // 크게 튀어나옴) 실제 캐릭터 발밑과 칸 하단이 안 맞아 게이지가 멀리 떨어져
+  // 보였다(사용자 지적 - "베인이랑 바가 너무 멀어") - 칸이 아니라 토큰 자신의
+  // 좌표(centerX/footY/tokenWidth)를 기준으로 다시 그려서 실제 발밑 바로 아래에
+  // 오도록 고쳤다.
+  function renderBaneUltimateGauge(occ, centerX, footY, width) {
     const start = occ.ultimateWindowStart ?? 0;
     const end = occ.nextUltimateAt ?? start;
     const fillRatio = end > start ? Math.max(0, Math.min(1, ((occ.progress ?? 0) - start) / (end - start))) : 0;
-    const gaugeTop = rect.top + rect.height + 1.2;
     return el('div', {
       class: 'indy-treasure-gauge',
-      style: `left:${rect.left}%; top:${gaugeTop}%; width:${rect.width}%;`,
+      style: `left:${centerX - width / 2}%; top:${footY}%; width:${width}%;`,
     }, [
       el('div', { class: 'indy-treasure-gauge-fill', style: `width:${fillRatio * 100}%;` }),
     ]);
@@ -840,9 +847,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
           }));
         }
         // 탑 베인 궁극기 쿨타임 게이지는 캐릭터 바로 밑에 항상 표시(선택 여부와
-        // 무관 - 인디 발굴 게이지와 같은 패턴, 칸 좌표 rect 기준).
+        // 무관 - 인디 발굴 게이지와 같은 패턴). 칸(rect)이 아니라 토큰 자신의
+        // 발끝(top+tokenHeight) 기준으로 그려야 신화 크기 배율과 무관하게 항상
+        // 캐릭터 바로 밑에 붙는다.
         if (occ.heroId === 'm_bane') {
-          layer.appendChild(renderBaneUltimateGauge(occ, rect));
+          layer.appendChild(renderBaneUltimateGauge(occ, centerX, top + tokenHeight + 1, tokenWidth));
         }
       });
 
@@ -882,7 +891,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (!found) return null;
     const { slot, instance } = found;
     const heroDef = HEROES_BY_ID[instance.heroId];
-    if (heroDef.tier === 'imp') return null; // 마마가 만든 임프는 조작 대상이 아니다
+    // 마마가 만든 임프도 이제 판매(9코인/마리)/합성(3마리 -> 희귀 랜덤)이 가능하다
+    // (사용자 지정) - 일반~전설과 같은 제네릭 판매/합성 블록을 그대로 타므로 여기서
+    // 더 이상 막을 필요가 없다(아래 mythic/immortal 전용 분기들은 heroId/tier로
+    // 따로 걸러지니 임프에는 자연히 적용 안 됨).
     const rect = fieldCellRect(slot.row, slot.col);
     const centerX = rect.left + rect.width / 2;
 
@@ -929,15 +941,19 @@ export function GameScreen({ getState, dispatch, onExit }) {
         onclick: () => apply(sellGigaChad(state, instance.instanceId)),
       }));
     }
-    // 채드 전용: "판매하기"를 누르면 팝니다 버튼이 아니라 필드의 신화/불멸(채드/기가채드
-    // 본인 제외) 머리 위에 초록 화살표가 뜨는 모드로 들어간다 - 그 화살표를 눌러야
-    // 비로소 판매(먹이기)가 실행된다(사용자 지정 순서: 채드 하단 버튼 → 화살표 표시 →
-    // 화살표 클릭 → 판매).
-    if (instance.heroId === 'm_chad') {
+    // 채드/기가채드 전용: "판매하기"를 누르면 팝니다 버튼이 아니라 필드의 신화/불멸
+    // (채드/기가채드 본인 제외) 머리 위에 초록 화살표가 뜨는 모드로 들어간다 - 그
+    // 화살표를 눌러야 비로소 판매(먹이기)가 실행된다(사용자 지정 순서: 채드 하단
+    // 버튼 → 화살표 표시 → 화살표 클릭 → 판매). 일반 채드는 신화만, 기가채드는
+    // 신화/불멸 둘 다 먹일 수 있다(사용자 지정 - "일반 채드는 불멸을 못 팔아.
+    // 기가채드만 신화/불멸 다 팔 수 있어") - 대상 등급 필터링은
+    // renderChadArrowLayer가 어느 채드가 눌렀는지(instance.heroId)로 판정한다.
+    if (instance.heroId === 'm_chad' || instance.heroId === 'i_giga_chad') {
+      const active = ui.chadSellMode === instance.instanceId;
       below.push(el('button', {
-        class: `cell-quick-btn cell-quick-extra ${ui.chadSellMode ? 'active' : ''}`,
-        text: ui.chadSellMode ? '취소' : '판매하기',
-        onclick: () => { ui.chadSellMode = !ui.chadSellMode; render(state); },
+        class: `cell-quick-btn cell-quick-extra ${active ? 'active' : ''}`,
+        text: active ? '취소' : '판매하기',
+        onclick: () => { ui.chadSellMode = active ? null : instance.instanceId; render(state); },
       }));
     }
     if (instance.heroId === 'm_tar' && countHeroOnField(state, 'm_tar').count > 1) {
@@ -1077,14 +1093,17 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 쪽에서 먼저 시작해야 한다는 사용자 지정 순서를 그대로 구현한 것.
   function renderChadArrowLayer(state) {
     if (!ui.chadSellMode) return null;
-    const chad = state.field.flatMap((s) => s.occupants).find((o) => o.heroId === 'm_chad');
-    if (!chad) { ui.chadSellMode = false; return null; }
+    const chad = state.field.flatMap((s) => s.occupants).find((o) => o.instanceId === ui.chadSellMode);
+    if (!chad) { ui.chadSellMode = null; return null; }
+    // 일반 채드는 신화만, 기가채드는 신화+불멸 둘 다 대상(사용자 지정 - "일반
+    // 채드는 불멸을 못 팔아. 기가채드만 신화/불멸 다 팔 수 있어").
+    const allowedTiers = chad.heroId === 'i_giga_chad' ? ['mythic', 'immortal'] : ['mythic'];
     const targets = [];
     for (const slot of state.field) {
       for (const occ of slot.occupants) {
         const def = HEROES_BY_ID[occ.heroId];
         if (!def) continue;
-        if ((def.tier === 'mythic' || def.tier === 'immortal') && occ.heroId !== 'm_chad' && occ.heroId !== 'i_giga_chad') {
+        if (allowedTiers.includes(def.tier) && occ.heroId !== 'm_chad' && occ.heroId !== 'i_giga_chad') {
           targets.push({ slot, occ });
         }
       }
@@ -1097,7 +1116,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         style: `left:${rect.left + rect.width / 2}%; top:${rect.top}%;`,
         title: '판매(먹이기)',
         onclick: () => {
-          ui.chadSellMode = false;
+          ui.chadSellMode = null;
           apply(feedMythicToChad(state, chad.instanceId, occ.instanceId));
         },
       }, [el('span', { text: '⬇' })]);
