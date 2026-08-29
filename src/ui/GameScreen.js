@@ -770,16 +770,17 @@ export function GameScreen({ getState, dispatch, onExit }) {
           occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
         ]));
 
-        // 로카(불멸 조건: 시간 기반 자동 누적, 10초마다 1~5, 목표 160)의 "장전"
-        // 진행도를 캐릭터 바로 위에 항상 표시(사용자 지정 - 선택 여부와 무관, 다른
-        // 신화들은 PR #27에서 진행도 표시를 전부 없앴지만 로카는 예외로 다시 요청받음).
+        // 로카(불멸 조건: 시간 기반 자동 누적, 10초마다 1~5)는 누적 진행도(N/160)가
+        // 아니라 "10초마다 한 번씩 얼마나 장전했는지"(방금 굴린 값 그 자체)를
+        // 캐릭터 바로 위에 항상 표시한다(사용자 정정 - "장전 진행도가 아니라...
+        // 몇초동안 한번씩 1~5씩 장전을 하잖아 그 숫자를 적어달라고"). 굴린 값은
+        // immortal.js의 m_roka 틱 핸들러가 매번 instance.lastChargeAmount에
+        // 남긴다 - 첫 틱이 돌기 전(아직 한 번도 장전 안 함)에는 대기 문구를 보여준다.
         if (occ.heroId === 'm_roka') {
-          const target = heroDef.immortalCondition?.target ?? 0;
-          const progress = Math.min(target, Math.floor(occ.progress ?? 0));
           layer.appendChild(el('div', {
             class: 'roka-charge-badge',
             style: `left:${centerX}%; top:${top}%; z-index:${30 + slot.row};`,
-            text: `장전 ${progress}/${target}`,
+            text: occ.lastChargeAmount != null ? `장전 +${occ.lastChargeAmount}` : '장전 대기중',
           }));
         }
       });

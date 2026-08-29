@@ -89,6 +89,21 @@ const tickOverrides = {
       t.nextTick = rollValue(cond.extra.postCapIntervalSec);
     }
   },
+  // 로카: 제네릭 시간기반 누적과 똑같이 진행(10초마다 1~5)하지만, 매 틱마다 실제로
+  // 몇을 굴렸는지(장전량)를 별도로 기록해둔다 - 화면에는 누적 진행도(N/160)가
+  // 아니라 "방금 몇 만큼 장전했는지"를 보여달라는 사용자 지정(진행도 표시가 아님).
+  m_roka(state, slot, instance, cond, deltaSec) {
+    const t = ensureTickState(instance, cond);
+    t.elapsed += deltaSec;
+    while (t.elapsed >= t.nextTick) {
+      t.elapsed -= t.nextTick;
+      const amount = rollValue(cond.incrementPerTick);
+      instance.progress = (instance.progress ?? 0) + amount;
+      instance.lastChargeAmount = amount;
+      instance.lastChargeAt = Date.now();
+      t.nextTick = rollValue(cond.tickIntervalSec);
+    }
+  },
   // 각성 헤일리: 별의 힘 10 도달 후에는 시간 기반으로 궁극기(15%) 성공 여부를 판정
   m_hailey(state, slot, instance, cond, deltaSec) {
     if ((instance.progress ?? 0) < cond.target || instance.ultimateSucceeded) return;
