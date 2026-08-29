@@ -824,6 +824,30 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
 .mission-reward-item { display: flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 700; color: var(--gold); }
 .mission-reward-item img { width: 12px; height: 12px; object-fit: contain; }
 
+/* 미션 완료 알림 - 화면 우측에서 슬라이드인됐다가 잠깐 머문 뒤 다시 슬라이드아웃
+   된다(사용자 요청). animation-delay는 GameScreen.js가 missionToastQueue의 남은
+   시간을 거꾸로 계산해서 매 렌더 다시 넣는다(0.2초마다 DOM이 재생성되는 구조에서
+   고정 delay를 쓰면 애니메이션이 매번 끊기는 문제 - CLAUDE.md 참고). */
+.mission-toast {
+  position: absolute; top: 8%; right: 2%; z-index: 15;
+  background: linear-gradient(180deg, #2a2438, #1a1626); border: 2px solid var(--gold);
+  border-radius: 10px; padding: 8px 12px; min-width: 140px; max-width: 70%;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  animation: mission-toast-slide 3000ms ease-out forwards;
+  pointer-events: none;
+}
+@keyframes mission-toast-slide {
+  0% { transform: translateX(120%); opacity: 0; }
+  10% { transform: translateX(0); opacity: 1; }
+  85% { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(120%); opacity: 0; }
+}
+.mission-toast-title { font-size: 11px; color: var(--gold); font-weight: 800; }
+.mission-toast-name { font-size: 14px; font-weight: 800; color: #fff; margin: 2px 0; }
+.mission-toast-reward { display: flex; gap: 8px; }
+.mission-toast-reward-item { display: flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 700; color: var(--gold); }
+.mission-toast-reward-item img { width: 14px; height: 14px; object-fit: contain; }
+
 .result-overlay {
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
   display: flex; align-items: center; justify-content: center;

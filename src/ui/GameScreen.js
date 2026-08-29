@@ -1,6 +1,6 @@
 import { HEROES_BY_ID, TIER_LABEL, heroesByTier, SECOND_STAGE_IMMORTAL, IMP_HERO_ID } from '../data/heroes.js';
 import { STAGE_LAYOUT, BOSS_IMAGE, UI_IMAGES } from '../data/assets.js';
-import { missionDefinitions } from '../logic/missions.js';
+import { missionDefinitions, MISSION_TOAST_SEC } from '../logic/missions.js';
 import { summonNormal, summonRoulette } from '../logic/summon.js';
 import { ROULETTE_SUCCESS_RATE, ROULETTE_COST } from '../data/heroes.js';
 import {
@@ -65,12 +65,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 문제가 있어서 실측 후 픽셀로 못박는다(CLAUDE.md 참고).
   const STAGE_RATIO = 688 / 1508;
 
-  // 뷰포트 비율이 STAGE_RATIO와 안 맞을 때(특히 모바일 브라우저 - 카카오톡 인앱
-  // 브라우저 등에서 실제 사용 가능한 높이가 688:1508과 어긋나는 경우가 흔함) 예전엔
-  // "contain"(전체가 다 보이게, 안 맞는 쪽에 검은 여백/레터박스)이었는데, 사용자가
-  // 그 "까만거" 없이 화면을 꽉 채워달라고 요청했다(item 2) - "cover"(꽉 채우고,
-  // 안 맞는 쪽은 넘치는 만큼 잘림)로 바꿨다. `.game-stage-wrap`에 이미 걸려있는
-  // overflow:hidden이 넘치는 부분을 가려준다.
+  // 뷰포트 비율이 STAGE_RATIO와 안 맞을 때 "cover"(꽉 채우고 넘치는 부분 자르기)로
+  // 바꿔봤었는데, 카카오톡 인앱 브라우저 같은 환경에서 위쪽 UI(상단 배지)가 통째로
+  // 잘려나가는 부작용이 나왔다(사용자 스크린샷으로 확인) - "안되면 크기 그냥
+  // 원래대로 해야할거 같아"라는 지시대로 "contain"(전체가 다 보이게, 안 맞는
+  // 쪽엔 검은 여백)으로 되돌렸다. 검은 여백 자체는 별도로 추가한 전체화면 버튼
+  // (renderStageControls의 ⛶, Fullscreen API)으로 해결을 시도한다 - 지원 안 되는
+  // 브라우저(iOS 인앱 브라우저 다수)에서는 버튼이 조용히 no-op으로 빠진다.
   function sizeStageToFit(wrap, stage) {
     const availW = wrap.clientWidth;
     const availH = wrap.clientHeight;
@@ -78,11 +79,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
     let w;
     let h;
     if (availW / availH > STAGE_RATIO) {
-      w = availW;
-      h = w / STAGE_RATIO;
-    } else {
       h = availH;
       w = h * STAGE_RATIO;
+    } else {
+      w = availW;
+      h = w / STAGE_RATIO;
     }
     stage.style.width = `${w}px`;
     stage.style.height = `${h}px`;
@@ -271,6 +272,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
     stage.appendChild(renderSideControls(state));
     stage.appendChild(renderActionRow(state));
     stage.appendChild(renderEnhanceOpenBtn(state));
+    const missionToast = renderMissionToast(state);
+    if (missionToast) stage.appendChild(missionToast);
     if (ui.popup === 'roulette') stage.appendChild(renderRoulettePopup(state));
     if (ui.popup === 'enhance') stage.appendChild(renderEnhancePopup(state));
     if (ui.popup === 'mythic') stage.appendChild(renderMythicPopup(state));
@@ -337,8 +340,28 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return el('div', { class: 'hole-effects' }, nodes);
   }
 
+  // 모바일에서 뷰포트 비율이 안 맞으면 위아래로 검은 여백이 남는 문제(위 sizeStageToFit
+  // 주석 참고)를 브라우저 자체 전체화면 API로 우회해본다 - 동영상 플레이어의
+  // 전체화면 버튼과 같은 개념(사용자 요청). `document.fullscreenEnabled`로 지원
+  // 여부를 확인해서 지원 안 하는 브라우저(iOS 인앱 브라우저 다수 - 카카오톡 포함)
+  // 에서는 버튼 자체를 안 띄운다(눌러도 반응 없는 죽은 버튼을 두지 않기 위해).
+  function isFullscreenSupported() {
+    return !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  }
+  function isCurrentlyFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+  function toggleFullscreen() {
+    if (isCurrentlyFullscreen()) {
+      (document.exitFullscreen ?? document.webkitExitFullscreen)?.call(document);
+    } else {
+      const root = document.documentElement;
+      (root.requestFullscreen ?? root.webkitRequestFullscreen)?.call(root)?.catch?.(() => {});
+    }
+  }
+
   function renderStageControls(state) {
-    return el('div', { class: 'stage-controls' }, [
+    const buttons = [
       el('button', {
         class: `stage-control-btn ${state.paused ? 'active' : ''}`,
         text: state.paused ? '▶' : '⏸',
@@ -348,8 +371,16 @@ export function GameScreen({ getState, dispatch, onExit }) {
           dispatch(next);
         },
       }),
-      el('button', { class: 'stage-control-btn', text: '🚪', onclick: onExit }),
-    ]);
+    ];
+    if (isFullscreenSupported()) {
+      buttons.push(el('button', {
+        class: `stage-control-btn ${isCurrentlyFullscreen() ? 'active' : ''}`,
+        text: '⛶', title: '전체화면',
+        onclick: toggleFullscreen,
+      }));
+    }
+    buttons.push(el('button', { class: 'stage-control-btn', text: '🚪', onclick: onExit }));
+    return el('div', { class: 'stage-controls' }, buttons);
   }
 
   const FAVORITE_BAR_MAX = 5;
@@ -535,14 +566,17 @@ export function GameScreen({ getState, dispatch, onExit }) {
   //
   // 캐릭터 크기는 그 칸에 몇 마리가 쌓여있든 항상 고정이다(사용자 지적 - 예전엔
   // 칸 너비를 마리 수만큼 나눠서 1마리일 때와 3마리일 때 크기가 달라졌었음).
-  const HERO_TOKEN_HEIGHT_RATIO = 1.0;
-  const HERO_TOKEN_WIDTH_RATIO = 0.55;
+  //
+  // "신화/불멸이 일반~전설보다 커야 하는데 지금 반대로 보인다"는 지적에 맞춰
+  // 일반~전설 기준 비율을 20% 줄이고(0.55/1.0 → 0.44/0.8), 신화/불멸 배율은 기존
+  // 절대 크기(1.25배) 대비 20% 더 키웠다 - 신화/불멸 배율은 이 기준 비율에 곱해지는
+  // 값이라, 최종 신화 절대 크기가 "예전 신화 크기(0.55×1.25=0.6875)의 120%"가
+  // 되도록 역산하면 0.6875×1.2 / 0.44 = 1.875. 결과적으로 신화/불멸이 일반~전설
+  // 대비 1.875배(예전 1.25배보다 격차가 훨씬 커짐)로 확실히 더 크게 보인다.
+  const HERO_TOKEN_HEIGHT_RATIO = 0.8;
+  const HERO_TOKEN_WIDTH_RATIO = 0.44;
   const IMP_TOKEN_SCALE = 0.5; // 마마 임프는 다른 캐릭터의 절반 크기(사용자 지적 - 너무 컸음)
-  // 신화/불멸은 항상 칸당 1마리라 스택 폭 제약(위 3마리 계산)이 적용 안 되므로
-  // 더 크게 키워도 된다(사용자 지정 - "신화는 크기를 2.5배 키워도 괜찮아. 불멸도
-  // 신화랑 크기 똑같으니 참고"). 이후 "너무 크다"는 지적을 받아 그 2.5배에서 다시
-  // 50%를 줄였다(2.5 × 0.5 = 1.25).
-  const MYTHIC_TOKEN_SCALE = 1.25;
+  const MYTHIC_TOKEN_SCALE = 1.875;
   const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
   const ATTACK_CYCLE_MS = 900; // 공격 모션(위아래 스쿼시-스트레치) 반복 주기
 
@@ -1172,6 +1206,35 @@ export function GameScreen({ getState, dispatch, onExit }) {
         el('div', { class: 'mythic-progress', text: unlocked ? '해금' : '잠김' }),
       ]);
     }));
+  }
+
+  // 미션이 새로 완료되면 화면 우측에서 슬라이드인되는 알림을 잠깐 띄운다(사용자
+  // 요청 - "미션 완료되면 우측에서 팝업 띄워주면서 미션 성공 알림"). 게임 루프가
+  // 0.2초마다 전체 DOM을 다시 그리는 구조라(main.js), 슬라이드인 애니메이션에
+  // 고정 delay를 쓰면 매번 처음부터 재생되며 끊겨 보인다(CLAUDE.md의 반복되는
+  // 함정 - 몬스터 이동/공격 모션과 동일) - missionToastQueue[0].timer(남은 시간)를
+  // 거꾸로 계산해 실제 경과 시간 기준 animation-delay를 매 렌더 다시 넣는다.
+  function renderMissionToast(state) {
+    const entry = state.missionToastQueue?.[0];
+    if (!entry) return null;
+    const def = missionDefinitions().find((m) => m.id === entry.missionId);
+    if (!def) return null;
+    const elapsedMs = Math.max(0, (MISSION_TOAST_SEC - entry.timer) * 1000);
+    const rewardParts = [];
+    if (def.reward?.gold) {
+      rewardParts.push(el('span', { class: 'mission-toast-reward-item' }, [el('img', { src: UI_IMAGES.goldIcon, alt: '' }), el('span', { text: String(def.reward.gold) })]));
+    }
+    if (def.reward?.luckstone) {
+      rewardParts.push(el('span', { class: 'mission-toast-reward-item' }, [el('img', { src: UI_IMAGES.luckstoneIcon, alt: '' }), el('span', { text: String(def.reward.luckstone) })]));
+    }
+    return el('div', {
+      class: 'mission-toast',
+      style: `animation-delay:-${elapsedMs}ms;`,
+    }, [
+      el('div', { class: 'mission-toast-title', text: '미션 완료!' }),
+      el('div', { class: 'mission-toast-name', text: def.name }),
+      el('div', { class: 'mission-toast-reward' }, rewardParts),
+    ]);
   }
 
   // 미션은 1번씩만 완료 가능하고(사용자 지정), 완료된 항목은 체크박스가 체크되고
