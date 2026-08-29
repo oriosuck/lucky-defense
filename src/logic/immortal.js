@@ -513,9 +513,6 @@ export function cannibalizeTar(state, eaterInstanceId) {
 // 단순화했다(사용자 지정 - "마마 임프 생성 속도 1~10초 사이로 랜덤 적용하자").
 // 임프 생성 중단 라운드 - 사용자 지정: "임프는 9라운드 이후로 생성하지 마라".
 const IMMORTAL_MAMA_STOP_ROUND = 9;
-// 마마 승급에 필요한 최대 임프 수(돌파 안 한 경우 9마리) - 실제 필드 토큰으로 무한정
-// 쌓이지 않도록 이 값에서 생성을 멈춘다(어차피 그 이상은 승급 조건에 필요 없음).
-const MAX_IMP_STOCK = 9;
 
 export function tickMamaImps(state, deltaSec) {
   const newState = structuredClone(state);
@@ -526,18 +523,19 @@ export function tickMamaImps(state, deltaSec) {
   // 한다).
   if (newState.monsterCount <= 0) return newState;
   // 임프는 필드에 있는 마마 전부가 공유하는 전역 자원이다(승급 판정도 이제 이
-  // 전역 수를 기준으로 함 - promotionHandlers.m_mama 참고) - 필드에 실존하는
-  // 임프 개수를 그때그때 세서 9마리를 넘지 않도록 생성을 멈춘다. 마마가 여러
-  // 마리면 각자의 타이머가 독립적으로 이 공용 풀에 기여하므로 더 빨리 채워질
-  // 뿐, 마마 마리수만큼 목표치가 늘어나지는 않는다.
+  // 전역 수를 기준으로 함 - promotionHandlers.m_mama 참고). 예전엔 승급에
+  // 필요한 최대치(9마리, 돌파 안 한 경우)에서 생성을 멈췄었는데, 몬스터가 자주
+  // 0에 가까워서(아래 "몬스터 표시 재확인" 참고) 생성 기회 자체가 희박한 상황에서
+  // 굳이 9로 또 막을 필요는 없다는 사용자 지정("9마리 이상 되어도 돼")에 따라
+  // 이 상한을 없앴다 - 이제 자연스러운 정지 조건은 findAutoPlaceSlot이 반환하는
+  // 빈 칸이 없을 때뿐이다(필드 공간이 다 차면 그 틱은 그냥 건너뜀).
   forEachMythicInstance(newState, (slot, instance, cond) => {
     if (instance.heroId !== 'm_mama') return;
-    if (countHeroOnField(newState, IMP_HERO_ID).count >= MAX_IMP_STOCK) return;
     const intervalRange = cond.extra.impIntervalSec;
     if (!instance.immortalTick) instance.immortalTick = { elapsed: 0, nextTick: rollValue(intervalRange) };
     const t = instance.immortalTick;
     t.elapsed += deltaSec;
-    while (t.elapsed >= t.nextTick && countHeroOnField(newState, IMP_HERO_ID).count < MAX_IMP_STOCK) {
+    while (t.elapsed >= t.nextTick) {
       t.elapsed -= t.nextTick;
       // 임프도 캐릭터처럼 실제로 필드 칸에 꺼내진다(사용자 요청) - 빈 칸이 없으면
       // 이번 틱은 그냥 건너뛴다.
