@@ -1074,12 +1074,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return null;
   }
 
-  // 마마(임프 보유량)/인디(보유 보물 등급) 등 진행도 텍스트 외에 추가로 보여줄 상태 한 줄.
+  // 인디(보유 보물 등급) 등 진행도 텍스트 외에 추가로 보여줄 상태 한 줄. 마마는
+  // 호출부(above 3줄 위)에서 아예 배지 자체를 안 띄우도록 걸러지므로 여기 없다
+  // (임프가 필드에 실제 캐릭터로 보이는 지금은 "임프 N/9" 텍스트가 중복 정보라
+  // 사용자 요청으로 제거됨 - impStock 필드 자체도 더는 존재하지 않는다, 이제
+  // 임프 수는 항상 field에서 실시간으로 세는 전역값이다).
   function extraStatusText(instance, heroDef) {
-    if (instance.heroId === 'm_mama') {
-      const target = instance.breakthrough ? heroDef.immortalCondition.extra.breakthroughCost : heroDef.immortalCondition.extra.normalCost;
-      return `임프: ${instance.impStock ?? 0} / ${target}${instance.breakthrough ? ' (돌파)' : ''}`;
-    }
     if (instance.heroId === 'm_indy') {
       return `보유 보물: ${instance.indyTreasureTier ? TIER_LABEL[instance.indyTreasureTier] : '없음'}`;
     }

@@ -277,11 +277,20 @@ const promotionHandlers = {
   },
   m_mama(state, slot, instance, cond) {
     // 임프 9마리(돌파 시 7마리)가 "동시에 필드에 존재"하면 승급 가능 - 소모가 아니라 존재
-    // 판정이다. 이제 임프가 실제 필드 토큰(x_imp)으로 존재하므로, impStock(=지금까지
-    // 실제로 배치에 성공한 임프 수, tickMamaImps 참고)이 목표치 이상이면 조건 충족.
+    // 판정이다. 마마가 몇 마리든(필드에 있는 마마 전부가 공유하는) **전역** 임프 수
+    // 기준이다(사용자 지정 정정 - "필드에 몇마리가 있건 간에 임프 9마리가 있으면
+    // 불멸 변신이 가능해"). 예전엔 마마 개체마다 자기가 만든 임프 수만 세는
+    // instance.impStock을 썼는데, 이러면 마마가 2마리면 각자 9마리씩 만들어야
+    // 해서 사실상 총 18마리(또는 관측된 대로 12마리 - 두 마마의 생성 속도 차이에
+    // 따라 먼저 도달하는 시점이 달랐을 뿐)가 필요한 것처럼 동작하는 버그였다.
+    // 이제 필드에 실존하는 임프 개수를 그때그때 실시간으로 세므로 별도 상태 필드가
+    // 필요 없다(impStock 완전히 제거, tickMamaImps 참고).
     const target = instance.breakthrough ? cond.extra.breakthroughCost : cond.extra.normalCost;
-    if ((instance.impStock ?? 0) < target) return { ok: false, reason: 'not-enough-imps' };
-    // 승급 시 필드의 임프는 전부 자동 소멸(수동 소모 없음, 기획서 확정 사항).
+    if (countHeroOnField(state, IMP_HERO_ID).count < target) return { ok: false, reason: 'not-enough-imps' };
+    // 승급 시 필드의 임프는 전부 자동 소멸(수동 소모 없음, 기획서 확정 사항) - 이
+    // 임프 풀을 모든 마마가 공유하므로, 한 마마가 승급하는 순간 다른 마마들은
+    // 다시 0부터 채워야 한다(=필드에 불멸은 종류별로 최대 1마리라는 일반 규칙과
+    // 자연히 맞물려서 "1마리만 불멸이 되고 나머지는 그대로 남는다"가 성립한다).
     for (const s of state.field) {
       s.occupants = s.occupants.filter((o) => o.heroId !== IMP_HERO_ID);
     }
@@ -354,6 +363,12 @@ export function checkImmortalPromotion(state, instanceId) {
   const heroDef = HEROES_BY_ID[instance.heroId];
   const cond = heroDef?.immortalCondition;
   if (!cond) return { eligible: false, promoted: false, newState: state };
+  // 불멸은 종류별로 필드에 최대 1마리(isImmortalPromotionReady와 동일한 규칙 - 거기서
+  // 이미 막혔어야 정상이지만, UI를 거치지 않고 직접 호출되는 경로에 대비해 실제
+  // 승급을 수행하는 이 함수에도 동일하게 최종 방어선을 둔다).
+  if (newState.field.some((s) => s.occupants.some((o) => o.heroId === cond.id))) {
+    return { eligible: false, promoted: false, reason: 'immortal-already-exists', newState: state };
+  }
 
   const eligible = cond.target == null ? true : isEligible(newState, slot, instance, cond) || instance.immortalEligible;
   if (!eligible) return { eligible: false, promoted: false, newState: state };
@@ -384,6 +399,12 @@ export function isImmortalPromotionReady(state, instanceId) {
   const heroDef = HEROES_BY_ID[instance.heroId];
   const cond = heroDef?.immortalCondition;
   if (!cond) return false;
+  // 불멸은 종류별로 필드에 최대 1마리만 존재할 수 있다(사용자 지정 - "무조건 1마리씩만
+  // 있어야 해... 1마리만 불멸 만들고 나머지는 일반으로 무조건 남는거야"). 같은 불멸
+  // 개체가 이미 필드에 있으면 조건을 다 채웠어도 승급 후보에서 제외한다 - 예를 들어
+  // 마마 2마리가 있을 때 하나가 먼저 승급하면(그랜드 마마), 나머지 마마는 임프
+  // 조건과 무관하게 다시는 "승급 가능!"으로 안 뜬다.
+  if (state.field.some((s) => s.occupants.some((o) => o.heroId === cond.id))) return false;
 
   const eligible = cond.target == null ? true : isEligible(state, slot, instance, cond) || instance.immortalEligible;
   if (!eligible) return false;
@@ -391,7 +412,7 @@ export function isImmortalPromotionReady(state, instanceId) {
   switch (instance.heroId) {
     case 'm_mama': {
       const target = instance.breakthrough ? cond.extra.breakthroughCost : cond.extra.normalCost;
-      return (instance.impStock ?? 0) >= target;
+      return countHeroOnField(state, IMP_HERO_ID).count >= target;
     }
     case 'm_ninja':
       return countHeroOnField(state, 'm_ninja').instances.length >= cond.extra.consumeCount;
@@ -468,9 +489,14 @@ const MAX_IMP_STOCK = 9;
 export function tickMamaImps(state, deltaSec) {
   const newState = structuredClone(state);
   if (newState.wave > IMMORTAL_MAMA.stopRound) return newState;
+  // 임프는 필드에 있는 마마 전부가 공유하는 전역 자원이다(승급 판정도 이제 이
+  // 전역 수를 기준으로 함 - promotionHandlers.m_mama 참고) - 필드에 실존하는
+  // 임프 개수를 그때그때 세서 9마리를 넘지 않도록 생성을 멈춘다. 마마가 여러
+  // 마리면 각자의 타이머가 독립적으로 이 공용 풀에 기여하므로 더 빨리 채워질
+  // 뿐, 마마 마리수만큼 목표치가 늘어나지는 않는다.
   forEachMythicInstance(newState, (slot, instance, cond) => {
     if (instance.heroId !== 'm_mama') return;
-    if ((instance.impStock ?? 0) >= MAX_IMP_STOCK) return;
+    if (countHeroOnField(newState, IMP_HERO_ID).count >= MAX_IMP_STOCK) return;
     const baseInterval = instance.breakthrough
       ? IMMORTAL_MAMA.breakthroughIntervalSec
       : newState.wave > 8
@@ -482,15 +508,13 @@ export function tickMamaImps(state, deltaSec) {
     if (!instance.immortalTick) instance.immortalTick = { elapsed: 0, nextTick: interval };
     const t = instance.immortalTick;
     t.elapsed += deltaSec;
-    while (t.elapsed >= interval && (instance.impStock ?? 0) < MAX_IMP_STOCK) {
+    while (t.elapsed >= interval && countHeroOnField(newState, IMP_HERO_ID).count < MAX_IMP_STOCK) {
       t.elapsed -= interval;
       // 임프도 캐릭터처럼 실제로 필드 칸에 꺼내진다(사용자 요청) - 빈 칸이 없으면
-      // 이번 틱은 그냥 건너뛴다(impStock도 증가시키지 않음 - 실제로 존재하는
-      // 임프 수와 어긋나면 안 되므로).
+      // 이번 틱은 그냥 건너뛴다.
       const impSlot = findAutoPlaceSlot(newState, IMP_HERO_ID);
       if (!impSlot) break;
       placeInstanceAtSlot(impSlot, createHeroInstance(IMP_HERO_ID));
-      instance.impStock = (instance.impStock ?? 0) + 1;
     }
   });
   return newState;
