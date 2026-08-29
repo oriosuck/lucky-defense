@@ -3580,6 +3580,104 @@ e.instantCellCount ?? 1)`로 이벤트 객체에 실려온 `instantCellCount`를
   강화 비용은 여전히 정식 밸런스 수치가 없어서 플레이스홀더 값 그대로다(코드 내
   주석에 표시돼 있음).
 
+## 베인 궁 30회로/불멸 진행도 표시 누락/강화 비용 재정의/로카 80% 맥스장전/오크 30% 지연 + 랜슬롯 승급 자체가 죽어있던 버그 발견
+
+한 메시지에서 여러 건을 받았다: (0) 베인 궁극기 발동 간격을 20 → 30회 왕복으로,
+(1) "필드에 베인이 있으면 불멸 창에 진행 상태가 보여야 하는데 다른 영웅들 중에
+안보이는 것들도 있다"는 지적, (2) 강화 비용 재정의(소환 확률 100코인/12맥스,
+전설~불멸은 "다음 레벨만큼" 행운석), (3) 로카 장전 80% 확률로 최대치, (4) 오크
+주술사 스킬 발동 간격 30% 증가.
+
+1. **베인 궁극기 간격 20 → 30**: `IMMORTAL_CONDITIONS.m_bane.extra.ultimateThresholdMin/Max`를
+   30/30으로(이전에도 15~20 랜덤 → 17 고정 → 20 고정을 거쳤던 값 - 이번이 네 번째
+   조정, `min===max`로 두면 `recordImmortalEvent`의 기존 랜덤 로직이 항상 그 값만
+   반환하는 패턴 재사용).
+2. **불멸 탭 진행도 "안 보이는" 영웅들 조사** - `immortalProgressText`(GameScreen.js)를
+   다시 훑어서, `cond.target`이 있고 어딘가에서 `instance.progress`가 실제로
+   증가하는 영웅(베인 포함 대부분)은 이미 정상 표시되고 있음을 먼저 확인했다.
+   진짜 문제였던 셋:
+   - **마마/개구리왕자**: `cond.target`이 애초에 `null`(진행을 별도 상태로 관리)이라
+     `immortalProgressText`가 무조건 `null`을 반환해 항상 "잠김"만 떴다. 마마는
+     `countHeroOnField(state, IMP_HERO_ID).count`를 목표(돌파 여부에 따라 9/7)와
+     비교해 "임프 N/M"으로, 개구리왕자는 `instance.frogTransformed` 여부로
+     "미변신"/"변신 완료"를 보여주도록 특수 분기를 추가했다.
+   - **랜슬롯**: `cond.target=3`이 있지만 `instance.progress`를 어디서도 증가시키지
+     않는 구조(승급 판정 자체가 "10강 달성 개체 수"를 필드에서 그때그때 세는
+     방식)라 항상 "0/3"만 뜨고 실제 진행을 전혀 반영 못 했다 - 판정과 같은 계산식
+     (`enhanceLevel >= 10인 개체 수`)을 그대로 재사용해서 보여주게 했다.
+   - 같은 김에 `immortalUnlockStatus`(잠김/해금 배지)도 재검사했다 - `cond.target
+     == null`이면 무조건 "해금"으로 잘못 취급하고 있어서, 마마/개구리왕자는 진행
+     상태와 무관하게(임프 0마리든 변신 전이든) 필드에 올라오자마자 항상 "해금"이
+     떴었다. 이미 정확한 판정 로직을 가진 `isImmortalPromotionReady()`를 그대로
+     재사용하도록 통째로 바꿨다(자체 재구현 대신 기존 진실 소스에 위임 - 로직이
+     두 곳에 따로 있으면 이번처럼 한쪽만 고쳐지고 다른 쪽은 계속 틀리는 문제가
+     반복된다).
+   - **조사 중 발견한 별개의 심각한 버그**: `isEligible()`(immortal.js)이 랜슬롯도
+     제네릭 `progress >= target` 분기를 타고 있었는데, 랜슬롯은 progress가 절대
+     안 올라가니 **승급 자격 자체가 영원히 안 생기는** 상태였다(왼쪽 바에는
+     "승급 가능!" 아이콘이 이미 떠 있었는데 - 그건 `isImmortalPromotionReady`의
+     별도 case로 정확히 판정하고 있었으므로 - 정작 눌러서 `checkImmortalPromotion`을
+     타면 이 `isEligible()` 게이트에 막혀 매번 조용히 실패했다). m_bamba/m_ray와
+     같은 패턴으로 m_lancelot 전용 분기를 추가해서 고쳤다.
+   - **그 수정으로 드러난 두 번째 버그(연쇄 발견)**: `isEligible()`을 고치고 나니
+     `promotionHandlers.m_lancelot`/`isImmortalPromotionReady`의 `case
+     'm_lancelot'` 둘 다 `cond.extra.maxEnhance`(옵셔널 체이닝 없이)를 읽고
+     있었는데, `IMMORTAL_CONDITIONS.m_lancelot`에는 애초에 `extra` 필드 자체가
+     없어서(`undefined.maxEnhance`) **즉시 크래시**했다 - 이 코드는 `isEligible`이
+     항상 false를 반환하던 예전엔 도달할 일이 없던 죽은 경로라 지금까지 한 번도
+     발견되지 않았다. `cond.extra?.maxEnhance ?? 10`으로 옵셔널 체이닝을 추가해
+     고쳤다.
+   - **세 번째 버그(가장 심각): 랜슬롯은 승급해도 필드에서 그냥 사라졌다** -
+     `promotionHandlers.m_lancelot`이 "10강 달성 3마리"를 소모할 때 **자기 자신을
+     제외하지 않고** target(3)마리를 전부(자기 자신 포함) 필드에서 지우고 있었다.
+     `checkImmortalPromotion`은 이 핸들러가 끝난 뒤 원래 자신의 슬롯에서 자신의
+     instanceId를 찾아 불멸 개체로 바꿔치기하는데, 이미 그 슬롯에서 자기 자신이
+     지워진 뒤라 `findIndex`가 -1을 반환해 아무 일도 안 일어난다 - `promoted:
+     true`는 반환되지만 실제로는 재료(3마리)만 사라지고 불멸은 생성되지 않는
+     조용한 실패였다. m_ninja/m_gigi와 같은 패턴(`if (ref.instance.instanceId ===
+     instance.instanceId) continue;`)으로 자기 자신은 소모 대상에서 빼고
+     target-1(2)마리만 제거하도록 고쳤다. **이 세 버그는 전부 "isEligible이 항상
+     false라 랜슬롯 승급 경로 자체가 한 번도 실행된 적 없었다"는 같은 뿌리에서
+     나온 연쇄였다** - 진입 조건 하나를 고쳤더니 그 안쪽에 숨어있던 두 개의 별개
+     버그가 순서대로 드러난 사례.
+3. **강화 비용 재정의**: `GLOBAL_ENHANCE_MAX_LEVEL.rate`를 11 → 12(사용자 지정 -
+   "12가 맥스였어. 12되면 맥스라고 표시하고 비활성화"). 소환 확률 트랙 자체의
+   골드 비용(100코인)은 이미 일치해서 변경 없음. 전설~불멸(legendary) 트랙은
+   고정 2행운석이던 걸 "다음 레벨만큼" 행운석이 드는 가변 비용으로 바꿨다(사용자
+   지정 - "1→2는 2행운석, 7→8은 8행운석"). `actions.js`에
+   `nextGlobalEnhanceCost(state, track)`를 새로 추가해서(배트맨 전용
+   `nextEnhanceGoldCost`와 같은 패턴) `state.globalEnhance.legendary + 2`(현재
+   표시 레벨+1이 다음 도달 레벨)를 반환하고, `upgradeGlobalEnhance()`와
+   `GameScreen.js`의 강화 팝업 렌더 둘 다 이 함수로 통일했다.
+4. **로카 장전 80% 확률로 최대치**: 매 장전 틱(10초 간격)마다 80% 확률로 그냥
+   최대(incrementPerTick 범위 상한, 5)로 채우고 나머지 20%만 기존처럼 1~5 랜덤을
+   굴리도록 `immortal.js`의 `tickOverrides.m_roka`를 고쳤다(`ROKA_MAX_CHARGE_CHANCE
+   = 0.8`, 사용자 지정 - "장전이 너무 늦어. 80% 확률로 폭발탄 최대 수로 장전을
+   해줘").
+5. **오크 주술사 스킬 발동 간격 30% 증가**: `IMMORTAL_CONDITIONS.m_orc_shaman.tickIntervalSec`를
+   7 → 9.1(7×1.3)로(사용자 지정 - "오크도 스킬 발동 시간을 좀더 늘려주면 좋겠는데
+   지금에서 30% 더 늘려줘").
+
+**검증 방법**: 이전 라운드들과 동일하게 `window.__debug` 훅(`tickImmortalProgress`,
+`checkImmortalPromotion`, `isImmortalPromotionReady`, `recordImmortalEvent`,
+`upgradeGlobalEnhance`, `nextGlobalEnhanceCost`, `countHeroOnField`,
+`createHeroInstance`, `findAutoPlaceSlot`, `placeInstanceAtSlot`, `HEROES_BY_ID`,
+`IMMORTAL_CONDITIONS`, `IMP_HERO_ID`)을 `main.js`에 임시로 추가해 Playwright로
+검증하고 끝난 뒤 다시 제거했다(디버그 전용, 커밋에 남기지 않음 - 제거 후
+재빌드해서 `__debug` 참조가 번들에 전혀 없는 것까지 확인). 실제 게임 로직 함수를
+그대로 호출해서: 베인은 29회 이동까지 progress=0, 30회째에 정확히 1이 되는지;
+마마 임프 7/9 상태에서 진행도 텍스트가 "임프 7/9"로 뜨는지, 개구리왕자 변신 전/후
+텍스트가 "미변신"/"해금"으로 바뀌는지(신화 팝업 불멸 탭을 실제로 열어 DOM
+텍스트까지 확인); 10강 랜슬롯 2마리(2/3, 미달)에서는 승급 후보가 아니다가 3마리
+(3/3)를 채우면 후보가 되고, 실제로 `checkImmortalPromotion`을 호출하면 크래시 없이
+`promoted:true`가 반환되며 필드에서 재료 2마리만 사라지고(자기 자신은 그대로
+남아 불멸로 교체) 승급이 실제로 일어나는지; 소환 확률 트랙에 11번 연속 성공시켜
+Lv.12에서 정확히 막히는지(`reason:'max-level'`), 전설~불멸 트랙이 레벨 0/6일 때
+각각 2/8행운석을 요구하는지; 로카를 10.05초(정확히 1회 장전)씩 400회 독립
+시행했을 때 progress 증가폭이 5(최대치)로 나오는 비율이 83%(80% ±3%p, 통계적
+오차 범위)로 나오는지; 오크 주술사가 9.0초에는 progress=0이다가 9.2초에는 1이
+되는지(9.1초 경계 확인)까지 전부 확인했다.
+
 ## 빌드/확인 방법
 
 ```bash

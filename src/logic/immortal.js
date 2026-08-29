@@ -13,6 +13,10 @@ function rollValue(v, integer = true) {
 
 // 로카가 장전된 탄약을 소모하는 속도(사용자 지정 - "0.5초당 1발씩 없애").
 const ROKA_FIRE_INTERVAL_SEC = 0.5;
+// 로카 장전이 너무 늦다는 지적(사용자 - "장전이 너무 늦어") - 매 장전 틱마다
+// 80% 확률로 그냥 최대치(incrementPerTick 범위의 상한, 5)로 채우고, 나머지 20%만
+// 기존처럼 1~5 랜덤을 굴린다("80% 확률로 폭발탄 최대 수로 장전을 해줘").
+const ROKA_MAX_CHARGE_CHANCE = 0.8;
 
 function ensureTickState(instance, cond) {
   if (!instance.immortalTick) {
@@ -104,7 +108,8 @@ const tickOverrides = {
     t.elapsed += deltaSec;
     while (t.elapsed >= t.nextTick) {
       t.elapsed -= t.nextTick;
-      const amount = rollValue(cond.incrementPerTick);
+      const maxCharge = Array.isArray(cond.incrementPerTick) ? cond.incrementPerTick[1] : cond.incrementPerTick;
+      const amount = Math.random() < ROKA_MAX_CHARGE_CHANCE ? maxCharge : rollValue(cond.incrementPerTick);
       instance.progress = (instance.progress ?? 0) + amount;
       instance.ammo = (instance.ammo ?? 0) + amount;
       t.nextTick = rollValue(cond.tickIntervalSec);
@@ -235,6 +240,17 @@ function isEligible(state, slot, instance, cond) {
   // 30이 되는 그 틱에 즉시(확률과 무관하게 100%) 자격이 생겨버려서 "30 도달
   // 후엔 낮은 확률로만 승급 가능"이라는 의도된 게이팅이 완전히 무력화된다.
   if (instance.heroId === 'm_bamba') return instance.immortalEligible === true;
+  // 랜슬롯은 instance.progress를 전혀 안 쓰고 "10강 달성 개체 수"를 그때그때
+  // 세서 판정한다(promotionHandlers.m_lancelot/isImmortalPromotionReady와 동일
+  // 계산) - 여기서 제네릭 progress>=target 체크를 그대로 쓰면 progress가 항상
+  // 0이라 실제로 3마리를 다 채워도 영원히 승급 자격이 안 생기는 버그가 된다
+  // (왼쪽 바 아이콘은 isImmortalPromotionReady의 별도 case로 이미 "승급 가능!"을
+  // 보여주는데, 정작 눌러도 checkImmortalPromotion이 이 함수에서 항상 막았음).
+  if (instance.heroId === 'm_lancelot') {
+    const { instances } = countHeroOnField(state, 'm_lancelot');
+    const maxEnhanced = instances.filter((ref) => (ref.instance.enhanceLevel ?? 0) >= (cond.extra?.maxEnhance ?? 10));
+    return maxEnhanced.length >= cond.target;
+  }
   return (instance.progress ?? 0) >= effectiveTarget(state, instance, cond);
 }
 
@@ -378,11 +394,19 @@ const promotionHandlers = {
   },
   m_lancelot(state, slot, instance, cond) {
     const { instances } = countHeroOnField(state, 'm_lancelot');
-    const maxEnhanced = instances.filter((ref) => (ref.instance.enhanceLevel ?? 0) >= (cond.extra.maxEnhance ?? 10));
+    const maxEnhanced = instances.filter((ref) => (ref.instance.enhanceLevel ?? 0) >= (cond.extra?.maxEnhance ?? 10));
     if (maxEnhanced.length < cond.target) return { ok: false, reason: 'not-enough-max-enhanced' };
-    let toRemove = cond.target;
+    // target(3)은 "동시에 존재해야 하는 10강 랜슬롯 수"라 자기 자신도 그 3마리 중
+    // 하나다 - m_ninja/m_gigi와 같은 패턴으로 자기 자신은 소모 대상에서 빼고 나머지
+    // (target-1=2마리)만 제거해야 한다. 예전엔 자기 자신까지 포함해서 target(3)마리를
+    // 전부 지워버렸는데(isEligible이 항상 false를 반환해 이 코드 자체가 한 번도
+    // 실행된 적 없는 죽은 경로라 발견되지 않았던 버그), 그러면 promoteInstance가
+    // 찾으려는 자기 자신의 instanceId가 이미 slot에서 사라진 뒤라 승급 결과물이
+    // 필드에 아예 나타나지 못하고 조용히 사라지기만 했다.
+    let toRemove = cond.target - 1;
     for (const ref of maxEnhanced) {
       if (toRemove <= 0) break;
+      if (ref.instance.instanceId === instance.instanceId) continue;
       ref.slot.occupants = ref.slot.occupants.filter((o) => o.instanceId !== ref.instance.instanceId);
       toRemove -= 1;
     }
@@ -468,7 +492,7 @@ export function isImmortalPromotionReady(state, instanceId) {
       return !cond.extra.requireStage3AtPromotion || (instance.tarStage ?? 1) >= 3;
     case 'm_lancelot': {
       const { instances } = countHeroOnField(state, 'm_lancelot');
-      const maxEnhanced = instances.filter((ref) => (ref.instance.enhanceLevel ?? 0) >= (cond.extra.maxEnhance ?? 10));
+      const maxEnhanced = instances.filter((ref) => (ref.instance.enhanceLevel ?? 0) >= (cond.extra?.maxEnhance ?? 10));
       return maxEnhanced.length >= cond.target;
     }
     default:

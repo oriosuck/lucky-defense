@@ -28,11 +28,16 @@ export const GLOBAL_ENHANCE_LABEL = {
   legendary: '전설~불멸',
   rate: '소환 확률',
 };
+// common/hero/rate 3트랙은 고정 비용. legendary(전설~불멸)는 고정값이 아니라
+// "다음 레벨만큼" 행운석이 드는 가변 비용이라(사용자 지정 - "1→2는 2행운석,
+// 7→8은 8행운석") actions.js의 nextGlobalEnhanceCost()가 매번 계산해서 쓴다 -
+// 여기 남겨둔 값은 실제로 안 쓰이는 계산 편의용 자리표시일 뿐이다.
 export const GLOBAL_ENHANCE_COST = {
   common: { gold: 30 },
   hero: { gold: 50 },
   legendary: { luckstone: 2 },
   rate: { gold: 100 },
 };
-// 소환 확률 트랙만 11레벨이 맥스(기획서 확정) - 나머지 3트랙은 레벨 제한 없음.
-export const GLOBAL_ENHANCE_MAX_LEVEL = { rate: 11 };
+// 소환 확률 트랙만 12레벨이 맥스(사용자 지정 - "12가 맥스였어") - 나머지 3트랙은
+// 레벨 제한 없음.
+export const GLOBAL_ENHANCE_MAX_LEVEL = { rate: 12 };

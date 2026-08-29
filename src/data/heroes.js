@@ -199,11 +199,11 @@ export const IMMORTAL_CONDITIONS = {
     // - "베인 불멸 기준은 필살기 12번 사용하는거야"). target(12)은 그 "궁극기 사용
     // 횟수"를 센 값이고, 원본 이동 누적치는 별도로 instance.moveProgress에
     // 보관한다(immortal.js recordImmortalEvent 참고). 궁극기 발동 간격은 왕복
-    // 15~20회 랜덤 → 고정 17회를 거쳐, 최종적으로 고정 20회로 확정했다(사용자
-    // 지정 - "20번 굴려야 궁 한번 쓰게", min===max로 두면 rollValue가 항상 20을
-    // 반환 - recordImmortalEvent의 랜덤 로직 재사용).
+    // 15~20회 랜덤 → 고정 17회 → 고정 20회를 거쳐, 최종적으로 고정 30회로
+    // 확정했다(사용자 지정 - "30번으로 늘려", min===max로 두면 rollValue가 항상
+    // 30을 반환 - recordImmortalEvent의 랜덤 로직 재사용).
     id: 'i_top_bane', name: '탑 베인', type: 'real-event', target: 12,
-    eventType: 'move', extra: { ultimateThresholdMin: 20, ultimateThresholdMax: 20 },
+    eventType: 'move', extra: { ultimateThresholdMin: 30, ultimateThresholdMax: 30 },
   },
   m_roka: {
     id: 'i_captain_roka', name: '캡틴 로카', type: 'time-based', target: 160,
@@ -283,8 +283,10 @@ export const IMMORTAL_CONDITIONS = {
     eventType: 'consumeMaxEnhancedLancelot',
   },
   m_orc_shaman: {
+    // 저주 스킬 자동 발동 간격 - 원래 7초였는데 "지금에서 30% 더 늘려달라"는
+    // 사용자 지정에 따라 9.1초(7×1.3)로 늦췄다.
     id: 'i_orc_leader', name: '오크 지도자', type: 'time-based', target: 100,
-    tickIntervalSec: 7, incrementPerTick: 1,
+    tickIntervalSec: 9.1, incrementPerTick: 1,
   },
 };
 
