@@ -9,6 +9,9 @@ function rollValue(v, integer = true) {
   return integer ? Math.floor(min + Math.random() * (max - min + 1)) : min + Math.random() * (max - min);
 }
 
+// 로카가 장전된 탄약을 소모하는 속도(사용자 지정 - "0.5초당 1발씩 없애").
+const ROKA_FIRE_INTERVAL_SEC = 0.5;
+
 function ensureTickState(instance, cond) {
   if (!instance.immortalTick) {
     instance.immortalTick = { elapsed: 0, nextTick: rollValue(cond.tickIntervalSec) };
@@ -89,9 +92,11 @@ const tickOverrides = {
       t.nextTick = rollValue(cond.extra.postCapIntervalSec);
     }
   },
-  // 로카: 제네릭 시간기반 누적과 똑같이 진행(10초마다 1~5)하지만, 매 틱마다 실제로
-  // 몇을 굴렸는지(장전량)를 별도로 기록해둔다 - 화면에는 누적 진행도(N/160)가
-  // 아니라 "방금 몇 만큼 장전했는지"를 보여달라는 사용자 지정(진행도 표시가 아님).
+  // 로카: 제네릭 시간기반 누적과 똑같이 승급용 progress는 그대로 쌓지만(10초마다
+  // 1~5), 화면에 보여주는 건 그 값이 아니라 실제 "장전된 탄약 수"(instance.ammo) -
+  // 장전되면 0.5초마다 1발씩 소모되고, 다 쓰면 다음 장전 틱까지 0으로 대기한다
+  // (사용자 지정 - "장전이 되었으면 0.5초당 1발씩 없애. 그리고 다시 쿨타임 차면
+  // 장전해"). 장전 틱은 기존 탄약에 새로 굴린 값을 더한다(누적 재장전).
   m_roka(state, slot, instance, cond, deltaSec) {
     const t = ensureTickState(instance, cond);
     t.elapsed += deltaSec;
@@ -99,9 +104,17 @@ const tickOverrides = {
       t.elapsed -= t.nextTick;
       const amount = rollValue(cond.incrementPerTick);
       instance.progress = (instance.progress ?? 0) + amount;
-      instance.lastChargeAmount = amount;
-      instance.lastChargeAt = Date.now();
+      instance.ammo = (instance.ammo ?? 0) + amount;
       t.nextTick = rollValue(cond.tickIntervalSec);
+    }
+    if ((instance.ammo ?? 0) > 0) {
+      instance.fireElapsed = (instance.fireElapsed ?? 0) + deltaSec;
+      while (instance.fireElapsed >= ROKA_FIRE_INTERVAL_SEC && instance.ammo > 0) {
+        instance.fireElapsed -= ROKA_FIRE_INTERVAL_SEC;
+        instance.ammo -= 1;
+      }
+    } else {
+      instance.fireElapsed = 0; // 탄약 없으면 다음 장전 때 0.5초부터 다시 세도록 리셋
     }
   },
   // 각성 헤일리: 별의 힘 10 도달 후에는 시간 기반으로 궁극기(15%) 성공 여부를 판정
@@ -480,15 +493,17 @@ export function cannibalizeTar(state, eaterInstanceId) {
 }
 
 // ---- 마마 전용: 임프 생성/소모, 돌파 토글 ----
-// 간격은 사용자 요청으로 기존 값의 2.5배 느리게(체감 속도가 너무 빠르다는 피드백).
-const IMMORTAL_MAMA = { impIntervalSec: 7.5, breakthroughIntervalSec: 5, postRound8IntervalSec: 12.5, stopRound: 10 };
+// 간격은 원래 돌파/라운드/강화 상태별로 따로 뒀었는데(3단계 고정값 + 전설강화
+// 시 2배) "너무 빠르다"는 사용자 지적으로 전부 걷어내고 1~10초 랜덤 하나로
+// 단순화했다(사용자 지정 - "마마 임프 생성 속도 1~10초 사이로 랜덤 적용하자").
+const IMMORTAL_MAMA_STOP_ROUND = 10;
 // 마마 승급에 필요한 최대 임프 수(돌파 안 한 경우 9마리) - 실제 필드 토큰으로 무한정
 // 쌓이지 않도록 이 값에서 생성을 멈춘다(어차피 그 이상은 승급 조건에 필요 없음).
 const MAX_IMP_STOCK = 9;
 
 export function tickMamaImps(state, deltaSec) {
   const newState = structuredClone(state);
-  if (newState.wave > IMMORTAL_MAMA.stopRound) return newState;
+  if (newState.wave > IMMORTAL_MAMA_STOP_ROUND) return newState;
   // 임프는 필드에 있는 마마 전부가 공유하는 전역 자원이다(승급 판정도 이제 이
   // 전역 수를 기준으로 함 - promotionHandlers.m_mama 참고) - 필드에 실존하는
   // 임프 개수를 그때그때 세서 9마리를 넘지 않도록 생성을 멈춘다. 마마가 여러
@@ -497,24 +512,18 @@ export function tickMamaImps(state, deltaSec) {
   forEachMythicInstance(newState, (slot, instance, cond) => {
     if (instance.heroId !== 'm_mama') return;
     if (countHeroOnField(newState, IMP_HERO_ID).count >= MAX_IMP_STOCK) return;
-    const baseInterval = instance.breakthrough
-      ? IMMORTAL_MAMA.breakthroughIntervalSec
-      : newState.wave > 8
-        ? IMMORTAL_MAMA.postRound8IntervalSec
-        : IMMORTAL_MAMA.impIntervalSec;
-    // 전설~불멸 강화(하단 강화 팝업의 globalEnhance.legendary 트랙)를 1레벨이라도
-    // 올렸으면 임프 생성 속도가 2배 빨라진다(사용자 지정 요청).
-    const interval = (newState.globalEnhance?.legendary ?? 0) > 0 ? baseInterval / 2 : baseInterval;
-    if (!instance.immortalTick) instance.immortalTick = { elapsed: 0, nextTick: interval };
+    const intervalRange = cond.extra.impIntervalSec;
+    if (!instance.immortalTick) instance.immortalTick = { elapsed: 0, nextTick: rollValue(intervalRange) };
     const t = instance.immortalTick;
     t.elapsed += deltaSec;
-    while (t.elapsed >= interval && countHeroOnField(newState, IMP_HERO_ID).count < MAX_IMP_STOCK) {
-      t.elapsed -= interval;
+    while (t.elapsed >= t.nextTick && countHeroOnField(newState, IMP_HERO_ID).count < MAX_IMP_STOCK) {
+      t.elapsed -= t.nextTick;
       // 임프도 캐릭터처럼 실제로 필드 칸에 꺼내진다(사용자 요청) - 빈 칸이 없으면
       // 이번 틱은 그냥 건너뛴다.
       const impSlot = findAutoPlaceSlot(newState, IMP_HERO_ID);
       if (!impSlot) break;
       placeInstanceAtSlot(impSlot, createHeroInstance(IMP_HERO_ID));
+      t.nextTick = rollValue(intervalRange);
     }
   });
   return newState;
