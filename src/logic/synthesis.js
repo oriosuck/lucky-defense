@@ -28,7 +28,13 @@ export function consolidateHeroStacks(state, heroId) {
   const heroDef = HEROES_BY_ID[heroId];
   if (!heroDef || heroDef.tier === 'mythic' || heroDef.tier === 'immortal') return;
   const holders = state.field.filter((s) => s.occupants.some((o) => o.heroId === heroId));
-  if (holders.length <= 1) return; // 이미 한 칸에 모여 있으면 할 일 없음
+  const totalCount = holders.reduce((sum, s) => sum + s.occupants.filter((o) => o.heroId === heroId).length, 0);
+  // 이미 한 칸에 모여 있고(holders 1개) 3마리를 넘지도 않으면 할 일 없음 - "칸이
+  // 1개"만 보고 넘어가면(예전 버그) 그 한 칸 자체가 4마리 이상으로 넘친 상태를
+  // 못 잡아서 다음 렌더에서 stackOffsets(n)이 3자리 좌표만 반환해 4번째 개체를
+  // 그리려다 그대로 터졌다("합성 누르면 튕긴다" 리포트의 원인 - synthesize()가
+  // 이미 3마리 찬 칸에 결과물을 바로 push한 뒤 이 함수를 불러서 생긴 4마리 칸).
+  if (holders.length <= 1 && totalCount <= 3) return;
 
   holders.sort((a, b) =>
     b.occupants.filter((o) => o.heroId === heroId).length - a.occupants.filter((o) => o.heroId === heroId).length,
@@ -44,7 +50,17 @@ export function consolidateHeroStacks(state, heroId) {
       slot.occupants.push(allInstances[idx]);
       idx += 1;
     }
-    if (idx >= allInstances.length) break;
+  }
+  // 기존 holder들을 3마리씩 다 채우고도 남으면(예: 4마리인데 holder가 1칸뿐이던 경우)
+  // 빈 칸을 새로 끌어와 나머지를 옮긴다 - 안 그러면 남은 개체가 갈 곳이 없어
+  // 유실되거나(더 나쁘게는) 원래 칸에 그대로 남아 다시 4마리 초과 상태가 된다.
+  while (idx < allInstances.length) {
+    const empty = state.field.find((s) => s.occupants.length === 0);
+    if (!empty) break; // 필드가 꽉 찼으면 더 옮길 곳이 없다 - 호출부가 사전에 자리를 확인했어야 함
+    while (empty.occupants.length < 3 && idx < allInstances.length) {
+      empty.occupants.push(allInstances[idx]);
+      idx += 1;
+    }
   }
 }
 const CHAD_FEED_LUCKSTONE = 5;
@@ -75,15 +91,17 @@ export function synthesize(state, row, col) {
   // 조합 결과가 이미 다른 칸에 있던 영웅이면(예: 산적 1마리가 다른 칸에 남아있는 상태에서
   // 조합으로 산적이 또 나온 경우) 자동으로 한 칸에 모은다 - 단, 방금 조합이 일어난
   // 이 칸이 아니라 "원래 있던 자리"로 새로 만들어진 개체가 옮겨가야 한다(사용자 지적 -
-  // 반대로 동작하고 있었음). 기존 칸에 넣고 나서 generic consolidateHeroStacks로
-  // 혹시 남는 조각(3마리 초과분 등)까지 마저 정리한다.
-  const existingHolder = newState.field.find((s) => s !== slot && s.occupants.some((o) => o.heroId === resultDef.id));
-  if (existingHolder) {
-    existingHolder.occupants.push(newInstance);
-    consolidateHeroStacks(newState, resultDef.id);
-  } else {
-    slot.occupants.push(newInstance);
-  }
+  // 반대로 동작하고 있었음). 새 개체를 방금 비운 이 칸(slot)에 먼저 넣고
+  // consolidateHeroStacks에게 병합을 맡긴다 - 예전엔 다른 칸(existingHolder)에 바로
+  // push한 뒤 정리를 불렀는데, 그 칸이 이미 3마리 꽉 찬 상태면 push로 4마리가 되고
+  // consolidateHeroStacks가 "holder가 1개뿐이면 이미 정리된 것"으로 착각해 그대로
+  // 넘어가버려서(그 함수 자체의 버그이기도 해서 이제 방어적으로도 고쳤다) 4마리짜리
+  // 칸이 그대로 남았다 - 다음 렌더에서 stackOffsets(n)이 3자리 좌표만 반환해 4번째
+  // 개체를 그리려다 그대로 튕기는 크래시로 이어졌다("합성 누르면 팅긴다" 리포트의
+  // 원인). slot에 먼저 넣으면 항상 holders가 2개 이상인 상태로 시작하므로 이 경로
+  // 자체가 발생하지 않는다.
+  slot.occupants.push(newInstance);
+  consolidateHeroStacks(newState, resultDef.id);
 
   return { success: true, resultHero: resultDef, newState };
 }
