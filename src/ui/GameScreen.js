@@ -172,7 +172,14 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const col = Number(cellEl.dataset.col);
     const state = getState();
     const slot = state.field.find((s) => s.row === row && s.col === col);
-    if (!slot || slot.occupants.length === 0) return;
+    if (!slot) return;
+    // 빈 칸이어도 dragState를 세워야 한다 - 그래야 pointerup의 endDrag()가
+    // onSlotClick()까지 도달해서 "다른(빈) 칸을 누르면 바로 선택 해제"가 된다
+    // (사용자 지적 - "다른곳 누르면 바로 선택 해제되어야 하는데 지금 바로
+    // 해제가 안돼"). 예전엔 여기서 빈 칸을 바로 return 해버려서 endDrag/
+    // onSlotClick 경로 자체를 못 타 해제가 안 됐다. 드래그 이동(moveHero)은
+    // 빈 칸이 출발지면 자체적으로 안전하게 실패 처리되므로 빈 칸에서 드래그를
+    // 시작해도 부작용이 없다.
     dragState = {
       fromRow: row, fromCol: col,
       startX: e.clientX, startY: e.clientY, moved: false,
@@ -897,7 +904,17 @@ export function GameScreen({ getState, dispatch, onExit }) {
         }, below)
       : null;
 
-    return el('div', { class: 'cell-quick-actions' }, [aboveWrap, belowWrap].filter(Boolean));
+    // 선택된 캐릭터가 어떤 칸인지 잘 보이도록 그 칸 주변에 연한 원형 테두리를 그린다
+    // (사용자 요청 - "어떤 캐릭을 선택했는지 잘 보이게 그 인근으로 원을 테두리만
+    // 하나 연하게 그려줘, 버튼이랑 이어지게"). 칸 좌표 기준으로 위/아래 버튼
+    // 스택과 같은 anchor(rect)를 쓰기 때문에, 링이 칸 위아래로 살짝 넘치게
+    // 잡으면 자연스럽게 위/아래 버튼 스택과 맞닿아 하나로 이어져 보인다.
+    const selectRing = el('div', {
+      class: 'cell-select-ring',
+      style: `left:${centerX}%; top:${rect.top + rect.height / 2}%; width:${rect.width * 1.35}%; height:${rect.height * 1.7}%;`,
+    });
+
+    return el('div', { class: 'cell-quick-actions' }, [selectRing, aboveWrap, belowWrap].filter(Boolean));
   }
 
   // 채드의 "판매하기" 버튼을 누르면(ui.chadSellMode) 필드의 신화/불멸(채드/기가채드
