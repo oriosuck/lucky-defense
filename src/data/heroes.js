@@ -158,7 +158,9 @@ export const IMMORTAL_CONDITIONS = {
     // 스택(30) 쌓이는 속도가 너무 빠르다는 사용자 지적(원래 1~5초 랜덤 간격) -
     // 5~15초 랜덤으로 늦췄다(사용자 지정 수치).
     tickIntervalSec: [5, 15], incrementPerTick: 1,
-    extra: { postCapChance: 0.001, postCapIntervalSec: [1, 5] },
+    // 30 도달 이후 판정 주기 - 사용자 지정: "초마다 3번씩 기본공격 한다 치고
+    // 기본 공격마다 0.1% 확률로 소환 가능"(공격 1회 = 1/3초 간격, 매번 0.1%).
+    extra: { postCapChance: 0.001, postCapIntervalSec: 1 / 3 },
   },
   m_ato: {
     id: 'i_spacetime_ato', name: '시공 아토', type: 'time-based', target: 100,
@@ -199,7 +201,10 @@ export const IMMORTAL_CONDITIONS = {
   },
   m_batman: {
     id: 'i_ace_batman', name: '에이스 배트맨', type: 'hybrid', target: 1,
-    tickIntervalSec: 5, eventType: 'ultimateAttempt',
+    // "궁극기 사용 시" 판정인데 실제 궁극기 발동 이벤트가 없어서 주기적 판정으로
+    // 근사한다 - 5초마다는 너무 잦다는 사용자 지적으로 10초에 1회로 늦췄다(사용자
+    // 지정 수치, 권장안 채택).
+    tickIntervalSec: 10, eventType: 'ultimateAttempt',
     extra: { minEnhance: 10, baseChance: 0.01, perEnhanceBonus: 0.025 },
   },
   m_mama: {

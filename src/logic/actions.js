@@ -195,6 +195,14 @@ export function moveHero(state, fromRow, fromCol, toRow, toCol) {
     toSlot.occupants = combined.slice(0, 3);
     fromSlot.occupants = combined.slice(3);
   } else {
+    // 교차 이동(자리 맞바꿈) - 원래 toSlot에 있던 개체들도 fromSlot으로 실제로
+    // 이동했으므로, 걔네도 "이동"으로 카운트해야 한다(사용자 지적 - "베인이
+    // 디버프걸린 애들이랑 서로 자리를 맞바꿔도 게이지가 차야해"). 예전엔
+    // movedInstanceIds가 fromSlot 쪽만 담아서, 반대쪽에서 스왑되어 들어온
+    // 개체(예: 디버프 걸린 캐릭터를 베인 칸으로 드래그해서 베인이 반대로
+    // 밀려난 경우, 드래그를 시작한 쪽만 아니라 밀려난 베인 쪽도)의 이동 기반
+    // 불멸 조건(탑 베인 등)이 전혀 안 쌓이는 버그였다.
+    movedInstanceIds.push(...toSlot.occupants.map((o) => o.instanceId));
     const swapped = toSlot.occupants;
     toSlot.occupants = fromSlot.occupants;
     fromSlot.occupants = swapped;

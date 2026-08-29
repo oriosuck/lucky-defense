@@ -497,7 +497,7 @@ body {
    "글자도 좀 굵게 가시적으로 보이게"라고 정정 - 판매 버튼(.cell-quick-sell) 급으로
    눈에 띄게 폰트/패딩/테두리를 키웠다. */
 .hero-head-badge {
-  position: absolute; transform: translate(-50%, calc(-100% - 4px));
+  position: absolute; transform: translate(-50%, calc(-100% - 8px));
   color: #ffe066; font-size: 14px; font-weight: 900; white-space: nowrap;
   background: rgba(0, 0, 0, 0.75); border-radius: 6px; padding: 2px 8px;
   border: 2px solid #ffe066;
