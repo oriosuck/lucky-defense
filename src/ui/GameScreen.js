@@ -21,6 +21,7 @@ import {
   cycleBatmanMode,
   nextEnhanceGoldCost,
   nextEnhanceLuckstoneCost,
+  nextEnhanceSuccessRate,
 } from '../logic/actions.js';
 import { checkImmortalPromotion, isImmortalPromotionReady, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
 import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT, INDY_TREASURE_INTERVAL_SEC } from '../logic/waveEvents.js';
@@ -912,10 +913,22 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (heroDef.immortalCondition?.eventType === 'enhance' || heroDef.immortalCondition?.extra?.minEnhance != null) {
       const goldCost = nextEnhanceGoldCost(instance.heroId, instance.enhanceLevel);
       const luckstoneCost = nextEnhanceLuckstoneCost(instance.heroId);
-      const costLabel = luckstoneCost > 0 ? `${goldCost}G ${luckstoneCost}💎` : `${goldCost}G`;
+      // 배트맨 외에는 강화가 무료(비용 0, 항상 성공)라 괄호 자체를 안 보여준다 -
+      // 사용자 정정("다른 영웅들은 무슨 골드랑 행운석이야? 그런거 없는데")에 따라
+      // 예전에 있던 고정 30G/1💎 비용을 없앴다. 배트맨은 골드 비용 + 10강부터
+      // 떨어지는 성공 확률(사용자 지정 수치)을 같이 보여준다.
+      const successRate = nextEnhanceSuccessRate(instance.heroId, instance.enhanceLevel);
+      let costLabel = '';
+      if (goldCost > 0 || luckstoneCost > 0) {
+        const parts = [];
+        if (goldCost > 0) parts.push(`${goldCost}G`);
+        if (luckstoneCost > 0) parts.push(`${luckstoneCost}💎`);
+        if (successRate < 1) parts.push(`성공 ${Math.round(successRate * 100)}%`);
+        costLabel = ` (${parts.join(' ')})`;
+      }
       below.push(el('button', {
         class: 'cell-quick-btn cell-quick-extra',
-        text: `강화 (${costLabel})`,
+        text: `강화${costLabel}`,
         disabled: state.gold < goldCost || state.luckstone < luckstoneCost,
         onclick: () => apply(enhanceHero(state, instance.instanceId)),
       }));

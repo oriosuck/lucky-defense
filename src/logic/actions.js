@@ -4,32 +4,61 @@ import { INDY_DIG_DURATION_SEC } from './waveEvents.js';
 import { HEROES_BY_ID } from '../data/heroes.js';
 import { GLOBAL_ENHANCE_COST, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 
-export const ENHANCE_GOLD_COST = 30;
-export const ENHANCE_LUCKSTONE_COST = 1;
+// 필드 개체별 강화(enhanceHero)에 실제로 골드/행운석 비용이 있는 건 배트맨뿐이다
+// (사용자 정정 - "다른 영웅들은 무슨 골드랑 행운석이야? 그런거 없는데"). 아이언
+// 미야옹처럼 강화 "횟수"가 불멸 조건인 다른 영웅들은 그냥 무료로 눌러서 카운트만
+// 올리면 된다 - 비용이 있던 예전 값(30G 1💎)은 이 기능을 처음 만들 때의 추측성
+// 플레이스홀더였을 뿐 확정된 적이 없었다.
+const BATMAN_ENHANCE_GOLD_BASE = 30;
 
-// 배트맨(신화 m_batman) 전용 강화 골드 비용 - 승급 확률이 10강부터 강화 레벨에
-// 비례해서 계속 오르는 구조라(heroes.js IMMORTAL_CONDITIONS.m_batman), 승급 RNG가
-// 안 터지는 동안 10강 이후로도 계속 강화를 밀어붙이는 경우가 흔하다 - 사용자가
-// 지정한 구간별 고정값(1~5강 30, 6~10강 60, 11~15강 120)을 "5강마다 2배"로
-// 일반화해서 명시되지 않은 그 이상 구간(16~20강 240...)에도 같은 패턴을 이어간다.
-// 승급 후(i_ace_batman)에는 enhanceLevel이 0으로 리셋되고 더 강화할 이유(승급
-// 조건은 이미 끝남, 데미지 계산도 범위 밖)가 없어서 강화 버튼 자체를 노출하지
-// 않는다(GameScreen.js) - 이 비용표는 승급 전 m_batman에만 적용된다.
+// 배트맨 전용 강화 골드 비용 - 승급 확률이 10강부터 강화 레벨에 비례해서 계속
+// 오르는 구조라(heroes.js IMMORTAL_CONDITIONS.m_batman), 승급 RNG가 안 터지는
+// 동안 10강 이후로도 계속 강화를 밀어붙이는 경우가 흔하다 - 사용자가 지정한
+// 구간별 고정값(1~5강 30, 6~10강 60, 11~15강 120)을 "5강마다 2배"로 일반화해서
+// 명시되지 않은 그 이상 구간(16~20강 240...)에도 같은 패턴을 이어간다. 승급
+// 후(i_ace_batman)에는 enhanceLevel이 0으로 리셋되고 더 강화할 이유(승급 조건은
+// 이미 끝남, 데미지 계산도 범위 밖)가 없어서 강화 버튼 자체를 노출하지 않는다
+// (GameScreen.js) - 이 비용표는 승급 전 m_batman에만 적용된다. 다른 영웅은 0(무료).
 function nextEnhanceGoldCost(heroId, currentLevel) {
-  if (heroId !== 'm_batman') return ENHANCE_GOLD_COST;
+  if (heroId !== 'm_batman') return 0;
   const nextLevel = (currentLevel ?? 0) + 1;
-  return ENHANCE_GOLD_COST * 2 ** Math.floor((nextLevel - 1) / 5);
+  return BATMAN_ENHANCE_GOLD_BASE * 2 ** Math.floor((nextLevel - 1) / 5);
 }
 export { nextEnhanceGoldCost };
 
 // 배트맨 강화는 행운석이 안 든다(사용자 지정 - "배트 강화 비용에 행운석은 안들어가").
-// 다른 영웅은 전부 골드+행운석(ENHANCE_LUCKSTONE_COST) 둘 다 드는 게 그대로 유지된다.
-function nextEnhanceLuckstoneCost(heroId) {
-  return heroId === 'm_batman' ? 0 : ENHANCE_LUCKSTONE_COST;
+// 다른 영웅도 애초에 강화 자체가 무료라 항상 0.
+function nextEnhanceLuckstoneCost() {
+  return 0;
 }
 export { nextEnhanceLuckstoneCost };
 
-/** 필드 영웅 강화. 데미지 계산은 시뮬레이션 범위 밖 - 강화 단계만 증가. */
+// 배트맨 강화 성공 확률(사용자 지정 수치) - 10강까지는 100%(무조건 성공), 11강부터
+// 급격히 떨어진다. 11~15강 구간만 명시적으로 받았고(강화 비용 구간표의 마지막
+// 구간과 정확히 일치), 그 이상(16강+)은 데이터가 없어 마지막 값(28%)을 그대로
+// 유지하는 플레이스홀더로 둔다 - 나중에 더 높은 강화를 실제로 시도하는 유저가
+// 나오면 사용자에게 재확인이 필요하다.
+const BATMAN_ENHANCE_SUCCESS_RATE = { 11: 0.83, 12: 0.69, 13: 0.55, 14: 0.41, 15: 0.28 };
+function batmanEnhanceSuccessRate(nextLevel) {
+  if (nextLevel <= 10) return 1;
+  if (nextLevel in BATMAN_ENHANCE_SUCCESS_RATE) return BATMAN_ENHANCE_SUCCESS_RATE[nextLevel];
+  return BATMAN_ENHANCE_SUCCESS_RATE[15];
+}
+
+// UI에서 강화 버튼에 성공 확률을 같이 보여주기 위한 조회 헬퍼(배트맨 외에는
+// 항상 100%라 버튼에서 굳이 안 보여줌 - GameScreen.js 참고).
+export function nextEnhanceSuccessRate(heroId, currentLevel) {
+  if (heroId !== 'm_batman') return 1;
+  return batmanEnhanceSuccessRate((currentLevel ?? 0) + 1);
+}
+
+/**
+ * 필드 영웅 강화. 데미지 계산은 시뮬레이션 범위 밖 - 강화 단계만 증가.
+ * 배트맨만 골드를 쓰고 확률적으로 실패할 수 있다(실패해도 시도한 골드는 그대로
+ * 소모됨 - 일반적인 강화 게임 관례를 따른 가정, 실패 시 레벨 하락/개체 소멸 같은
+ * 페널티는 없음). 다른 영웅은 비용 없이 항상 성공(레벨 카운트만 올리면 되는
+ * 용도라 실패 개념 자체가 없음).
+ */
 export function enhanceHero(state, instanceId) {
   const newState = structuredClone(state);
   const found = findInstance(newState, instanceId);
@@ -42,11 +71,19 @@ export function enhanceHero(state, instanceId) {
 
   newState.gold -= goldCost;
   newState.luckstone -= luckstoneCost;
-  found.instance.enhanceLevel += 1;
+
+  const nextLevel = (found.instance.enhanceLevel ?? 0) + 1;
+  const successRate = found.instance.heroId === 'm_batman' ? batmanEnhanceSuccessRate(nextLevel) : 1;
+  const leveledUp = Math.random() < successRate;
+  if (!leveledUp) {
+    return { success: true, leveledUp: false, newState };
+  }
+
+  found.instance.enhanceLevel = nextLevel;
   newState.counters.enhanceCount += 1;
 
   const afterEvent = recordImmortalEvent(newState, instanceId, 'enhance');
-  return { success: true, newState: afterEvent.success ? afterEvent.newState : newState };
+  return { success: true, leveledUp: true, newState: afterEvent.success ? afterEvent.newState : newState };
 }
 
 /**
