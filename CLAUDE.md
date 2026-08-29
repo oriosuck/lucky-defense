@@ -1880,6 +1880,52 @@ touch→click 합성 파이프라인을 그대로 타는 진짜 터치 시뮬레
 소환되는 것(필드 개체 수 5, 골드 -120)을 `git stash`로 코드를 오갔다 실측
 대조해 확인했다.
 
+## 진짜 원인 발견 - 네이티브 disabled 버튼이 더블탭 확대를 유발 (PR #43 배포 후)
+
+PR #43(JS 더블탭 방지 제거) 배포 후, 사용자가 직접 원인을 특정해서 알려줬다 -
+"활성화된 버튼을 누를 때는 괜찮은데 비활성화 됐을 때 버튼을 누르면 더블탭으로
+인식하는 거였어." 이 세션에서 더블탭 확대를 세 번이나 쫓아다니면서도(뷰포트
+meta, body/전체 요소 touch-action, JS 레벨 방지) 결국 못 잡았던 이유가 여기
+있었다 - 원인이 "터치 처리 로직"이 아니라 **"비활성(disabled) 버튼은애초에
+`touch-action`의 보호를 못 받는다"**는, CSS 레벨로는 손댈 수 없는 지점에 있었다.
+
+**원인**: `el()` 헬퍼(`components/dom.js`)가 `disabled: true`를 네이티브 HTML
+`disabled` 속성(`setAttribute('disabled', '')`)으로 그대로 넘기고 있었다.
+브라우저는 disabled 폼 컨트롤(버튼 등)을 상호작용 파이프라인에서 제외하는데,
+이때 `touch-action: manipulation`도 같이 적용이 안 되는 것으로 보인다 - 그
+버튼 위에서의 탭은 "이 요소가 처리하는 제스처"가 아니게 되어 브라우저 기본
+제스처 인식(더블탭 확대 포함)으로 그대로 넘어간다. 활성 버튼은 정상적으로
+`touch-action`의 보호를 받아 문제가 없었기 때문에, "버튼 자체는 멀쩡한데
+가끔 확대된다"는 재현이 어려운 증상으로 나타났던 것 - 지금까지의 모든 CSS/JS
+레벨 대응이 "활성 상태의 상호작용"만 가정하고 있어서 이 케이스를 못 잡았다.
+
+**수정**: `el()`이 `disabled: true`를 네이티브 속성으로 넘기지 않도록 바꿨다 -
+대신 `is-disabled` 클래스로 시각적 비활성 표시(불투명도 등 기존
+`:disabled` CSS와 동일한 효과)만 하고, 클릭 핸들러 자체를 렌더 시점에
+`disabled` 여부로 감싸서 눌러도 무시되게 했다(`node.addEventListener(type,
+(e) => { if (disabled) return; value(e); })`) - 접근성을 위해
+`aria-disabled="true"`도 같이 붙인다. 버튼은 끝까지 "정상적인 상호작용
+요소"로 남아있으므로 `touch-action`이 항상 적용된다. `main.css`의 `X:disabled`
+셀렉터 7개를 전부 `X.is-disabled`로 바꿨다(`.btn`, `.favorite-icon`,
+`.cell-quick-btn`, `.side-btn`/`.summon-btn-wrap`, `.roulette-wheel-btn`,
+`.enhance-col`, `.mythic-summon-btn`). 모든 `disabled:` 호출부(9곳)가 이미
+`class` prop을 `disabled` prop보다 앞에 쓰고 있어서(`el()`이 prop을 객체
+순서대로 처리) `node.className = value`가 먼저 실행된 뒤 `classList.add`가
+따라붙는 순서가 보장되어 있었다 - 별도 수정 없이 그대로 호환됐다.
+**교훈**: 더블탭 확대처럼 산발적으로 재현되는 터치 버그는 "항상 이 조건에서만
+재현된다"는 사용자의 정확한 관찰이 나올 때까지는 CSS/JS 레벨의 일반적인 대응만
+반복하며 헛수고할 수 있다 - 이번처럼 원인이 상태(disabled 여부)에 따라
+갈리는 경우, 재현 조건을 좁혀주는 사용자 관찰이 결정적이었다.
+
+**검증 방법**: Playwright `page.touchscreen.tap()`(실제 터치 시뮬레이션)으로
+확인했다 - 골드를 0으로 만들어 소환 버튼을 비활성 상태로 만든 뒤, 그 버튼에
+네이티브 `disabled` 속성이 없고(`btn.disabled === false`) `is-disabled`
+클래스와 `aria-disabled="true"`만 붙어 있는지, 그 상태로 3번 연속 탭해도
+필드에 아무것도 소환되지 않는지(클릭이 정상적으로 무시되는지) 확인했다. 이어서
+골드를 복구해 버튼이 다시 활성화됐을 때 `is-disabled`/`aria-disabled`가
+정상적으로 사라지고, 5번 연속 빠른 탭이 전부 정상 소환되는지(이 리팩터가
+PR #43에서 고친 "빠른 연타" 자체를 다시 깨뜨리지 않았는지)도 함께 확인했다.
+
 ## CSS/레이아웃에서 배운 것
 
 1. **배경 이미지 비율 유지는 JS로 실측해서 픽셀로 박아라.** `.game-stage`를

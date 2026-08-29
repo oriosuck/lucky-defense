@@ -82,7 +82,7 @@ body {
   font-size: 14px;
 }
 .btn:hover { background: #32324a; }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.is-disabled { opacity: 0.4; cursor: not-allowed; }
 .btn.active { border-color: var(--accent); background: var(--accent); }
 .btn-primary { background: var(--accent); border-color: var(--accent); }
 .btn-danger { border-color: var(--danger); color: var(--danger); }
@@ -218,7 +218,7 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 .favorite-icon-image { width: 100%; height: 100%; border-radius: 50%; }
-.favorite-icon:disabled { cursor: default; opacity: 0.6; border-color: rgba(255, 255, 255, 0.35); }
+.favorite-icon.is-disabled { cursor: default; opacity: 0.6; border-color: rgba(255, 255, 255, 0.35); }
 /* 승급 가능한 불멸 후보 - 신화 조합 가능 아이콘과 구분되도록 보라색 테두리+글로우 */
 /* 빨간 테두리 원 - 신화(보라색 원)와 구분되는 불멸 승급 후보 표시(사용자 지정) */
 .favorite-icon-promote { border-color: #e53935; box-shadow: 0 0 8px rgba(229, 57, 53, 0.85); }
@@ -432,7 +432,7 @@ body {
   cursor: pointer; white-space: nowrap;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
-.cell-quick-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cell-quick-btn.is-disabled { opacity: 0.5; cursor: not-allowed; }
 .cell-quick-close {
   background: rgba(20, 16, 26, 0.85); border-color: rgba(255, 255, 255, 0.3);
   padding: 1px 6px; font-size: 10px;
@@ -679,7 +679,7 @@ body {
   color: var(--gold); font-weight: 800; font-size: clamp(9px, 2.6vw, 12px);
   text-shadow: 0 1px 2px #000;
 }
-button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; cursor: not-allowed; }
+button.is-disabled.side-btn, button.is-disabled.summon-btn-wrap { opacity: 0.45; cursor: not-allowed; }
 
 /* ---- 강화 버튼(하단, 팝업을 연다) ----
    목업의 .enhance-btn 폭(155px/375=41.3%)은 우연히 action-row의 소환 버튼 렌더 폭과
@@ -733,7 +733,7 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
   width: 100%; aspect-ratio: 1; border: none; background: transparent; padding: 0; cursor: pointer;
   position: relative;
 }
-.roulette-wheel-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.roulette-wheel-btn.is-disabled { opacity: 0.4; cursor: not-allowed; }
 .roulette-wheel-circle {
   width: 100%; height: 100%; border-radius: 50%;
   border: 5px solid;
@@ -790,7 +790,7 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
   display: flex; flex-direction: column; align-items: center; gap: 3px;
   border: none; color: #fff; cursor: pointer;
 }
-.enhance-col:disabled { opacity: 0.55; cursor: not-allowed; }
+.enhance-col.is-disabled { opacity: 0.55; cursor: not-allowed; }
 .enhance-col-icon { width: 40px; height: 40px; object-fit: contain; }
 .enhance-col-name { font-size: clamp(9px, 2.4vw, 11px); font-weight: 700; color: var(--muted); text-align: center; }
 .enhance-col-lv { font-size: clamp(10px, 2.8vw, 13px); font-weight: 700; }
@@ -844,7 +844,7 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
   color: #0a3a30; font-weight: 900; font-size: 14px;
   padding: 3% 0;
 }
-.mythic-summon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.mythic-summon-btn.is-disabled { opacity: 0.5; cursor: not-allowed; }
 .mythic-empty-note { color: #8a7050; font-size: 12px; }
 
 .mythic-grid {
