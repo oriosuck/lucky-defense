@@ -13,7 +13,17 @@ import {
   FIRST_WAVE_SUBSIDY,
 } from '../data/constants.js';
 
-// ---- 이동불능(즉시형/게이지형) - 게임당 정확히 2회, 라운드는 createGameState에서 미리 확정됨 ----
+// ---- 이동불능(즉시형/게이지형) ----
+// 예전엔 "게임당 정확히 2회, 1~9/11~19 중 랜덤"이었는데, 사용자가 고정 라운드
+// 목록으로 재지정했다 - "랜덤으로 총 2번 말고, 2,4,7,9에 나오게 하고... 11,
+// 13(이미 한거), 17에 나오게". 게이지형(필드에 5초간 차오르는 빨간 원)이 뜨는
+// 라운드를 이 고정 목록으로 못박는다. 13라운드는 삭제 공격 직전 강제 발생이라는
+// 별도 규칙이 이미 있어서(onWaveStart 참고) 이 목록엔 안 넣는다.
+const IMMOBILIZE_GAUGE_ROUNDS = [2, 4, 7, 9, 11, 17];
+// 10라운드는 빨간 원(게이지형) 없이 보스가 곧장 5~6칸을 동시에 속박한다(사용자
+// 지정 - "10라운드에는 빨간색 없이 보스가 바로 속박 공격 한번 하고(대여섯칸)") -
+// 즉시형과 같은 구조(예열 없이 바로 잠금)지만 대상 칸 수만 다르다.
+const IMMOBILIZE_BOSS_INSTANT_ROUND = 10;
 // 실제로 이동불능 상태에 걸려 있는 시간(즉시형/게이지형 공통)은 20초로 통일한다
 // (사용자 지정 - "공격 당했을 때 당하는 시간은 일단 20초로 통일해두자", 정확한 수치가
 // 기획서에 없어 임시로 맞춘 값). 게이지형의 "차오르는 시간"(IMMOBILIZE_GAUGE_FILL_SEC)은
@@ -174,12 +184,12 @@ function onWaveStart(state) {
 
   // 13라운드("삭제 있는 버전"에서만)는 삭제 공격 직전에 게이지형(원형) 이동불능이
   // 100% 확정으로 발생해야 한다(사용자 지정 - "13라운드 삭제 직전에 동그라미로 그
-  // 속박 공격하는거 한번 있어야해") - 게임당 정확히 2회인 기존 랜덤 스케줄과는
-  // 별개의 강제 이벤트라, 13라운드가 그 랜덤 스케줄에 우연히 뽑혀 있었어도 이
-  // 강제 버전이 우선한다. 삭제 공격 게이지가 waveTimeLeft<=15부터 차기 시작하므로
-  // 라운드 시작(waveTimeLeft=30) 즉시 발동시켜 겹치는 시간을 최대한 줄인다 -
-  // 게이지형 총 소요시간(5초 채움+20초 잠금=25초)이 라운드 길이(30초)보다 짧아서
-  // 완전히 안 겹치게 할 수는 없다(약 1초 정도만 걸침, 사용자에게 확인받은 절충안).
+  // 속박 공격하는거 한번 있어야해") - 아래 고정 목록과는 별개의 강제 이벤트라
+  // 이 라운드는 목록에 안 넣고 여기서 최우선으로 처리한다. 삭제 공격 게이지가
+  // waveTimeLeft<=15부터 차기 시작하므로 라운드 시작(waveTimeLeft=30) 즉시
+  // 발동시켜 겹치는 시간을 최대한 줄인다 - 게이지형 총 소요시간(5초 채움+20초
+  // 잠금=25초)이 라운드 길이(30초)보다 짧아서 완전히 안 겹치게 할 수는 없다(약
+  // 1초 정도만 걸침, 사용자에게 확인받은 절충안).
   if (state.gameType === 'delete' && state.wave === 13) {
     state.eventLog.immobilizeEvent = {
       round: state.wave,
@@ -189,12 +199,23 @@ function onWaveStart(state) {
       timer: 0,
       targetSlots: [],
     };
-  } else if (state.bossAttackSchedule.immobilizeRounds.includes(state.wave)) {
+  } else if (state.wave === IMMOBILIZE_BOSS_INSTANT_ROUND) {
+    // 10라운드: 빨간 원(게이지형 예열) 없이 보스가 곧장 5~6칸을 동시에 속박한다.
     const duration = waveDuration(state.wave);
-    const type = Math.random() < 0.5 ? 'instant' : 'gauge';
     state.eventLog.immobilizeEvent = {
       round: state.wave,
-      type,
+      type: 'instant',
+      phase: 'idle',
+      triggerAtTimeLeft: randomInt(duration),
+      timer: 0,
+      targetSlots: [],
+      instantCellCount: 5 + Math.floor(Math.random() * 2), // 5 또는 6
+    };
+  } else if (IMMOBILIZE_GAUGE_ROUNDS.includes(state.wave)) {
+    const duration = waveDuration(state.wave);
+    state.eventLog.immobilizeEvent = {
+      round: state.wave,
+      type: 'gauge',
       phase: 'idle',
       triggerAtTimeLeft: randomInt(Math.max(1, duration - IMMOBILIZE_GAUGE_FILL_SEC)),
       timer: 0,
@@ -241,7 +262,7 @@ function snapshotOccupantInstanceIds(state, slots) {
   });
 }
 
-/** 이동불능 공격(즉시형: 즉시 속박 5초 / 게이지형: 6칸 5초 채워진 뒤 10초간 이동불가) */
+/** 이동불능 공격(즉시형: 예열 없이 즉시 속박 / 게이지형: 6칸 5초 채워진 뒤 20초간 이동불가) */
 export function handleImmobilizeEvent(state) {
   const ev = state.eventLog.immobilizeEvent;
   if (!ev || ev.round !== state.wave || ev.phase === 'done') return state;
@@ -250,7 +271,9 @@ export function handleImmobilizeEvent(state) {
 
   if (e.phase === 'idle' && newState.waveTimeLeft <= e.triggerAtTimeLeft) {
     if (e.type === 'instant') {
-      e.targetSlots = pickRandomSlots(newState, 1);
+      // 대상 칸 수는 기본 1칸이지만, 10라운드 보스 강제 이벤트처럼
+      // instantCellCount로 늘려 지정할 수 있다(사용자 지정 - "대여섯칸").
+      e.targetSlots = pickRandomSlots(newState, e.instantCellCount ?? 1);
       e.targetInstanceIds = snapshotOccupantInstanceIds(newState, e.targetSlots);
       e.phase = 'active';
       e.timer = IMMOBILIZE_INSTANT_SEC;
