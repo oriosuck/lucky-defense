@@ -298,10 +298,16 @@ function promoteInstance(state, slot, instanceId, immortalId) {
 // 반환: { ok:boolean, reason?:string } - ok=true면 checkImmortalPromotion이 promoteInstance를 호출한다.
 const promotionHandlers = {
   m_frog_prince(state, slot, instance, cond) {
-    // 승천 시도: 즉시 판정, 실패 시 개체 소멸
-    if (Math.random() < cond.extra.successRate) return { ok: true };
-    slot.occupants = slot.occupants.filter((o) => o.instanceId !== instance.instanceId);
-    return { ok: false, reason: 'ascend-failed-destroyed' };
+    // 예전엔 이 판정 자체(35% 확률, 실패 시 소멸)를 왼쪽 즐겨찾기 바의 "승급 가능!"
+    // 아이콘 클릭 한 번으로 처리했었는데, 사용자가 정확한 순서를 지정했다 - "개구리왕자가
+    // 있어. 변신 버튼을 눌러. 그러면 개구리왕자변신 상태가 돼. 이건 35% 확률이고
+    // 실패하면 없어져. 만약 변신에 성공하면 불멸 소환이 가능해져." 즉 위험한 RNG는
+    // 별도의 "변신" 버튼(attemptFrogTransform, 아래)에서 먼저 끝나야 하고, 여기
+    // (실제 불멸 승급)는 그 변신이 이미 성공했는지만 확인하는 게이트다 - 변신이 안
+    // 됐으면 거부한다(isImmortalPromotionReady의 'm_frog_prince' case가 같은 조건으로
+    // UI에서 미리 막아주지만, 직접 호출 경로에 대한 최종 방어선으로 여기도 확인).
+    if (!instance.frogTransformed) return { ok: false, reason: 'not-transformed' };
+    return { ok: true };
   },
   m_mama(state, slot, instance, cond) {
     // 임프 9마리(돌파 시 7마리)가 "동시에 필드에 존재"하면 승급 가능 - 소모가 아니라 존재
@@ -438,6 +444,12 @@ export function isImmortalPromotionReady(state, instanceId) {
   if (!eligible) return false;
 
   switch (instance.heroId) {
+    case 'm_frog_prince':
+      // "변신"(attemptFrogTransform)이 먼저 35% 확률로 성공해야만 승급 후보로
+      // 뜬다 - 예전엔 target==null이라 default 분기를 타서 소환 즉시 "승급
+      // 가능!"으로 떴는데, 그 클릭 한 번에 위험한 확률 판정까지 같이 일어나서
+      // 사용자가 말한 "변신 먼저, 그 다음 불멸" 순서와 어긋났다.
+      return instance.frogTransformed === true;
     case 'm_mama': {
       const target = instance.breakthrough ? cond.extra.breakthroughCost : cond.extra.normalCost;
       return countHeroOnField(state, IMP_HERO_ID).count >= target;
@@ -456,8 +468,8 @@ export function isImmortalPromotionReady(state, instanceId) {
       return maxEnhanced.length >= cond.target;
     }
     default:
-      // 핸들러가 없는(제네릭 폴백) 대부분의 조건과 사신개구리(m_frog_prince, 자원
-      // 게이팅 없이 언제든 확률 시도 가능)는 eligible이면 그대로 준비된 것으로 본다.
+      // 핸들러가 없는(제네릭 폴백) 대부분의 조건은 eligible이면 그대로 준비된
+      // 것으로 본다(m_frog_prince는 위에서 별도 case로 처리 - 변신 선행 필요).
       return true;
   }
 }
@@ -481,6 +493,31 @@ export function attemptSecondStageEvolution(state, instanceId) {
   }
   slot.occupants = slot.occupants.filter((o) => o.instanceId !== instanceId);
   return { success: true, evolved: false, newState };
+}
+
+/**
+ * 개구리왕자 전용 "변신" - 사신개구리(불멸) 승급의 선행 단계(사용자 지정 순서).
+ * 수동 버튼으로 즉시 35% 확률 판정 - 성공하면 instance.frogTransformed를 세워
+ * 이후 checkImmortalPromotion(m_frog_prince)이 통과할 수 있게 하고(위험한 RNG는
+ * 여기서 이미 끝났으므로 그 쪽은 더 이상 확률 판정 없이 확정 승급), 실패하면
+ * attemptSecondStageEvolution의 실패 분기와 동일하게 개체 자체가 소멸한다.
+ */
+export function attemptFrogTransform(state, instanceId) {
+  const newState = structuredClone(state);
+  const found = findInstance(newState, instanceId);
+  if (!found || found.instance.heroId !== 'm_frog_prince') {
+    return { success: false, reason: 'not-eligible', newState: state };
+  }
+  const { slot, instance } = found;
+  if (instance.frogTransformed) return { success: false, reason: 'already-transformed', newState: state };
+  const cond = HEROES_BY_ID.m_frog_prince.immortalCondition;
+
+  if (Math.random() < cond.extra.successRate) {
+    instance.frogTransformed = true;
+    return { success: true, transformed: true, newState };
+  }
+  slot.occupants = slot.occupants.filter((o) => o.instanceId !== instanceId);
+  return { success: true, transformed: false, newState };
 }
 
 /**
