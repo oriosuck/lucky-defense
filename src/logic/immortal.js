@@ -1,6 +1,8 @@
 import { HEROES_BY_ID, SECOND_STAGE_IMMORTAL, IMP_HERO_ID } from '../data/heroes.js';
+import { RAY_SWORD_TABLE, RAY_SWORD_CRAFT_MAX } from '../data/raySwords.js';
 import { createHeroInstance, neighborsOf, findAutoPlaceSlot, placeInstanceAtSlot } from '../state/gameState.js';
 import { countHeroOnField } from './synthesis.js';
+import { weightedRandom } from './summon.js';
 
 // ---- 공통 유틸 ----
 function rollValue(v, integer = true) {
@@ -518,6 +520,76 @@ export function attemptFrogTransform(state, instanceId) {
   }
   slot.occupants = slot.occupants.filter((o) => o.instanceId !== instanceId);
   return { success: true, transformed: false, newState };
+}
+
+function rollRaySword() {
+  return weightedRandom(RAY_SWORD_TABLE.map((sword) => ({ item: sword, weight: sword.rate })));
+}
+
+/**
+ * 용사 레이 전용 "검 부르기" - 마나가 다 찼을 때(instance.manaReady)만 무료로 시도
+ * 가능하다. 뽑은 검은 RAY_SWORD_TABLE에서 등급별 확률 그대로 하나 고르고, 이전에
+ * 부른 검을 대체한다(사용자 지정 - "매번 교체"). 전설 등급을 뽑으면 그 즉시
+ * progress를 target까지 채워 불멸 승급 자격을 준다(제네릭 isEligible이 그대로
+ * 소비함).
+ */
+export function callRaySword(state, instanceId) {
+  const newState = structuredClone(state);
+  const found = findInstance(newState, instanceId);
+  if (!found || found.instance.heroId !== 'm_ray') return { success: false, reason: 'not-eligible', newState: state };
+  const { instance } = found;
+  if (!instance.manaReady) return { success: false, reason: 'mana-not-ready', newState: state };
+
+  const sword = rollRaySword();
+  instance.raySwords = [sword];
+  instance.manaReady = false;
+  if (sword.tier === 'legendary') {
+    instance.progress = HEROES_BY_ID.m_ray.immortalCondition.target;
+  }
+  return { success: true, sword, newState };
+}
+
+/**
+ * 불멸 용사 레이 전용 "검 제작" - 필드의 희귀 등급 영웅 1마리(종류 무관, 먼저
+ * 찾은 것 자동 소모)를 재료로 검을 하나 더 뽑아 누적한다(사용자 지정 - "희귀
+ * 영웅 1개를 소모해서 검을 제작"). 최대 RAY_SWORD_CRAFT_MAX(3)개까지 누적 가능,
+ * "검 부르기"와 달리 이전 검을 대체하지 않고 쌓인다.
+ */
+export function craftRaySword(state, instanceId) {
+  const newState = structuredClone(state);
+  const found = findInstance(newState, instanceId);
+  if (!found || found.instance.heroId !== 'i_hero_ray') return { success: false, reason: 'not-eligible', newState: state };
+  const { instance } = found;
+  if (!instance.raySwords) instance.raySwords = [];
+  if (instance.raySwords.length >= RAY_SWORD_CRAFT_MAX) return { success: false, reason: 'max-reached', newState: state };
+
+  let consumed = false;
+  for (const slot of newState.field) {
+    const idx = slot.occupants.findIndex((o) => HEROES_BY_ID[o.heroId]?.tier === 'rare');
+    if (idx >= 0) {
+      slot.occupants.splice(idx, 1);
+      consumed = true;
+      break;
+    }
+  }
+  if (!consumed) return { success: false, reason: 'no-rare-material', newState: state };
+
+  const sword = rollRaySword();
+  instance.raySwords.push(sword);
+  return { success: true, sword, newState };
+}
+
+/**
+ * 불멸 용사 레이 전용 "초기화" - 지금까지 제작한 검을 전부 제거하고 처음부터
+ * 다시 제작해야 하는 상태로 되돌린다(사용자 지정 - "초기화를 할 시에는 모든
+ * 검이 제거되어 처음부터 다시 시작"). 별도 비용 없음.
+ */
+export function resetRaySwords(state, instanceId) {
+  const newState = structuredClone(state);
+  const found = findInstance(newState, instanceId);
+  if (!found || found.instance.heroId !== 'i_hero_ray') return { success: false, reason: 'not-eligible', newState: state };
+  found.instance.raySwords = [];
+  return { success: true, newState };
 }
 
 /**
