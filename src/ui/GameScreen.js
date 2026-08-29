@@ -69,9 +69,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 바꿔봤었는데, 카카오톡 인앱 브라우저 같은 환경에서 위쪽 UI(상단 배지)가 통째로
   // 잘려나가는 부작용이 나왔다(사용자 스크린샷으로 확인) - "안되면 크기 그냥
   // 원래대로 해야할거 같아"라는 지시대로 "contain"(전체가 다 보이게, 안 맞는
-  // 쪽엔 검은 여백)으로 되돌렸다. 검은 여백 자체는 별도로 추가한 전체화면 버튼
-  // (renderStageControls의 ⛶, Fullscreen API)으로 해결을 시도한다 - 지원 안 되는
-  // 브라우저(iOS 인앱 브라우저 다수)에서는 버튼이 조용히 no-op으로 빠진다.
+  // 쪽엔 검은 여백)으로 되돌렸다. 이때 여백을 우회하려고 추가했던 전체화면 버튼은
+  // 이후 사용자 요청으로 제거했다(renderStageControls 참고).
   function sizeStageToFit(wrap, stage) {
     const availW = wrap.clientWidth;
     const availH = wrap.clientHeight;
@@ -340,26 +339,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return el('div', { class: 'hole-effects' }, nodes);
   }
 
-  // 모바일에서 뷰포트 비율이 안 맞으면 위아래로 검은 여백이 남는 문제(위 sizeStageToFit
-  // 주석 참고)를 브라우저 자체 전체화면 API로 우회해본다 - 동영상 플레이어의
-  // 전체화면 버튼과 같은 개념(사용자 요청). `document.fullscreenEnabled`로 지원
-  // 여부를 확인해서 지원 안 하는 브라우저(iOS 인앱 브라우저 다수 - 카카오톡 포함)
-  // 에서는 버튼 자체를 안 띄운다(눌러도 반응 없는 죽은 버튼을 두지 않기 위해).
-  function isFullscreenSupported() {
-    return !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
-  }
-  function isCurrentlyFullscreen() {
-    return !!(document.fullscreenElement || document.webkitFullscreenElement);
-  }
-  function toggleFullscreen() {
-    if (isCurrentlyFullscreen()) {
-      (document.exitFullscreen ?? document.webkitExitFullscreen)?.call(document);
-    } else {
-      const root = document.documentElement;
-      (root.requestFullscreen ?? root.webkitRequestFullscreen)?.call(root)?.catch?.(() => {});
-    }
-  }
-
+  // 전체화면 버튼은 사용자 요청으로 제거했다(모바일 검은 여백 문제 우회용으로
+  // 넣었던 것 - "전체화면 모드는 제거해줘").
   function renderStageControls(state) {
     const buttons = [
       el('button', {
@@ -372,13 +353,6 @@ export function GameScreen({ getState, dispatch, onExit }) {
         },
       }),
     ];
-    if (isFullscreenSupported()) {
-      buttons.push(el('button', {
-        class: `stage-control-btn ${isCurrentlyFullscreen() ? 'active' : ''}`,
-        text: '⛶', title: '전체화면',
-        onclick: toggleFullscreen,
-      }));
-    }
     buttons.push(el('button', { class: 'stage-control-btn', text: '🚪', onclick: onExit }));
     return el('div', { class: 'stage-controls' }, buttons);
   }
@@ -487,9 +461,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
         // ondragstart를 막아야 하는 이유는 heroVisual.js의 draggable=false 주석 참고.
         ondragstart: (e) => e.preventDefault(),
       });
-      if (isImmobilized(state, slot)) {
-        cell.appendChild(el('div', { class: 'immobilize-mark' }, [el('img', { src: UI_IMAGES.immobilizeIcon, alt: '이동불능' })]));
-      }
+      // 이동불능 사슬 아이콘은 칸 구석의 작은 아이콘이 아니라 캐릭터 앞을 덮는 큰
+      // 아이콘이어야 한다는 사용자 지적(참고 이미지) - renderHeroTokenLayer가 캐릭터
+      // 토큰과 같은 좌표계에서 그린다(여기서는 더 이상 그리지 않음).
       // 보물 위치는 필드 임의의 칸에 랜덤 등장한다(기획서 명시 사항) - 작은 코너 아이콘이
       // 아니라 칸 전체가 노란색으로 빛나야 눈에 띈다는 사용자 지적을 반영해 글로우로 표시.
       if (isTreasureSlot(state, slot)) cell.appendChild(el('div', { class: 'treasure-mark' }, [el('span', { text: '💰' })]));
@@ -699,8 +673,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
         // 디버프는 개체 하나가 아니라 칸 전체에 적용되고(사용자 지적 - 한 칸에 3마리가
         // 있으면 그 중 1마리만이 아니라 칸에 있는 전원이 대상이어야 한다), 칸도 한 번에
         // 6개까지 동시에 물든다(사용자 지정 - 이동불능 게이지형과 동일).
+        // 디버프는 칸이 아니라 개체(instanceId) 기준 - 캐릭터를 다른 칸으로 옮기면
+        // 보라색도 같이 따라가야 한다(사용자 지적).
         const debuffEv = state.eventLog.debuffEvent;
-        const debuffed = debuffEv && debuffEv.slots.some((s) => s.row === slot.row && s.col === slot.col);
+        const debuffed = debuffEv && debuffEv.instanceIds.includes(occ.instanceId);
         // 탑 베인이 방금 궁극기 환산 임계치(이동 왕복 15~20회 랜덤)를 넘겼으면 잠깐
         // 이펙트를 준다(사용자 요청 - immortal.js의 recordImmortalEvent가 남긴
         // 타임스탬프 확인). 게임 루프가 0.2초마다 전체 DOM을 다시 그리는 구조라
@@ -741,6 +717,21 @@ export function GameScreen({ getState, dispatch, onExit }) {
           occ.enhanceLevel ? el('span', { class: 'enhance-badge', text: `+${occ.enhanceLevel}` }) : null,
         ]));
       });
+
+      // 이동불능(속박) 사슬 아이콘 - 칸 구석의 작은 아이콘이 아니라 캐릭터 바로
+      // 앞(위)을 덮는 큰 아이콘으로 표시해달라는 사용자 지적(참고 이미지: 캐릭터
+      // 크기만큼 큰 사슬 X가 캐릭터 앞에 겹쳐 보임). 캐릭터 토큰과 같은 좌표계
+      // (cellCenterX/baseTop/tokenWidth/tokenHeight)를 그대로 재사용해 칸 전체(3마리
+      // 스택 포함)를 덮도록 살짝 더 키우고, z-index를 캐릭터 토큰보다 위로 둬서
+      // "캐릭터 앞"에 오게 한다.
+      if (isImmobilized(state, slot)) {
+        const chainWidth = tokenWidth * 1.6;
+        const chainHeight = tokenHeight * 1.15;
+        layer.appendChild(el('div', {
+          class: 'stage-immobilize-mark',
+          style: `left:${cellCenterX}%; top:${baseTop + tokenHeight / 2}%; width:${chainWidth}%; height:${chainHeight}%; z-index:${20 + slot.row};`,
+        }, [el('img', { src: UI_IMAGES.immobilizeIcon, alt: '이동불능' })]));
+      }
 
       // 인디 쿨타임 게이지는 칸에 다른 영웅이 같이 쌓여 있어도(보물이 이미 다른
       // 캐릭터가 있는 칸에 등장할 수 있다는 것과는 별개로, 인디 본인이 서 있는 칸

@@ -19,16 +19,31 @@
 .tier-mythic { --tier-color: #ef5da8; }
 .tier-immortal { --tier-color: #f5c542; }
 
-* { box-sizing: border-box; }
+/* touch-action/user-select를 body 하나에만 걸어뒀더니(예전 방식) 더블탭 확대가
+   여전히 재현된다는 재지적을 받았다 - 스펙상 자손 요소가 명시적으로 재설정하지
+   않으면 조상의 값이 그대로 적용돼야 하지만, 실제로는 별도의 포지셔닝/합성 레이어를
+   만드는 요소(position:absolute, transform 등 - 이 프로젝트의 캐릭터 토큰/버튼
+   레이어가 전부 이런 구조)에서 브라우저(특히 iOS 계열 웹뷰)가 조상의 touch-action을
+   제대로 물려받지 못하는 경우가 있다. 그래서 body 하나가 아니라 모든 요소에
+   직접 걸어서 요소별로 확실히 적용되게 한다. user-select:none도 같이 전역으로
+   걸었다 - 드래그로 캐릭터를 옮길 때 그 경로에 있는 다른 텍스트/요소가 브라우저
+   기본 선택(파란 하이라이트)으로 잡히던 문제(사용자 지적 - "드래그했을때 이거
+   html이라 다른요소 선택되는데") 방지용. <input>(프리셋 이름 입력창)은 조상의
+   user-select와 무관하게 폼 컨트롤 내부 텍스트는 브라우저가 항상 별도로 선택
+   가능하게 처리하므로 영향 없다. */
+* {
+  box-sizing: border-box;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
 
 body {
   margin: 0;
   font-family: 'Pretendard', 'Apple SD Gothic Neo', -apple-system, sans-serif;
   background: var(--bg);
   color: var(--text);
-  /* 더블탭 확대 방지(사용자 지적) - 뷰포트 meta의 user-scalable=no와 별개로
-     브라우저가 더블탭 제스처 자체를 확대로 해석하지 않도록 CSS에서도 막는다. */
-  touch-action: manipulation;
 }
 
 /* #app 자체는 패딩을 두지 않는다 - 게임 화면(.game-screen)은 모바일에서 뷰포트를
@@ -409,10 +424,16 @@ body {
   position: absolute; bottom: -2px; right: -2px;
   color: var(--gold); font-size: 8px; background: #000; border-radius: 4px; padding: 0 2px;
 }
-.immobilize-mark {
-  position: absolute; top: 1px; right: 1px; width: 12px; height: 12px;
+/* 이동불능(속박) 사슬 - 칸 구석의 작은 아이콘이 아니라 캐릭터 앞을 덮는 큰 아이콘
+   이어야 한다는 사용자 지적(참고 이미지) - .stage-hero-layer 안에서 캐릭터 토큰과
+   같은 좌표계(left/top이 %, translate(-50%,-50%)로 중앙 정렬)로 그리고, z-index를
+   캐릭터 토큰(2~5)보다 확실히 높게 둬서 캐릭터 "앞"에 겹쳐 보이게 한다. */
+.stage-immobilize-mark {
+  position: absolute; transform: translate(-50%, -50%);
+  pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
 }
-.immobilize-mark img { width: 100%; height: 100%; object-fit: contain; }
+.stage-immobilize-mark img { width: 100%; height: 100%; object-fit: contain; }
 
 /* 인디 "보물 발굴" 쿨타임 게이지 - 인디가 필드에 있으면 선택 여부와 무관하게 항상
    캐릭터 바로 밑에 떠 있다(사용자 지정 - "이건 클릭 안 해도 보여지게"). 칸 좌표
@@ -856,9 +877,12 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
 /* 미션 완료 알림 - 화면 우측에서 슬라이드인됐다가 잠깐 머문 뒤 다시 슬라이드아웃
    된다(사용자 요청). animation-delay는 GameScreen.js가 missionToastQueue의 남은
    시간을 거꾸로 계산해서 매 렌더 다시 넣는다(0.2초마다 DOM이 재생성되는 구조에서
-   고정 delay를 쓰면 애니메이션이 매번 끊기는 문제 - CLAUDE.md 참고). */
+   고정 delay를 쓰면 애니메이션이 매번 끊기는 문제 - CLAUDE.md 참고). 위치는 우측
+   상단이 아니라 우측 하단, 미션 버튼(.stage-side-controls, top:70.7%) 바로 위(사용자
+   지정 - "미션 성공했을 때 우측 하단 즈음에... 미션 그 클릭하는거 버튼 위에")로
+   옮겼다. */
 .mission-toast {
-  position: absolute; top: 8%; right: 2%; z-index: 15;
+  position: absolute; bottom: 30%; right: 2%; z-index: 15;
   background: linear-gradient(180deg, #2a2438, #1a1626); border: 2px solid var(--gold);
   border-radius: 10px; padding: 8px 12px; min-width: 140px; max-width: 70%;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);

@@ -1462,6 +1462,68 @@ Playwright에서 필드 상태를 직접 주입한 뒤(인디를 특정 칸에 �
 페인트되는 것까지 전부 확인했다. 검증이 끝난 뒤 `window.__debug` 훅은
 `main.js`에서 다시 제거했다(디버그 전용, 커밋에 남기지 않음).
 
+## 더블탭 확대 재발/드래그 중 요소 선택/디버프 개체 추적/속박 사슬 확대/불멸 밤바 속도/전체화면 제거/미션 토스트 위치 (PR #38 배포 후)
+
+PR #37 배포 후 7개를 지적했다.
+
+1. **더블탭 확대가 여전히 재현됨(재발)**: PR #31에서 뷰포트 meta
+   (`maximum-scale=1.0, user-scalable=no`) + `body { touch-action: manipulation; }`로
+   고쳤다고 기록했었는데 실제로는 여전히 발생했다. `touch-action`을 `body` 하나에만
+   걸어두는 방식은, 이 프로젝트처럼 캐릭터 토큰/버튼이 전부 `position:absolute`인
+   별도 레이어로 분리된 구조에서 자손 요소가 조상의 값을 제대로 물려받지 못하는
+   경우가 있다(특히 iOS 계열 웹뷰) - `* { touch-action: manipulation; }`로 모든
+   요소에 직접 걸어서 확실히 적용되게 했다. `.field-slot`의 기존
+   `touch-action: none`(드래그 이동용)은 클래스 선택자가 우선순위가 높아 그대로
+   유지된다.
+2. **드래그 중 다른 요소(텍스트 등)가 브라우저 기본 선택으로 하이라이트되던 문제**:
+   위와 같은 이유로 `user-select: none`도 `body`가 아니라 `*`(전체 요소)에 직접
+   걸었다(사용자 지적 - "드래그했을때 이거 html이라 다른요소 선택되는데"). 프리셋
+   이름 `<input>`은 조상의 `user-select`와 무관하게 폼 컨트롤 내부 텍스트는 브라우저가
+   항상 별도로 선택 가능하게 처리하므로 영향 없다.
+3. **디버프가 칸이 아니라 개체를 따라가야 함**: 예전엔(PR #30) "디버프도 이동불능처럼
+   6칸을 한 번에" 요구를 반영하면서 `debuffEvent`를 `{slots:[{row,col},...]}`(좌표
+   기준)로 저장했는데, 이번에 사용자가 "그 칸에 있던 캐릭터들한테 디버프가 걸린거라
+   그 친구들 옮기면 보라색이 따라가야해"라고 정정했다. `waveEvents.js`의
+   `pickRandomOccupiedSlots` → `pickDebuffTargetInstanceIds`로 바꿔서 발동 시점에
+   대상 칸들의 occupant instanceId를 미리 뽑아 `debuffEvent.instanceIds`(좌표가 아니라
+   개체 ID 배열)로 저장한다. `GameScreen.js`의 `debuffed` 판정도 `slot.row/col` 일치
+   대신 `debuffEv.instanceIds.includes(occ.instanceId)`로 바꿨다 - 이제 디버프 걸린
+   캐릭터를 드래그로 다른 칸에 옮겨도 보라색 틴트가 그 개체를 따라간다(칸에 새로
+   들어온 다른 개체는 대상이 아니었으므로 자연히 물들지 않음).
+4. **이동불능(속박) 사슬을 칸 구석의 작은 아이콘이 아니라 캐릭터 앞을 덮는 큰
+   아이콘으로**: 사용자가 참고 이미지(캐릭터 크기만큼 큰 사슬 X가 캐릭터 얼굴
+   앞에 겹쳐 보이는 모습)를 첨부해 요청했다. 기존 `.immobilize-mark`(12×12px,
+   `.field-slot` 구석에 고정)를 없애고, `renderHeroTokenLayer`가 캐릭터 토큰과 같은
+   좌표계(`cellCenterX`/`baseTop`/`tokenWidth`/`tokenHeight`)로 `.stage-immobilize-mark`를
+   그리도록 옮겼다 - 캐릭터 토큰 크기의 1.6배(가로)/1.15배(세로)로 살짝 더 키워서
+   3마리 스택도 덮고, z-index를 캐릭터 토큰(2~5)보다 훨씬 높은 20+행번호로 둬서
+   "캐릭터 앞"에 겹쳐 보이게 했다. `.field-slot.immobilize-active`의 빨간 테두리는
+   보조 표시로 그대로 유지.
+5. **밤바(`m_bamba`)의 불멸 조건(스택 30) 누적 속도가 너무 빠름**: `heroes.js`의
+   `IMMORTAL_CONDITIONS.m_bamba.tickIntervalSec`가 `[1, 5]`(평균 3초마다 1스택,
+   30스택까지 평균 90초)였는데 사용자가 "5~15초 랜덤으로 스택쌓기 갈게"라고 확정
+   수치를 지정해서 `[5, 15]`로 늦췄다(평균 10초마다 1스택, 평균 300초) - 이 값은
+   `immortal.js`의 제네릭 `hybrid` 진행 엔진이 그대로 소비하므로 데이터 수정만으로
+   충분했다(코드 변경 불필요).
+6. **전체화면 버튼 제거**: PR #36에서 모바일 검은 여백(letterbox) 우회용으로 추가했던
+   `⛶` 버튼(Fullscreen API)을 사용자 요청으로 완전히 제거했다(`renderStageControls`).
+   letterbox 자체는 "contain" 방식(원본 비율 유지)의 의도된 트레이드오프로 그대로
+   남는다 - 다시 문제 삼으면 그때 다른 대안을 검토해야 한다.
+7. **미션 완료 토스트 위치를 우측 상단에서 우측 하단(미션 버튼 바로 위)으로**:
+   `.mission-toast`의 `top:8%`를 `bottom:30%`로 바꿔서 `.stage-side-controls`
+   (미션 버튼, `top:70.7%`) 바로 위에 뜨도록 옮겼다(사용자 지정 - "미션 성공했을 때
+   우측 하단 즈음에 해줘(미션 그 클릭하는거 버튼 위에)"). 좌우 슬라이드인
+   애니메이션 자체는 그대로 유지.
+
+**검증 방법**: 이전 라운드와 동일하게 `window.__debug` 훅을 `main.js`에 임시로
+추가해 Playwright로 필드 상태를 직접 주입한 뒤 검증하고, 검증이 끝나면 훅을 다시
+제거했다(디버그 전용, 커밋에 남기지 않음) - 이동불능 사슬이 캐릭터 토큰보다 크고
+z-index가 위인 것, 디버프가 칸을 비우고 다른 칸으로 이동시켜도 여전히 같은
+instanceId에 걸려 있는 것, 미션 토스트의 bounding box가 미션 버튼 바로 위(겹치지
+않고 인접)에 오는 것, `getComputedStyle`로 `touch-action:manipulation`/
+`user-select:none`이 전역에 실제로 적용된 것, 전체화면 버튼(⛶)이 컨트롤 목록에서
+사라진 것까지 전부 스크린샷과 DOM 계산값으로 확인했다.
+
 ## CSS/레이아웃에서 배운 것
 
 1. **배경 이미지 비율 유지는 JS로 실측해서 픽셀로 박아라.** `.game-stage`를
