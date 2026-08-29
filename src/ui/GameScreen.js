@@ -20,8 +20,7 @@ import {
   upgradeGlobalEnhance,
   cycleBatmanMode,
   nextEnhanceGoldCost,
-  ENHANCE_GOLD_COST,
-  ENHANCE_LUCKSTONE_COST,
+  nextEnhanceLuckstoneCost,
 } from '../logic/actions.js';
 import { checkImmortalPromotion, isImmortalPromotionReady, cannibalizeTar, attemptSecondStageEvolution } from '../logic/immortal.js';
 import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT, INDY_TREASURE_INTERVAL_SEC } from '../logic/waveEvents.js';
@@ -912,10 +911,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 자체가 아예 안 떠서 승급 조건을 영원히 만족할 수 없는 버그였음).
     if (heroDef.immortalCondition?.eventType === 'enhance' || heroDef.immortalCondition?.extra?.minEnhance != null) {
       const goldCost = nextEnhanceGoldCost(instance.heroId, instance.enhanceLevel);
+      const luckstoneCost = nextEnhanceLuckstoneCost(instance.heroId);
+      const costLabel = luckstoneCost > 0 ? `${goldCost}G ${luckstoneCost}💎` : `${goldCost}G`;
       below.push(el('button', {
         class: 'cell-quick-btn cell-quick-extra',
-        text: `강화 (${goldCost}G ${ENHANCE_LUCKSTONE_COST}💎)`,
-        disabled: state.gold < goldCost || state.luckstone < ENHANCE_LUCKSTONE_COST,
+        text: `강화 (${costLabel})`,
+        disabled: state.gold < goldCost || state.luckstone < luckstoneCost,
         onclick: () => apply(enhanceHero(state, instance.instanceId)),
       }));
     }

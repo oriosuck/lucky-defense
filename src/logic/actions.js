@@ -22,18 +22,26 @@ function nextEnhanceGoldCost(heroId, currentLevel) {
 }
 export { nextEnhanceGoldCost };
 
+// 배트맨 강화는 행운석이 안 든다(사용자 지정 - "배트 강화 비용에 행운석은 안들어가").
+// 다른 영웅은 전부 골드+행운석(ENHANCE_LUCKSTONE_COST) 둘 다 드는 게 그대로 유지된다.
+function nextEnhanceLuckstoneCost(heroId) {
+  return heroId === 'm_batman' ? 0 : ENHANCE_LUCKSTONE_COST;
+}
+export { nextEnhanceLuckstoneCost };
+
 /** 필드 영웅 강화. 데미지 계산은 시뮬레이션 범위 밖 - 강화 단계만 증가. */
 export function enhanceHero(state, instanceId) {
   const newState = structuredClone(state);
   const found = findInstance(newState, instanceId);
   if (!found) return { success: false, reason: 'not-found', newState: state };
   const goldCost = nextEnhanceGoldCost(found.instance.heroId, found.instance.enhanceLevel);
-  if (newState.gold < goldCost || newState.luckstone < ENHANCE_LUCKSTONE_COST) {
+  const luckstoneCost = nextEnhanceLuckstoneCost(found.instance.heroId);
+  if (newState.gold < goldCost || newState.luckstone < luckstoneCost) {
     return { success: false, reason: 'not-enough-resource', newState: state };
   }
 
   newState.gold -= goldCost;
-  newState.luckstone -= ENHANCE_LUCKSTONE_COST;
+  newState.luckstone -= luckstoneCost;
   found.instance.enhanceLevel += 1;
   newState.counters.enhanceCount += 1;
 
