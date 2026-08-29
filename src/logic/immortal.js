@@ -133,7 +133,9 @@ const tickOverrides = {
       t.nextTick = rollValue(cond.extra.ultimateIntervalSec);
     }
   },
-  // 용사 레이: 마나 게이지가 차면 "검 소환" 버튼을 누를 수 있는 상태로 표시
+  // 용사 레이: 쿨타임(고정 40초, cond.tickIntervalSec)이 차면 "검 부르기" 버튼을
+  // 누를 수 있는 상태로 표시(instance.manaReady) - rollValue()가 배열이 아닌
+  // 고정값을 받으면 그대로 반환하므로 매번 정확히 40초 간격으로 돈다.
   m_ray(state, slot, instance, cond, deltaSec) {
     if (instance.progress >= cond.target) return; // 이미 전설 검 획득
     if (!instance.immortalTick) {

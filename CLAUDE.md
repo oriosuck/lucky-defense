@@ -3425,6 +3425,46 @@ summon.js의 소환 경로들)도 이 값을 조회하지 않았다. 마마의 `
 잠깐 뜨는 화면이라(다른 팝업들도 화면 일부를 가리는 게 이미 이 프로젝트의 기존
 패턴) 일단 이대로 배포하고, 사용자가 문제 삼으면 그때 위치를 다시 조정할 것.
 
+## 용사 레이 쿨타임 고정 40초 + 쿨타임 게이지 추가
+
+바로 위 라운드 직후 두 가지를 추가로 받았다 - "신화 단계일 때는 쿨타임 차면 검부르기
+할 수 있고, 쿨타임 시간은 40초로 설정해줘"(예전엔 `IMMORTAL_CONDITIONS.m_ray.
+tickIntervalSec`가 `[1, 10]` 랜덤이었다 - 마나가 정확히 언제 찰지 예측 불가능했음),
+그리고 진행 중에 끼어든 "쿨타임 바도 보여줘"(캐릭터 위에서 눈으로 확인할 방법이
+없었음 - `instance.manaReady` boolean만 있고 시각화가 전혀 안 됨).
+
+**고정 40초**: `tickIntervalSec: [1, 10]` → `tickIntervalSec: 40`으로 데이터만
+바꿨다 - `rollValue()`가 배열이 아닌 값은 그대로 반환하는 기존 헬퍼라 코드 변경
+없이 데이터 수정만으로 충분했다(다른 여러 영웅의 "고정 간격" 조건들과 동일한
+패턴 - 예: 베인 궁극기 발동 간격을 랜덤→고정으로 바꿨을 때도 같은 방식이었음).
+
+**쿨타임 게이지**: 베인의 궁극기 쿨타임 게이지(`renderBaneUltimateGauge`)와 완전히
+같은 패턴으로 `renderRayCooldownGauge(occ, centerX, footY, width)`를 추가해
+`renderHeroTokenLayer()`의 `m_ray` 개체 렌더링 직후 항상(선택 여부와 무관, 인디
+발굴 게이지·베인 게이지와 동일한 상시 표시 원칙) 캐릭터 발밑에 붙인다. 채움
+비율은 `instance.immortalTick.elapsed / .nextTick`로 계산하되, **다 찬 뒤
+(`manaReady===true`)에는 이 비율 대신 무조건 100%로 고정 표시**해야 한다는 걸
+미리 알아챘다 - `tickOverrides.m_ray`의 while 루프가 `manaReady`를 true로 세운
+뒤에도 `elapsed -= nextTick; nextTick = rollValue(...)`로 계속 다음 40초 주기를
+새로 돌리기 때문에(플레이어가 바로 안 누르고 오래 방치하면), 원시 비율을 그대로
+쓰면 이미 다 찬 상태에서도 게이지가 "다시 채워지는 중"처럼 보이는 오해를 낳을
+뻔했다(실제로 구현 전에 로직을 읽으며 미리 예상하고 대응함 - 이번엔 검증에서
+걸린 게 아니라 설계 단계에서 피함). 승급 후(`i_hero_ray`)는 heroId 자체가
+달라지므로 이 게이지 조건에 자연히 안 걸려 사라진다.
+
+**검증 방법**: `window.__debug` 훅(`createHeroInstance`, `findAutoPlaceSlot`,
+`placeInstanceAtSlot`, `callRaySword`, `tickImmortalProgress`, `getState`/`setState`)을
+`main.js`에 임시로 추가해 Playwright로 검증했다 - (1) 레이를 선택하지 않아도
+게이지가 항상 보이는지, (2) `tickImmortalProgress`를 실제로 10초 흘려서
+`nextTick`이 정확히 40(더 이상 1~10 랜덤이 아님)이고 게이지가 대략 25%
+(10/40)로 차 있는지, (3) 총 40초를 흘리면 `manaReady=true`가 되고 게이지가
+정확히 100%로 표시되는지(다음 주기로 넘어가며 원시 비율을 그대로 썼다면
+실패했을 검증), (4) 실제로 "검 부르기" 버튼을 눌러 검을 뽑으면 `manaReady`가
+다시 false로 소모되고 게이지도 거의 0%로 리셋되는지까지 총 9개 항목을 확인했다.
+검증이 끝난 뒤 `window.__debug` 훅은 `main.js`에서 다시 제거했다(디버그 전용,
+커밋에 남기지 않음 - 제거 후 재빌드해서 `__debug` 참조가 번들에 전혀 없는 것까지
+확인).
+
 ## CSS/레이아웃에서 배운 것
 
 1. **배경 이미지 비율 유지는 JS로 실측해서 픽셀로 박아라.** `.game-stage`를
