@@ -136,13 +136,14 @@ export const IMMORTAL_CONDITIONS = {
     },
   },
   m_ray: {
-    // 마나(tickOverrides.m_ray)가 다 차면 instance.manaReady=true - "검 부르기"
+    // 쿨타임(tickOverrides.m_ray)이 다 차면 instance.manaReady=true - "검 부르기"
     // 버튼(immortal.js의 callRaySword)이 활성화되고, 누르면 RAY_SWORD_TABLE
     // (src/data/raySwords.js, 사용자 지정 확률표)에서 검 하나를 뽑아 이전 검을
     // 대체한다(사용자 지정 - "매번 교체"). 전설 등급을 뽑으면 그 즉시 승급
-    // 자격이 생긴다.
+    // 자격이 생긴다. 쿨타임은 랜덤이 아니라 고정 40초(사용자 지정 - "쿨타임 차면
+    // 검부르기 할 수 있고, 쿨타임 시간은 40초로 설정해줘").
     id: 'i_hero_ray', name: '용사 레이', type: 'hybrid', target: 1,
-    tickIntervalSec: [1, 10], eventType: 'summonSword',
+    tickIntervalSec: 40, eventType: 'summonSword',
   },
   m_monopoly_man: {
     id: 'i_devil_monopoly', name: '악마 모노폴리', type: 'time-based', target: 15,

@@ -740,6 +740,23 @@ export function GameScreen({ getState, dispatch, onExit }) {
     ]);
   }
 
+  // 용사 레이(신화)의 "검 부르기" 쿨타임(고정 40초)을 캐릭터 바로 밑에 항상
+  // 보여주는 게이지(사용자 요청 - "쿨타임 바도 보여줘") - 베인/인디와 같은 시각
+  // 스타일을 재사용한다. 다 찬 뒤(instance.manaReady=true)에도 tickOverrides.m_ray의
+  // while 루프가 elapsed/nextTick을 계속 다음 주기로 넘겨버리므로, 그 값을 그대로
+  // 쓰면 이미 다 찼는데도 다시 채워지는 중처럼 보인다 - manaReady가 true인 동안은
+  // 무조건 100%로 고정해서 보여준다.
+  function renderRayCooldownGauge(occ, centerX, footY, width) {
+    const t = occ.immortalTick;
+    const fillRatio = occ.manaReady ? 1 : (t && t.nextTick > 0 ? Math.max(0, Math.min(1, t.elapsed / t.nextTick)) : 0);
+    return el('div', {
+      class: 'indy-treasure-gauge',
+      style: `left:${centerX - width / 2}%; top:${footY}%; width:${width}%;`,
+    }, [
+      el('div', { class: 'indy-treasure-gauge-fill', style: `width:${fillRatio * 100}%;` }),
+    ]);
+  }
+
   function renderHeroTokenLayer(state) {
     const layer = el('div', { class: 'stage-hero-layer' });
     for (const slot of state.field) {
@@ -861,6 +878,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
         // 캐릭터 바로 밑에 붙는다.
         if (occ.heroId === 'm_bane') {
           layer.appendChild(renderBaneUltimateGauge(occ, centerX, top + tokenHeight + 1, tokenWidth));
+        }
+        // 용사 레이(신화) "검 부르기" 쿨타임 게이지도 같은 패턴으로 항상 표시
+        // (선택 여부와 무관). 승급 후(i_hero_ray)는 쿨타임 개념 자체가 없어져서
+        // heroId가 달라지므로 자연히 안 뜬다.
+        if (occ.heroId === 'm_ray') {
+          layer.appendChild(renderRayCooldownGauge(occ, centerX, top + tokenHeight + 1, tokenWidth));
         }
       });
 
