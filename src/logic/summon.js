@@ -71,6 +71,7 @@ export function summonNormal(state) {
 
   const tier = rollNormalTier();
   const heroDef = pickRandomHeroOfTier(tier);
+  if (tier === 'legendary') newState.counters.normalSummonLegendaryCount += 1; // "운빨좋은날" 미션용
 
   const slot = findAutoPlaceSlot(newState, heroDef.id);
   if (slot) {

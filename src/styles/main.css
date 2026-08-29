@@ -804,10 +804,25 @@ button:disabled.side-btn, button:disabled.summon-btn-wrap { opacity: 0.45; curso
   z-index: 20;
 }
 .popup-box { background: var(--panel); padding: 16px; border-radius: 10px; max-width: 480px; width: 90%; max-height: 80vh; overflow-y: auto; }
-.mythic-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.mythic-list li { display: flex; align-items: center; gap: 6px; }
-.mythic-list li.completed { color: var(--gem); }
-.missing-note { color: var(--danger); font-size: 12px; }
+
+/* 미션 목록 - 체크박스(☐/☑)로 완료 여부를 표시하고, 완료된 항목은 이름에
+   취소선을 긋는다(사용자 지정 - "미션은 1번씩만 가능하고... 다된거는 취소선으로
+   그어줘... 미션들은 체크박스로 표시해줘. 다된거는 체크 아닌거는 그냥 박스"). */
+.mission-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.mission-item {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--panel-2); border-radius: 8px; padding: 8px 10px;
+}
+.mission-checkbox { font-size: 18px; line-height: 1; flex-shrink: 0; }
+.mission-item.completed .mission-checkbox { color: var(--gem); }
+.mission-body { flex: 1; min-width: 0; }
+.mission-name { font-weight: 700; font-size: 13px; }
+.mission-item.completed .mission-name { text-decoration: line-through; color: var(--muted); }
+.mission-desc { font-size: 11px; color: var(--muted); }
+.mission-item.completed .mission-desc { text-decoration: line-through; }
+.mission-reward { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+.mission-reward-item { display: flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 700; color: var(--gold); }
+.mission-reward-item img { width: 12px; height: 12px; object-fit: contain; }
 
 .result-overlay {
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);

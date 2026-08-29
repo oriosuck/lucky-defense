@@ -540,8 +540,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
   const IMP_TOKEN_SCALE = 0.5; // 마마 임프는 다른 캐릭터의 절반 크기(사용자 지적 - 너무 컸음)
   // 신화/불멸은 항상 칸당 1마리라 스택 폭 제약(위 3마리 계산)이 적용 안 되므로
   // 더 크게 키워도 된다(사용자 지정 - "신화는 크기를 2.5배 키워도 괜찮아. 불멸도
-  // 신화랑 크기 똑같으니 참고").
-  const MYTHIC_TOKEN_SCALE = 2.5;
+  // 신화랑 크기 똑같으니 참고"). 이후 "너무 크다"는 지적을 받아 그 2.5배에서 다시
+  // 50%를 줄였다(2.5 × 0.5 = 1.25).
+  const MYTHIC_TOKEN_SCALE = 1.25;
   const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
   const ATTACK_CYCLE_MS = 900; // 공격 모션(위아래 스쿼시-스트레치) 반복 주기
 
@@ -1173,13 +1174,30 @@ export function GameScreen({ getState, dispatch, onExit }) {
     }));
   }
 
+  // 미션은 1번씩만 완료 가능하고(사용자 지정), 완료된 항목은 체크박스가 체크되고
+  // 이름에 취소선이 그어진다 - 미완료는 빈 체크박스만 뜬다.
   function renderMissionPopup(state) {
     const items = missionDefinitions().map((def) => {
       const progress = state.missions.find((m) => m.missionId === def.id);
-      return el('li', { class: progress?.completed ? 'completed' : '' }, `${def.name}: ${progress?.current ?? 0} / ${def.target} - ${def.description}`);
+      const completed = progress?.completed ?? false;
+      const rewardParts = [];
+      if (def.reward?.gold) {
+        rewardParts.push(el('span', { class: 'mission-reward-item' }, [el('img', { src: UI_IMAGES.goldIcon, alt: '' }), el('span', { text: String(def.reward.gold) })]));
+      }
+      if (def.reward?.luckstone) {
+        rewardParts.push(el('span', { class: 'mission-reward-item' }, [el('img', { src: UI_IMAGES.luckstoneIcon, alt: '' }), el('span', { text: String(def.reward.luckstone) })]));
+      }
+      return el('li', { class: `mission-item${completed ? ' completed' : ''}` }, [
+        el('span', { class: 'mission-checkbox', text: completed ? '☑' : '☐' }),
+        el('div', { class: 'mission-body' }, [
+          el('div', { class: 'mission-name', text: `${def.name} (${progress?.current ?? 0}/${def.target})` }),
+          el('div', { class: 'mission-desc', text: def.description }),
+        ]),
+        el('div', { class: 'mission-reward' }, rewardParts),
+      ]);
     });
     return el('div', { class: 'popup-overlay', onclick: (e) => { if (e.target === e.currentTarget) closePopup(state); } }, [
-      el('div', { class: 'popup-box' }, [el('h3', { text: '미션' }), el('ul', {}, items), el('button', { class: 'btn', text: '닫기', onclick: () => closePopup(state) })]),
+      el('div', { class: 'popup-box mission-popup-box' }, [el('h3', { text: '미션' }), el('ul', { class: 'mission-list' }, items), el('button', { class: 'btn', text: '닫기', onclick: () => closePopup(state) })]),
     ]);
   }
 
