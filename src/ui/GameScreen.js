@@ -108,9 +108,20 @@ export function GameScreen({ getState, dispatch, onExit }) {
     }
   }
 
-  window.addEventListener('resize', () => {
+  // window에 등록하는 리스너(resize/pointermove/pointerup/pointercancel)는 root와
+  // 달리 게임 화면을 나가도 저절로 사라지지 않는다 - root는 DOM에서 떨어져 나가면
+  // 참조가 없어져 가비지 컬렉션되지만, window는 페이지가 살아있는 한 계속 남아있어서
+  // 그 안에 등록된 리스너(와 그 클로저가 붙잡고 있는 이 GameScreen 인스턴스 전체)도
+  // 계속 살아있게 된다. 사용자가 게임을 나갔다가 다시 시작하는(mountGame이 다시
+  // 호출되는) 매 라운드마다 이 4개가 누적돼서, 여러 판을 하고 나면 겹겹이 쌓인
+  // 리스너들이 매 pointermove/resize마다 전부 실행돼 체감 랙("버벅거리고 멈추고")의
+  // 원인이 될 수 있다 - 한 판만 해도 즉시 눈에 띄는 정도는 아니지만 재시작을 반복할수록
+  // 누적되는 전형적인 메모리/리스너 누수 패턴이다. 함수 참조를 변수로 잡아뒀다가
+  // destroy()에서 명시적으로 해제한다(main.js가 onExit 시 호출).
+  const handleResize = () => {
     if (root.isConnected) render(getState());
-  });
+  };
+  window.addEventListener('resize', handleResize);
 
   // 게임 루프가 0.2초마다 전체 DOM을 다시 그리는데, 그 사이에 클릭(mousedown~mouseup)이
   // 걸리면 누르고 있던 버튼이 통째로 교체돼서 클릭이 씹히는 문제가 있었다(매번 두 번씩
@@ -191,7 +202,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     cellEl.classList.add('dragging-source');
   });
 
-  window.addEventListener('pointermove', (e) => {
+  const handlePointerMove = (e) => {
     if (!dragState) return;
     if (!dragState.moved) {
       const dx = e.clientX - dragState.startX;
@@ -202,7 +213,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const target = document.elementFromPoint(e.clientX, e.clientY);
     const cellEl = target?.closest('.field-slot');
     setDragHover(cellEl ?? null);
-  });
+  };
+  window.addEventListener('pointermove', handlePointerMove);
 
   function endDrag(e) {
     pointerDown = false;
@@ -230,14 +242,16 @@ export function GameScreen({ getState, dispatch, onExit }) {
     apply(moveHero(getState(), fromRow, fromCol, toRow, toCol));
   }
 
-  window.addEventListener('pointerup', (e) => { endDrag(e); });
-  window.addEventListener('pointercancel', () => {
+  const handlePointerUp = (e) => { endDrag(e); };
+  const handlePointerCancel = () => {
     pointerDown = false;
     const sourceEl = root.querySelector('.dragging-source');
     if (sourceEl) sourceEl.classList.remove('dragging-source');
     setDragHover(null);
     dragState = null;
-  });
+  };
+  window.addEventListener('pointerup', handlePointerUp);
+  window.addEventListener('pointercancel', handlePointerCancel);
 
   const MONSTER_TRAVEL_MS = 10400; // 기존 2600ms의 4배로 느리게(사용자 요청)
 
@@ -579,6 +593,14 @@ export function GameScreen({ getState, dispatch, onExit }) {
   const HERO_TOKEN_WIDTH_RATIO = 0.44;
   const IMP_TOKEN_SCALE = 0.5; // 마마 임프는 다른 캐릭터의 절반 크기(사용자 지적 - 너무 컸음)
   const MYTHIC_TOKEN_SCALE = 1.6875;
+  // 전설 등급이 일반~영웅 등급보다 유독 작아 보인다는 지적(사용자 - "다른 캐릭터들에
+  // 비해 너무 작아") - 원인은 크기 로직 자체가 아니라(일반~전설은 같은
+  // HERO_TOKEN_WIDTH/HEIGHT_RATIO를 공유해서 프로그램상 크기는 동일했다) 전설 등급
+  // 원화 89장 중 실제 인물이 캔버스에서 차지하는 비중이 이미지마다 달라서 생기는
+  // 시각적 차이로 보인다 - object-fit:contain은 알파 bbox 기준으로만 맞추므로
+  // 여백이 상대적으로 많은 이미지는 같은 박스 안에서도 작게 보인다. 전설 등급
+  // 전용 배율을 별도로 둬서 다른 등급과 비슷한 존재감이 나도록 50% 키웠다.
+  const LEGENDARY_TOKEN_SCALE = 1.5;
   const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
   const ATTACK_CYCLE_MS = 900; // 공격 모션(위아래 스쿼시-스트레치) 반복 주기
 
@@ -666,7 +688,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
       const firstHeroTier = HEROES_BY_ID[slot.occupants[0].heroId]?.tier;
       const isImpCell = slot.occupants[0].heroId === IMP_HERO_ID;
       const isMythicCell = firstHeroTier === 'mythic' || firstHeroTier === 'immortal';
-      const sizeScale = isImpCell ? IMP_TOKEN_SCALE : isMythicCell ? MYTHIC_TOKEN_SCALE : 1;
+      const isLegendaryCell = firstHeroTier === 'legendary';
+      const sizeScale = isImpCell ? IMP_TOKEN_SCALE : isMythicCell ? MYTHIC_TOKEN_SCALE : isLegendaryCell ? LEGENDARY_TOKEN_SCALE : 1;
       const tokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO * sizeScale;
       const n = slot.occupants.length;
       // 발끝(박스 하단) 기준선: 일반~영웅은 칸 정중앙(사용자 지정) - 마리 수와
@@ -1354,6 +1377,14 @@ export function GameScreen({ getState, dispatch, onExit }) {
     update(state) {
       if (pointerDown) return; // 클릭 도중엔 건너뛰고, 다음 tick에 반영
       render(state);
+    },
+    // 게임을 나갈 때(main.js의 onExit) 반드시 호출해야 한다 - 위 window 리스너
+    // 4개는 root와 달리 그냥 두면 페이지가 살아있는 한 계속 쌓인다(주석 참고).
+    destroy() {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
     },
   };
 }
