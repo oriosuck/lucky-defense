@@ -206,8 +206,15 @@ export const IMMORTAL_CONDITIONS = {
     eventType: 'move', extra: { ultimateThresholdMin: 30, ultimateThresholdMax: 30 },
   },
   m_roka: {
+    // 승급까지 걸리는 시간을 16라운드 시작 시점(누적 570초 - 1~9라운드 30초×9 +
+    // 10라운드 150초 + 11~15라운드 30초×5) 근처로 맞춰달라는 사용자 지정("로카
+    // 한 16라운드에 변신할 수 있게 랜덤시간 조정좀 해줘"). 로카는 80% 확률로
+    // 최대치(5)로 장전하므로(ROKA_MAX_CHARGE_CHANCE, immortal.js) 평균 장전량은
+    // 0.8×5+0.2×3(1~5 균등평균) = 4.6/틱 - 목표(160)를 그 평균으로 나눈 틱 수
+    // (≈34.78회)가 570초에 걸리도록 tickIntervalSec을 10 → 16.39초로 늦췄다
+    // (570×4.6/160 = 16.3875, 반올림).
     id: 'i_captain_roka', name: '캡틴 로카', type: 'time-based', target: 160,
-    tickIntervalSec: 10, incrementPerTick: [1, 5],
+    tickIntervalSec: 16.39, incrementPerTick: [1, 5],
   },
   m_batman: {
     id: 'i_ace_batman', name: '에이스 배트맨', type: 'hybrid', target: 1,
