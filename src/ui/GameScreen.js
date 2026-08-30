@@ -1144,9 +1144,17 @@ export function GameScreen({ getState, dispatch, onExit }) {
       }
     }
 
+    // 위쪽 버튼 스택(판매 등)이 캐릭터 스프라이트와 겹쳐서, 캐릭터를 더블탭했을 때
+    // 두 번째 탭이 이 버튼 위에 떨어져 더블탭 확대 방지 로직(버튼은 항상 예외)을
+    // 우회하는 문제가 실측으로 확인됐다(사용자 리포트 - "캐릭터를 클릭하면 원이
+    // 생기잖아 그때 더블클릭하면은 화면 확대돼"). 캐릭터는 칸 중앙을 기준으로
+    // 위로 `rect.height*(0.8*scale-0.5)`만큼 튀어나오게 그려지는데(renderHeroTokenLayer의
+    // "발끝 기준" 배치 공식과 동일), 판매/합성 버튼이 뜨는 등급(전설까지, scale
+    // 최대 1.5) 기준 가장 많이 튀어나오는 경우(scale=1.5 → 0.7×rect.height)를
+    // 넘어서도록 여유 있게 0.75배 위로 올려서 겹치지 않게 했다.
     const aboveWrap = el('div', {
       class: 'cell-quick-stack cell-quick-stack-above',
-      style: `left:${centerX}%; top:${rect.top}%;`,
+      style: `left:${centerX}%; top:${rect.top - rect.height * 0.75}%;`,
     }, above);
     const belowWrap = below.length
       ? el('div', {

@@ -344,6 +344,17 @@ export function handleDeleteEvent(state) {
   return newState;
 }
 
+// 10라운드는 "라운드 남은 시간이 2:25(=145초)가 되면 소탕 가능"이라는 사용자 지정
+// 고정 시점이 있다(사용자 지정 - "10라운드 2분 25초에 공격 소탕 가능하게 설정해줘",
+// "라운드 남은 시간(카운트다운)이 2:25일 때 열려야 함"으로 확인받음). 몬스터
+// 처치 속도가 이미 "10라운드 시작 후 몇 초 안에 전멸"하도록 튜닝돼 있어서
+// (MONSTER_KILL_RATE_PER_HERO_PER_SEC 참고) 몬스터가 0이 되는 시점 자체는 보통
+// 5초보다도 이르지만, 그 뒤에 이어지는 동적 지연(기본 4초+누락 핵심 영웅당 5초)까지
+// 합치면 실제로 창이 열리는 시점은 5초보다 항상 늦다 - 그래서 이 고정 시점을
+// 동적 계산보다 우선 적용해서 최소한 이 시점엔 무조건 열리도록 보장한다(더 일찍
+// 열어주는 효과만 있고 기존 동적 로직과 충돌하지 않음).
+const RAID_WINDOW_ROUND10_FORCE_AT_TIME_LEFT = 145;
+
 /**
  * 보스 레이드 창(10/20라운드 전용): 필드에 몬스터가 0마리가 된 시점부터 지연시간을 세고,
  * 지연시간이 지나면 창이 열려 해당 웨이브가 끝날 때까지 유지된다.
@@ -353,6 +364,10 @@ export function tickBossRaidWindow(state, deltaSec) {
   const rw = state.bossRaidWindow;
   if (!rw || rw.open || state.result) return state;
   const newState = structuredClone(state);
+  if (state.wave === 10 && newState.waveTimeLeft <= RAID_WINDOW_ROUND10_FORCE_AT_TIME_LEFT) {
+    newState.bossRaidWindow.open = true;
+    return newState;
+  }
   const r = newState.bossRaidWindow;
 
   if (Math.floor(newState.monsterCount) > 0) {
