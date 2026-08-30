@@ -314,7 +314,7 @@ body {
    못 잡혀서 탭 선택/드래그 이동이 전혀 동작하지 않는다(실제로 이 버그가 났었음 -
    .field-slot 안에 있던 예전 구조와 달리 지금은 완전히 별도 레이어라 이벤트를
    투과시켜야 한다). */
-/* 캐릭터 토큰/머리 위 배지/이동불능 사슬 등 이 레이어 안의 요소들은 행(row) 기반
+/* 캐릭터 토큰/머리 위 배지/기절 사슬 등 이 레이어 안의 요소들은 행(row) 기반
    z-index(최대 33까지)를 인라인으로 쓰는데, 레이어 자체에 z-index가 없으면
    position:absolute만으로는 새 스태킹 컨텍스트가 안 생겨서 그 큰 값들이 그대로
    .game-popup/.mythic-popup(z-index:10) 같은 형제 위로 새어나간다(사용자 지적 -
@@ -402,7 +402,7 @@ body {
   position: absolute; bottom: -2px; right: -2px;
   color: var(--gold); font-size: 8px; background: #000; border-radius: 4px; padding: 0 2px;
 }
-/* 이동불능(속박) 사슬 - 칸 구석의 작은 아이콘이 아니라 캐릭터 앞을 덮는 큰 아이콘
+/* 기절 사슬 - 칸 구석의 작은 아이콘이 아니라 캐릭터 앞을 덮는 큰 아이콘
    이어야 한다는 사용자 지적(참고 이미지) - .stage-hero-layer 안에서 캐릭터 토큰과
    같은 좌표계(left/top이 %, translate(-50%,-50%)로 중앙 정렬)로 그리고, z-index를
    캐릭터 토큰(2~5)보다 확실히 높게 둬서 캐릭터 "앞"에 겹쳐 보이게 한다. */
@@ -522,7 +522,7 @@ body {
   box-shadow: 0 0 10px rgba(78, 224, 106, 0.85);
 }
 
-/* 이동불능(게이지형) - 빨간 원이 5초 동안 차오르는 연출. 이미지가 아니라 conic-gradient +
+/* 기절(게이지형) - 빨간 원이 5초 동안 차오르는 연출. 이미지가 아니라 conic-gradient +
    CSS 애니메이션으로 구현한다. */
 .field-slot.immobilize-filling::after {
   content: '';

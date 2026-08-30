@@ -3791,6 +3791,65 @@ Lv.12에서 정확히 막히는지(`reason:'max-level'`), 전설~불멸 트랙�
 20% 근처로 나오는지, 위로로 나온 영웅이 전부 정확히 한 단계 아래(hero→rare)
 등급인지 전부 확인했다.
 
+## "이동불능"/"속박" 용어를 "기절"로 전면 교체 + 기절 중 자동 진행(스킬) 정지 신규
+
+"내가 2, 4, 7 뭐 하면서 속박이라 한거 기절로 바꿔줘. 그러면 스킬도 못쓰고
+제자리에 그대로 있어야하는거야"를 받았다. 두 가지가 모호해서 AskUserQuestion으로
+먼저 확인받았다 - (1) "스킬을 못 쓴다"가 27개 신화 각각의 자동 진행(로카 장전,
+오크주술사 저주, 마마 임프 생성 등)과 수동 버튼(검 부르기/발굴/강화 등) 중 어디까지
+막는 것인지 → **자동 진행만 멈춤**(수동 버튼은 그대로 유지, 권장안). (2) 용어
+교체 범위가 화면에 노출되는 알파벳/텍스트뿐인지 코드 주석/변수명 전반인지 →
+**코드 전체(주석/아이콘 alt 텍스트) 다 기절로**(권장안).
+
+1. **용어 교체**: `src/ui/GameScreen.js`, `src/logic/waveEvents.js`,
+   `src/styles/main.css`에서 "이동불능"/"속박"이 등장하는 모든 한글 주석과 실제
+   화면에 노출되는 사슬 아이콘의 `alt` 텍스트('이동불능' → '기절')를 일괄 교체했다
+   (`이동불능(속박)`처럼 두 단어가 겹쳐 쓰인 자리는 "기절(기절)"처럼 중복되지
+   않게 먼저 개별 처리한 뒤 나머지를 치환). **CLAUDE.md의 과거 기록(이 문서
+   자체)은 건드리지 않았다** - 그건 당시 실제로 오간 대화/작업 내역을 보존하는
+   일지라, 지금 용어가 바뀌었다고 소급해서 다시 쓰면 그 시점 기록의 정확성이
+   깨진다(세션 시작 지침에도 "실제로 이전에 반영한 버전과 diff해서 확인" 같은
+   식으로 이 문서의 사실성을 신뢰하는 전제가 깔려 있음). `src/data/assets.js`의
+   `immobilizeIcon: ... // "속박.png"` 주석도 그대로 뒀다 - 이건 게임 개념 설명이
+   아니라 원본 zip 파일의 실제 파일명을 기록한 것이라 사실 자체가 바뀌지 않는다.
+   함수/변수/CSS 클래스명(`isImmobilized`, `.immobilize-active`,
+   `.stage-immobilize-mark` 등, 전부 영어)은 그대로 남겨뒀다 - 질문에서 확인받은
+   범위가 "한글 용어(주석/alt 텍스트)"였고, 내부 식별자까지 바꾸는 건 회귀
+   리스크만 키우고 사용자에게 보이는 이득이 없다고 판단했다.
+2. **기절 중 자동 진행 정지 신규 구현**: `waveEvents.js`에 `isInstanceStunned(state,
+   instanceId)`를 새로 추가했다 - 기존 `GameScreen.js`의 `isImmobilized(state, slot)`
+   (칸 단위 판정, `eventLog.immobilizeEvent.targetInstanceIds` 기반)에서 개체 단위
+   판정 로직만 뽑아내 로직 레이어(waveEvents.js)로 옮기고, `GameScreen.js`는 이제
+   각 occupant에 대해 이 함수를 호출하는 방식으로 재구현했다(칸 안의 개체 중
+   하나라도 기절 중이면 그 칸이 기절 상태로 보이는 기존 동작은 동일). 이렇게 UI와
+   로직이 같은 판정 함수를 공유해야, 나중에 판정 조건이 바뀌어도 두 곳이 따로
+   어긋나지 않는다. `immortal.js`의 `tickImmortalProgress()`(27개 신화의 자동
+   진행 전체를 갱신하는 함수)가 각 개체를 처리하기 직전에
+   `isInstanceStunned(newState, instance.instanceId)`를 확인해서, 기절 중이면
+   `tickOverrides`/`applyGenericTick` 호출 자체를 건너뛴다(진행도가 그대로
+   멈춤 - 시간을 몰아서 나중에 따라잡지 않도록 elapsed 누적도 같이 멈춘다).
+   `tickMamaImps()`(마마의 임프 생성 - 이것도 마마 자신의 "자동 진행"이라 같은
+   원칙 적용)에도 마마 본인이 기절 중이면 그 틱을 건너뛰는 가드를 추가했다(몬스터가
+   0마리일 때 멈추는 기존 가드와 같은 패턴 - `return`으로 그냥 건너뛰어 elapsed도
+   같이 정지시킨다). **수동 버튼은 이 정지 대상이 아니다** - `enhanceHero`/
+   `advanceIronMeyaong`/`callRaySword`/`digTreasure` 등 클릭으로 직접 호출되는
+   함수들은 손대지 않았다(사용자 지정 - "자동 진행만 멈춤"). 이동 자체는 이미
+   예전부터 드래그 차단으로 막혀 있었으니(`endDrag()`의 `immobilized` 체크) 이번엔
+   건드릴 필요가 없었다 - "제자리에 그대로 있어야" 요구사항은 이미 충족된 상태였다.
+
+**검증 방법**: 이전 라운드들과 동일하게 `window.__debug` 훅(`tickImmortalProgress`,
+`tickMamaImps`, `isInstanceStunned`, `enhanceHero`, `createHeroInstance`,
+`findAutoPlaceSlot`, `placeInstanceAtSlot`)을 `main.js`에 임시로 추가해 Playwright로
+검증하고 끝난 뒤 다시 제거했다(디버그 전용, 커밋에 남기지 않음 - 제거 후 재빌드한
+번들 해시가 훅 추가 전과 정확히 일치하는 것까지 확인). `state.eventLog.immobilizeEvent`를
+`{phase:'active', targetInstanceIds:[...]}`로 직접 세팅해 특정 개체를 기절시킨 뒤 -
+(1) 로카를 기절시키고 `tickImmortalProgress`를 15초 흘리면 progress/ammo가 그대로
+0으로 남는지, 기절 안 시킨 대조군은 정상적으로 5까지 쌓이는지(장전 자체는 정상),
+(2) 마마를 기절시키고 `tickMamaImps`를 30초 흘리면 임프가 0마리인지, 대조군은
+정상적으로 여러 마리 생성되는지, (3) 기절 중인 배트맨에게 `enhanceHero`를 직접
+호출해도 정상적으로 강화가 성공하는지(수동 버튼은 안 막힘을 확인), (4) 기절시킨
+칸의 사슬 아이콘 `alt` 텍스트가 실제로 '기절'로 렌더링되는지까지 전부 확인했다.
+
 ## 빌드/확인 방법
 
 ```bash

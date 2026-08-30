@@ -3,6 +3,7 @@ import { RAY_SWORD_TABLE, RAY_SWORD_CRAFT_MAX } from '../data/raySwords.js';
 import { createHeroInstance, neighborsOf, findAutoPlaceSlot, placeInstanceAtSlot } from '../state/gameState.js';
 import { countHeroOnField } from './synthesis.js';
 import { weightedRandom } from './summon.js';
+import { isInstanceStunned } from './waveEvents.js';
 
 // ---- 공통 유틸 ----
 function rollValue(v, integer = true) {
@@ -205,11 +206,19 @@ const tickOverrides = {
 export function tickImmortalProgress(state, deltaSec) {
   const newState = structuredClone(state);
   forEachMythicInstance(newState, (slot, instance, cond) => {
-    const handler = tickOverrides[instance.heroId];
-    if (handler) {
-      handler(newState, slot, instance, cond, deltaSec);
-    } else {
-      applyGenericTick(instance, cond, deltaSec);
+    // 기절 중엔 "스킬도 못 쓰고 제자리에 그대로 있어야" 한다(사용자 지정) - 이동은
+    // 이미 드래그 차단으로 막혀 있었는데, 자동으로 쌓이는 불멸 조건 진행(로카 장전,
+    // 오크주술사 저주, 밤바 스택 등)도 같이 멈춰야 "스킬을 못 쓴다"가 성립한다.
+    // 수동 버튼(검 부르기/발굴/강화 등)은 이 정지 대상이 아니다(사용자 지정 -
+    // "자동 진행만 멈춤") - 그건 recordImmortalEvent/actions.js의 개별 함수들이
+    // 그대로 처리하므로 여기서 막을 필요가 없다.
+    if (!isInstanceStunned(newState, instance.instanceId)) {
+      const handler = tickOverrides[instance.heroId];
+      if (handler) {
+        handler(newState, slot, instance, cond, deltaSec);
+      } else {
+        applyGenericTick(instance, cond, deltaSec);
+      }
     }
     if (isEligible(newState, slot, instance, cond)) {
       instance.immortalEligible = true;
@@ -666,6 +675,10 @@ export function tickMamaImps(state, deltaSec) {
   // 빈 칸이 없을 때뿐이다(필드 공간이 다 차면 그 틱은 그냥 건너뜀).
   forEachMythicInstance(newState, (slot, instance, cond) => {
     if (instance.heroId !== 'm_mama') return;
+    // 마마 본인이 기절 중이면 임프 생성(마마의 자동 진행/"스킬")도 멈춘다 - 몬스터가
+    // 없을 때 멈추는 것과 같은 방식으로, elapsed 자체를 쌓지 않고 그냥 건너뛰어서
+    // 기절이 풀리는 순간 그동안 밀린 시간을 몰아서 처리하지 않게 한다.
+    if (isInstanceStunned(newState, instance.instanceId)) return;
     const intervalRange = cond.extra.impIntervalSec;
     if (!instance.immortalTick) instance.immortalTick = { elapsed: 0, nextTick: rollValue(intervalRange) };
     const t = instance.immortalTick;

@@ -35,7 +35,7 @@ import {
   craftRaySword,
   resetRaySwords,
 } from '../logic/immortal.js';
-import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT, INDY_TREASURE_INTERVAL_SEC } from '../logic/waveEvents.js';
+import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT, INDY_TREASURE_INTERVAL_SEC, isInstanceStunned } from '../logic/waveEvents.js';
 import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 import { RAY_SWORD_TIER_LABEL, RAY_SWORD_TIER_COLOR, RAY_SWORD_CRAFT_MAX } from '../data/raySwords.js';
 import { fieldOccupantCount, isFieldPhysicallyFull, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
@@ -252,8 +252,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
     dragState = {
       fromRow: row, fromCol: col,
       startX: e.clientX, startY: e.clientY, moved: false,
-      // 이동불능(속박) 상태인 칸은 탭 선택은 그대로 되지만 실제 드래그 이동은
-      // endDrag에서 막는다(보스 이동불능 이벤트 지속 시간 동안 캐릭터를 움직일 수
+      // 기절 상태인 칸은 탭 선택은 그대로 되지만 실제 드래그 이동은
+      // endDrag에서 막는다(보스 기절 이벤트 지속 시간 동안 캐릭터를 움직일 수
       // 있던 버그 리포트 반영).
       immobilized: isImmobilized(state, slot),
     };
@@ -284,13 +284,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
     dragState = null;
     if (!moved) {
       // 이동량이 거의 없으면 드래그가 아니라 탭 - 기존 선택 토글 동작을 그대로 수행.
-      // (이동불능이어도 정보 확인용 선택은 막지 않는다 - 실제 이동만 아래에서 막음)
+      // (기절이어도 정보 확인용 선택은 막지 않는다 - 실제 이동만 아래에서 막음)
       const state = getState();
       const slot = state.field.find((s) => s.row === fromRow && s.col === fromCol);
       if (slot) onSlotClick(state, slot);
       return;
     }
-    if (immobilized) return; // 이동불능 상태에선 드래그 이동 자체가 성립하지 않는다
+    if (immobilized) return; // 기절 상태에선 드래그 이동 자체가 성립하지 않는다
     const target = document.elementFromPoint(e.clientX, e.clientY);
     const cellEl = target?.closest('.field-slot');
     if (!cellEl) return;
@@ -546,7 +546,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         // ondragstart를 막아야 하는 이유는 heroVisual.js의 draggable=false 주석 참고.
         ondragstart: (e) => e.preventDefault(),
       });
-      // 이동불능 사슬 아이콘은 칸 구석의 작은 아이콘이 아니라 캐릭터 앞을 덮는 큰
+      // 기절 사슬 아이콘은 칸 구석의 작은 아이콘이 아니라 캐릭터 앞을 덮는 큰
       // 아이콘이어야 한다는 사용자 지적(참고 이미지) - renderHeroTokenLayer가 캐릭터
       // 토큰과 같은 좌표계에서 그린다(여기서는 더 이상 그리지 않음).
       // 보물 위치는 필드 임의의 칸에 랜덤 등장한다(기획서 명시 사항) - 작은 코너 아이콘이
@@ -811,7 +811,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         const heroDef = HEROES_BY_ID[occ.heroId];
         // 디버프는 개체 하나가 아니라 칸 전체에 적용되고(사용자 지적 - 한 칸에 3마리가
         // 있으면 그 중 1마리만이 아니라 칸에 있는 전원이 대상이어야 한다), 칸도 한 번에
-        // 6개까지 동시에 물든다(사용자 지정 - 이동불능 게이지형과 동일).
+        // 6개까지 동시에 물든다(사용자 지정 - 기절 게이지형과 동일).
         // 디버프는 칸이 아니라 개체(instanceId) 기준 - 캐릭터를 다른 칸으로 옮기면
         // 보라색도 같이 따라가야 한다(사용자 지적).
         const debuffEv = state.eventLog.debuffEvent;
@@ -898,7 +898,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         }
       });
 
-      // 이동불능(속박) 사슬 아이콘 - 칸 구석의 작은 아이콘이 아니라 캐릭터 바로
+      // 기절 사슬 아이콘 - 칸 구석의 작은 아이콘이 아니라 캐릭터 바로
       // 앞(위)을 덮는 큰 아이콘으로 표시해달라는 사용자 지적(참고 이미지: 캐릭터
       // 크기만큼 큰 사슬 X가 캐릭터 앞에 겹쳐 보임). 캐릭터 토큰과 같은 좌표계
       // (cellCenterX/baseTop/tokenWidth/tokenHeight)를 그대로 재사용한다. 처음엔
@@ -911,7 +911,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         layer.appendChild(el('div', {
           class: 'stage-immobilize-mark',
           style: `left:${cellCenterX}%; top:${baseTop + tokenHeight / 2}%; width:${chainWidth}%; height:${chainHeight}%; z-index:${20 + slot.row};`,
-        }, [el('img', { src: UI_IMAGES.immobilizeIcon, alt: '이동불능' })]));
+        }, [el('img', { src: UI_IMAGES.immobilizeIcon, alt: '기절' })]));
       }
 
       // 인디 쿨타임 게이지는 칸에 다른 영웅이 같이 쌓여 있어도(보물이 이미 다른
@@ -1236,16 +1236,16 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return heroDef.name;
   }
 
-  // 실제로 속박되는 건 칸 좌표가 아니라 active 전환 시점에 스냅샷 뜬 개체
+  // 실제로 기절되는 건 칸 좌표가 아니라 active 전환 시점에 스냅샷 뜬 개체
   // (targetInstanceIds)다(사용자 지적 - "원을 피했으면 캐릭터가 없는 자리는
-  // 속박이 안되는게 맞아... 피한애를 다시 그 칸에 들여다놓으면 피했는데도
-  // 속박되어버려"). 그 칸에 지금 있는 개체 중 스냅샷에 있는 게 하나라도 있으면
-  // 그 칸을 속박 상태로 표시한다 - 필링 단계에서 도망친 개체나, active 이후에
-  // 새로 들어온 개체는 스냅샷에 없으므로 자연히 제외된다.
+  // 기절이 안되는게 맞아... 피한애를 다시 그 칸에 들여다놓으면 피했는데도
+  // 기절되어버려"). 그 칸에 지금 있는 개체 중 스냅샷에 있는 게 하나라도 있으면
+  // 그 칸을 기절 상태로 표시한다 - 필링 단계에서 도망친 개체나, active 이후에
+  // 새로 들어온 개체는 스냅샷에 없으므로 자연히 제외된다. 개체 단위 판정 자체는
+  // waveEvents.js의 isInstanceStunned()로 통일했다 - immortal.js의 자동 진행 정지
+  // (틱 스킵)도 같은 함수를 공유해서 판정이 두 곳에서 따로 어긋나지 않는다.
   function isImmobilized(state, slot) {
-    const ev = state.eventLog.immobilizeEvent;
-    if (!ev || ev.phase !== 'active' || !ev.targetInstanceIds) return false;
-    return slot.occupants.some((o) => ev.targetInstanceIds.includes(o.instanceId));
+    return slot.occupants.some((o) => isInstanceStunned(state, o.instanceId));
   }
   function isImmobilizeFilling(state, slot) {
     const ev = state.eventLog.immobilizeEvent;

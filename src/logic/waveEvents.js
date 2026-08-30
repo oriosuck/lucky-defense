@@ -13,18 +13,18 @@ import {
   FIRST_WAVE_SUBSIDY,
 } from '../data/constants.js';
 
-// ---- 이동불능(즉시형/게이지형) ----
+// ---- 기절(즉시형/게이지형) ----
 // 예전엔 "게임당 정확히 2회, 1~9/11~19 중 랜덤"이었는데, 사용자가 고정 라운드
 // 목록으로 재지정했다 - "랜덤으로 총 2번 말고, 2,4,7,9에 나오게 하고... 11,
 // 13(이미 한거), 17에 나오게". 게이지형(필드에 5초간 차오르는 빨간 원)이 뜨는
 // 라운드를 이 고정 목록으로 못박는다. 13라운드는 삭제 공격 직전 강제 발생이라는
 // 별도 규칙이 이미 있어서(onWaveStart 참고) 이 목록엔 안 넣는다.
 const IMMOBILIZE_GAUGE_ROUNDS = [2, 4, 7, 9, 11, 17];
-// 10라운드는 빨간 원(게이지형) 없이 보스가 곧장 5~6칸을 동시에 속박한다(사용자
-// 지정 - "10라운드에는 빨간색 없이 보스가 바로 속박 공격 한번 하고(대여섯칸)") -
+// 10라운드는 빨간 원(게이지형) 없이 보스가 곧장 5~6칸을 동시에 기절한다(사용자
+// 지정 - "10라운드에는 빨간색 없이 보스가 바로 기절 공격 한번 하고(대여섯칸)") -
 // 즉시형과 같은 구조(예열 없이 바로 잠금)지만 대상 칸 수만 다르다.
 const IMMOBILIZE_BOSS_INSTANT_ROUND = 10;
-// 실제로 이동불능 상태에 걸려 있는 시간(즉시형/게이지형 공통)은 20초로 통일한다
+// 실제로 기절 상태에 걸려 있는 시간(즉시형/게이지형 공통)은 20초로 통일한다
 // (사용자 지정 - "공격 당했을 때 당하는 시간은 일단 20초로 통일해두자", 정확한 수치가
 // 기획서에 없어 임시로 맞춘 값). 게이지형의 "차오르는 시간"(IMMOBILIZE_GAUGE_FILL_SEC)은
 // 당하는 시간이 아니라 발동 전 예열 시간이라 별개로 그대로 둔다.
@@ -45,9 +45,9 @@ const RAID_BASE_DELAY_SEC = 4;
 const RAID_MISSING_PENALTY_SEC = 5;
 const RAID_KEY_HERO_IDS = ['m_mama', 'm_bane', 'm_roka'];
 
-// ---- 보스 일반공격(디버프) - 이동불능과 별개, 1~2 주사위 간격으로 반복 발동 ----
+// ---- 보스 일반공격(디버프) - 기절과 별개, 1~2 주사위 간격으로 반복 발동 ----
 // 실질 효과 없음(공격속도/공격력 감소 미반영), 대상 칸 표시만. 지속시간은 기획서에
-// 명시되어 있지 않아 이동불능과 마찬가지로 20초로 통일한다(사용자 지정).
+// 명시되어 있지 않아 기절과 마찬가지로 20초로 통일한다(사용자 지정).
 const DEBUFF_MARK_SEC = 20;
 
 // ---- 인디 "보물 발굴" (5-4) ----
@@ -92,7 +92,7 @@ function pickRandomSlots(state, count) {
   return shuffled.slice(0, count).map((s) => ({ row: s.row, col: s.col }));
 }
 
-// 디버프는 이동불능(게이지형)과 마찬가지로 한 칸이 아니라 6칸을 한 번에 대상으로
+// 디버프는 기절(게이지형)과 마찬가지로 한 칸이 아니라 6칸을 한 번에 대상으로
 // 삼는다(사용자 지정). 빈 칸을 물들여봐야 의미가 없으니(디버프는 캐릭터 색조
 // 변경 연출이라) 점유된 칸 중에서만 뽑는다. 발동 시점의 "칸"이 아니라 그 칸에 있던
 // "개체"를 대상으로 기록한다(사용자 지적 - 디버프 걸린 캐릭터를 다른 칸으로 옮기면
@@ -182,9 +182,9 @@ function onWaveStart(state) {
   // 위 tickWave에서 경과 시간에 비례해 처리).
   state.roundMonsterSpawnedSoFar = 0;
 
-  // 13라운드("삭제 있는 버전"에서만)는 삭제 공격 직전에 게이지형(원형) 이동불능이
+  // 13라운드("삭제 있는 버전"에서만)는 삭제 공격 직전에 게이지형(원형) 기절이
   // 100% 확정으로 발생해야 한다(사용자 지정 - "13라운드 삭제 직전에 동그라미로 그
-  // 속박 공격하는거 한번 있어야해") - 아래 고정 목록과는 별개의 강제 이벤트라
+  // 기절 공격하는거 한번 있어야해") - 아래 고정 목록과는 별개의 강제 이벤트라
   // 이 라운드는 목록에 안 넣고 여기서 최우선으로 처리한다. 삭제 공격 게이지가
   // waveTimeLeft<=15부터 차기 시작하므로 라운드 시작(waveTimeLeft=30) 즉시
   // 발동시켜 겹치는 시간을 최대한 줄인다 - 게이지형 총 소요시간(5초 채움+20초
@@ -200,7 +200,7 @@ function onWaveStart(state) {
       targetSlots: [],
     };
   } else if (state.wave === IMMOBILIZE_BOSS_INSTANT_ROUND) {
-    // 10라운드: 빨간 원(게이지형 예열) 없이 보스가 곧장 5~6칸을 동시에 속박한다.
+    // 10라운드: 빨간 원(게이지형 예열) 없이 보스가 곧장 5~6칸을 동시에 기절한다.
     const duration = waveDuration(state.wave);
     state.eventLog.immobilizeEvent = {
       round: state.wave,
@@ -225,10 +225,10 @@ function onWaveStart(state) {
     state.eventLog.immobilizeEvent = null;
   }
 
-  // 보스 일반공격(디버프) 스케줄 - 이동불능과 별개로, 예정된 라운드마다 발동하고 다음
+  // 보스 일반공격(디버프) 스케줄 - 기절과 별개로, 예정된 라운드마다 발동하고 다음
   // 예정 라운드를 다시 주사위(1~2)로 굴린다. 대상은 칸이 아니라 그 칸에 있던 개체
   // (인스턴스)다(사용자 지적 - 칸에 고정되면 안 되고, 옮기면 디버프가 캐릭터를
-  // 따라가야 한다). 칸 자체는 이동불능(게이지형)과 똑같이 6칸을 한 번에 골라 그
+  // 따라가야 한다). 칸 자체는 기절(게이지형)과 똑같이 6칸을 한 번에 골라 그
   // 안의 개체를 전부 대상으로 삼는다(사용자 지정).
   if (state.wave === state.bossAttackSchedule.nextAttackRound) {
     const targetIds = pickDebuffTargetInstanceIds(state, 6);
@@ -246,15 +246,15 @@ function onWaveStart(state) {
   state.bossRaidWindow = RAID_ROUNDS.includes(state.wave) ? { open: false, delayRemaining: null } : null;
 }
 
-// 실제로 속박되는 대상은 칸 좌표가 아니라 "잠기는 순간(active 전환 시점)에 그
+// 실제로 기절되는 대상은 칸 좌표가 아니라 "잠기는 순간(active 전환 시점)에 그
 // 칸에 실제로 있던 개체"다(사용자 지적 - "그 원을 다 피했으면 캐릭터가 없는
-// 자리는 속박이 안되는게 맞아. 지금은 칸에 그냥 속박이 남아있어서 내가 피한애를
-// 다시 그 칸에 들여다놓으면 피했는데도 속박되어버려"). filling 단계(5초 게이지)
+// 자리는 기절이 안되는게 맞아. 지금은 칸에 그냥 기절이 남아있어서 내가 피한애를
+// 다시 그 칸에 들여다놓으면 피했는데도 기절되어버려"). filling 단계(5초 게이지)
 // 동안은 아직 아무도 잠기지 않았으니 targetSlots(좌표, 게이지 연출용)만 갖고
 // 있다가, active로 전환되는 그 순간에만 실제 점유 개체를 스냅샷 떠서
 // targetInstanceIds에 담는다 - 그래서 그 전에 칸을 비웠으면 애초에 스냅샷에
 //안 잡히고, active 이후에 다른(또는 같은) 개체를 그 칸에 새로 들여놔도 스냅샷에
-// 없는 instanceId라 속박되지 않는다.
+// 없는 instanceId라 기절되지 않는다.
 function snapshotOccupantInstanceIds(state, slots) {
   return slots.flatMap(({ row, col }) => {
     const slot = state.field.find((s) => s.row === row && s.col === col);
@@ -262,7 +262,18 @@ function snapshotOccupantInstanceIds(state, slots) {
   });
 }
 
-/** 이동불능 공격(즉시형: 예열 없이 즉시 속박 / 게이지형: 6칸 5초 채워진 뒤 20초간 이동불가) */
+// 기절 중인 개체는 실제로 잠긴 상태(phase==='active')에서만 targetInstanceIds에
+// 잡힌다(위 snapshotOccupantInstanceIds 주석 참고 - 회피 가능해야 하므로 좌표가
+// 아니라 개체 스냅샷 기준). GameScreen.js의 필드 표시(사슬 아이콘/이동 차단)와
+// immortal.js의 자동 진행(기절 중엔 "스킬도 못 쓰고 제자리에 그대로 있어야
+// 한다"는 사용자 지정에 따른 틱 정지) 양쪽이 이 함수를 공유한다.
+export function isInstanceStunned(state, instanceId) {
+  const ev = state.eventLog.immobilizeEvent;
+  if (!ev || ev.phase !== 'active' || !ev.targetInstanceIds) return false;
+  return ev.targetInstanceIds.includes(instanceId);
+}
+
+/** 기절 공격(즉시형: 예열 없이 즉시 기절 / 게이지형: 6칸 5초 채워진 뒤 20초간 이동불가) */
 export function handleImmobilizeEvent(state) {
   const ev = state.eventLog.immobilizeEvent;
   if (!ev || ev.round !== state.wave || ev.phase === 'done') return state;
