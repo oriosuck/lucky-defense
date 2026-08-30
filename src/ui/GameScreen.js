@@ -1833,7 +1833,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
       ]);
     });
     return el('div', { class: 'popup-overlay', onclick: (e) => { if (e.target === e.currentTarget) closePopup(state); } }, [
-      el('div', { class: 'popup-box mission-popup-box' }, [el('h3', { text: '미션' }), el('ul', { class: 'mission-list' }, items), el('button', { class: 'btn', text: '닫기', onclick: () => closePopup(state) })]),
+      el('div', { class: 'popup-box mission-popup-box' }, [el('h3', { text: '미션' }), el('ul', { class: 'mission-list' }, items), el('button', { class: 'btn mission-close-btn', text: '닫기', onclick: () => closePopup(state) })]),
     ]);
   }
 
