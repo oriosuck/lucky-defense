@@ -1398,7 +1398,16 @@ export function GameScreen({ getState, dispatch, onExit }) {
       const fresh = getState();
       const result = summonRoulette(fresh, r.tier, r.slot);
       ui.spinningTier = null;
-      if (!result.success && result.reason === 'roulette-fail') {
+      if (!result.success && result.reason === 'roulette-fail' && result.consolationHero) {
+        // 실패 위로 보상(20% 확률)으로 하위 단계 영웅이 실제로 나온 경우 -
+        // 해골 대신 그 영웅 그림을 잠깐 보여준다(성공과 같은 표시 패턴, 등급
+        // 실패는 그대로 유지됐다는 걸 헷갈리지 않게 skull은 띄우지 않음).
+        ui.rouletteSuccessHero = { tier: r.tier, heroId: result.consolationHero.id };
+        setTimeout(() => {
+          ui.rouletteSuccessHero = null;
+          if (root.isConnected) render(getState());
+        }, ROULETTE_FAIL_FLASH_MS);
+      } else if (!result.success && result.reason === 'roulette-fail') {
         ui.rouletteFailTier = r.tier;
         setTimeout(() => {
           ui.rouletteFailTier = null;

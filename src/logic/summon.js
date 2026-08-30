@@ -4,6 +4,7 @@ import {
   ROULETTE_SUCCESS_RATE,
   ROULETTE_COST,
   heroesByTier,
+  prevTierOf,
 } from '../data/heroes.js';
 import { NORMAL_SUMMON_COST_INCREMENT } from '../data/constants.js';
 import {
@@ -89,6 +90,11 @@ export function summonNormal(state) {
 
 const ROULETTE_TIER_ORDER = ['rare', 'hero', 'legendary'];
 
+// 룰렛 실패 시 위로 보상(사용자 지정) - 서로 독립적인 두 번의 20% 굴림이라 둘 다
+// 터질 수도, 둘 다 안 터질 수도 있다.
+const ROULETTE_FAIL_REFUND_CHANCE = 0.2; // 비용(행운석) 환불
+const ROULETTE_FAIL_CONSOLATION_CHANCE = 0.2; // 시도한 등급보다 한 단계 아래 영웅 지급
+
 /**
  * 룰렛 소환. 실패 가능하며 실패 시 해골 표시만 하고 재화만 소모한다.
  * 성공 시 결과가 필드에 자리가 없으면 대기열에 보관 후 자동 배치.
@@ -124,7 +130,25 @@ export function summonRoulette(state, tier, slotPosition = 'left') {
     if (tier === 'legendary') {
       newState.counters.legendaryRouletteFailCount += 1;
     }
-    return { success: false, reason: 'roulette-fail', newState };
+    // 실패해도 두 위로 보상을 각각 독립적으로 굴린다(사용자 지정) - "20% 확률로
+    // 비용을 되돌려주고, 20% 확률로 하위 단계 영웅을 지급"이라 두 문장을 별개의
+    // 굴림으로 해석했다(하나가 터졌다고 다른 하나가 막히지 않음).
+    const refunded = Math.random() < ROULETTE_FAIL_REFUND_CHANCE;
+    if (refunded) newState.luckstone += cost;
+
+    let consolationHero = null;
+    const lowerTier = prevTierOf(tier);
+    if (lowerTier && Math.random() < ROULETTE_FAIL_CONSOLATION_CHANCE) {
+      consolationHero = pickRandomHeroOfTier(lowerTier);
+      const slot = findAutoPlaceSlot(newState, consolationHero.id);
+      if (slot) {
+        placeInstanceAtSlot(slot, createHeroInstance(consolationHero.id));
+      } else {
+        newState.pendingPlacementQueue = [...(newState.pendingPlacementQueue ?? []), consolationHero.id];
+      }
+    }
+
+    return { success: false, reason: 'roulette-fail', refunded, consolationHero, newState };
   }
   if (tier === 'legendary') newState.counters.legendaryRouletteSuccessCount += 1; // "전설 룰렛 소환 성공 3번" 미션용
 
