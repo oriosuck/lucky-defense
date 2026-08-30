@@ -38,11 +38,22 @@ const appEl = document.getElementById('app');
 // 않는다. 필드 위 요소는 여전히 대상이라 같은 칸을 빠르게 두 번 탭하면 두 번째
 // 탭의 pointerdown 자체는 정상 발생하되(선택/드래그 시작은 그대로 동작) 브라우저의
 // 확대 제스처만 취소된다.
+// **미션 팝업 안에서 더블탭이 여전히 확대되던 버그**: `.popup-overlay`는 미션
+// 팝업의 배경 클릭 시 닫히는 로직(onclick, `e.target===e.currentTarget`으로
+// "배경 자체"만 판정)을 이미 갖고 있어서 그 배경 요소 자체는 우리 preventDefault가
+// 그 클릭 합성을 취소하지 않게 예외로 둬야 했다. 그런데 예외 판정을 `e.target.
+// closest('.popup-overlay')`로 했더니, `.closest()`는 조상까지 전부 훑으므로
+// 미션 목록/텍스트 등 그 배경 **안에 든 모든 내용물**까지 통째로 "배경 클릭"과
+// 똑같이 취급돼 더블탭 방지 대상에서 빠져버렸다 - 사용자 리포트("미션 팝업이
+// 뜰 때... 더블클릭하면 또 커져")의 원인. 배경 요소 자체인지는 `.closest()`가
+// 아니라 `classList.contains()`로 정확히 그 노드인지만 확인하도록 좁혀서, 팝업
+// 배경을 직접 눌렀을 때만 예외로 남고 팝업 안의 콘텐츠는 다시 보호 대상이 되게
+// 했다(버튼은 자식 아이콘 등을 눌러도 버튼으로 쳐야 하므로 `closest()` 그대로 유지).
 const DOUBLE_TAP_POS_TOLERANCE_PX = 24;
 const DOUBLE_TAP_WINDOW_MS = 500;
 let lastBgTouchStart = { time: 0, x: 0, y: 0 };
 document.addEventListener('touchstart', (e) => {
-  if (e.target.closest('button, .popup-overlay')) {
+  if (e.target.closest('button') || e.target.classList?.contains('popup-overlay')) {
     lastBgTouchStart = { time: 0, x: 0, y: 0 };
     return;
   }
