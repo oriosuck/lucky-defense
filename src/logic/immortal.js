@@ -658,6 +658,15 @@ export function cannibalizeTar(state, eaterInstanceId) {
 // 임프 생성 중단 라운드 - 사용자 지정: "임프는 9라운드 이후로 생성하지 마라".
 const IMMORTAL_MAMA_STOP_ROUND = 9;
 
+// 예전엔 마마 개체마다 각자 독립된 타이머(instance.immortalTick)를 돌려서, 마마를
+// 여러 마리 뽑으면 그만큼 임프 생성 속도가 배로 빨라졌다(같은 전역 임프 풀에
+// 여러 타이머가 동시에 기여하는 구조였음). 사용자가 명시적으로 정정 - "마마 임프
+// 생성 속도는 1마리만 소환하는 걸로 가자 여러마리 소환됐더라도" - 마마가 몇
+// 마리든 전체 생성 속도가 항상 "마마 1마리일 때"와 같아야 한다는 뜻이라, 개체별
+// 타이머 대신 게임 상태 전체에 하나뿐인 공유 타이머(state.mamaImpTick)로 바꿨다.
+// 필드에 있는 마마 중 기절하지 않은 개체가 하나라도 있으면 그 간격 설정
+// (cond.extra.impIntervalSec, 모든 마마가 공유하는 같은 값)을 그대로 써서
+// 진행한다 - 마마가 여러 마리여도 이 공유 타이머 하나만 돈다.
 export function tickMamaImps(state, deltaSec) {
   const newState = structuredClone(state);
   if (newState.wave > IMMORTAL_MAMA_STOP_ROUND) return newState;
@@ -666,6 +675,22 @@ export function tickMamaImps(state, deltaSec) {
   // 멈춰서, 몬스터가 다시 나타났을 때 그 순간부터 정상적으로 카운트가 이어지게
   // 한다).
   if (newState.monsterCount <= 0) return newState;
+
+  const mamaInstances = [];
+  forEachMythicInstance(newState, (slot, instance, cond) => {
+    if (instance.heroId === 'm_mama') mamaInstances.push({ instance, cond });
+  });
+  // 마마 본인이 기절 중이면 임프 생성(마마의 자동 진행/"스킬")도 멈춘다 - 모든
+  // 마마가 동시에 기절 중이면(또는 마마가 아예 없으면) 공유 타이머도 같이
+  // 멈춘다(몬스터가 없을 때 멈추는 것과 같은 방식으로, elapsed 자체를 쌓지
+  // 않고 그냥 건너뛰어서 나중에 밀린 시간을 몰아서 처리하지 않게 한다).
+  const active = mamaInstances.find(({ instance }) => !isInstanceStunned(newState, instance.instanceId));
+  if (!active) return newState;
+
+  const intervalRange = active.cond.extra.impIntervalSec;
+  if (!newState.mamaImpTick) newState.mamaImpTick = { elapsed: 0, nextTick: rollValue(intervalRange) };
+  const t = newState.mamaImpTick;
+  t.elapsed += deltaSec;
   // 임프는 필드에 있는 마마 전부가 공유하는 전역 자원이다(승급 판정도 이제 이
   // 전역 수를 기준으로 함 - promotionHandlers.m_mama 참고). 예전엔 승급에
   // 필요한 최대치(9마리, 돌파 안 한 경우)에서 생성을 멈췄었는데, 몬스터가 자주
@@ -673,25 +698,14 @@ export function tickMamaImps(state, deltaSec) {
   // 굳이 9로 또 막을 필요는 없다는 사용자 지정("9마리 이상 되어도 돼")에 따라
   // 이 상한을 없앴다 - 이제 자연스러운 정지 조건은 findAutoPlaceSlot이 반환하는
   // 빈 칸이 없을 때뿐이다(필드 공간이 다 차면 그 틱은 그냥 건너뜀).
-  forEachMythicInstance(newState, (slot, instance, cond) => {
-    if (instance.heroId !== 'm_mama') return;
-    // 마마 본인이 기절 중이면 임프 생성(마마의 자동 진행/"스킬")도 멈춘다 - 몬스터가
-    // 없을 때 멈추는 것과 같은 방식으로, elapsed 자체를 쌓지 않고 그냥 건너뛰어서
-    // 기절이 풀리는 순간 그동안 밀린 시간을 몰아서 처리하지 않게 한다.
-    if (isInstanceStunned(newState, instance.instanceId)) return;
-    const intervalRange = cond.extra.impIntervalSec;
-    if (!instance.immortalTick) instance.immortalTick = { elapsed: 0, nextTick: rollValue(intervalRange) };
-    const t = instance.immortalTick;
-    t.elapsed += deltaSec;
-    while (t.elapsed >= t.nextTick) {
-      t.elapsed -= t.nextTick;
-      // 임프도 캐릭터처럼 실제로 필드 칸에 꺼내진다(사용자 요청) - 빈 칸이 없으면
-      // 이번 틱은 그냥 건너뛴다.
-      const impSlot = findAutoPlaceSlot(newState, IMP_HERO_ID);
-      if (!impSlot) break;
-      placeInstanceAtSlot(impSlot, createHeroInstance(IMP_HERO_ID));
-      t.nextTick = rollValue(intervalRange);
-    }
-  });
+  while (t.elapsed >= t.nextTick) {
+    t.elapsed -= t.nextTick;
+    // 임프도 캐릭터처럼 실제로 필드 칸에 꺼내진다(사용자 요청) - 빈 칸이 없으면
+    // 이번 틱은 그냥 건너뛴다.
+    const impSlot = findAutoPlaceSlot(newState, IMP_HERO_ID);
+    if (!impSlot) break;
+    placeInstanceAtSlot(impSlot, createHeroInstance(IMP_HERO_ID));
+    t.nextTick = rollValue(intervalRange);
+  }
   return newState;
 }
