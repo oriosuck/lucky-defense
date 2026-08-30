@@ -108,18 +108,18 @@ export function fieldOccupantCount(state) {
 // 새 영웅이 들어갈 자리가 단 한 칸도 없는 상태가 될 수 있다. 이 경우 findAutoPlaceSlot이
 // 항상 null을 반환하는데도 소환 버튼은 인원수만 보고 계속 활성 상태였던 게 버그였다
 // (사용자 지적 - "임프 포함 필드가 꽉차면 마리수가 남아도 소환이 안되어야해").
-// 모든 칸이 더 이상 어떤 영웅도(같은 종류든 다른 종류든) 받을 수 없는 상태인지를
-// 확인한다 - 신화/불멸(칸당 1마리 고정)은 점유된 순간 그 칸이 완전히 막히고,
-// 그 외 등급(임프 포함)은 3마리까지 쌓이면 막힌다. 일반 플레이에서는 칸 24개 ×
-// 3마리 = 72자리인데 인원수 상한(30)을 절대 넘을 수 없어 이 조건이 우연히도
-// 먼저 걸릴 일이 없다 - 임프처럼 상한 밖에서 계속 쌓이는 경우에만 실제로 발동한다.
+//
+// **처음엔 "모든 칸이 3마리(또는 신화/불멸 1마리)까지 꽉 찼는지"로 구현했었는데**,
+// 그러면 24칸이 전부 서로 다른 1마리씩(칸마다 다른 종류라 스택 매칭이 안 되는
+// 상태, 인원수는 24로 아직 30 미만)으로 채워진 경우를 못 잡는다 - 그 상태에서
+// 새로 뽑힌 영웅이 기존 어느 스택과도 안 맞으면 findAutoPlaceSlot이 여전히 null을
+// 반환해 골드만 날아간다. 사용자가 다시 지적했다 - "필드가 가득 차면(만약에
+// 30마리가 다 안되더라도) 룰렛이 돌아가면 안돼. 소환도." 새로 뽑힐 영웅의 종류를
+// 미리 알 수 없으니(스택 매칭은 순전히 운) "완전히 빈 칸이 하나라도 있는가"만이
+// 유일하게 신뢰할 수 있는 기준이다 - 빈 칸이 하나도 없으면 어떤 결과가 나오든
+// 배치가 보장되지 않으므로 이 시점에 이미 "꽉 찼다"로 취급한다.
 export function isFieldPhysicallyFull(state) {
-  return state.field.every((s) => {
-    if (s.occupants.length === 0) return false;
-    const heroDef = HEROES_BY_ID[s.occupants[0].heroId];
-    const isSingleSlotTier = heroDef?.tier === 'mythic' || heroDef?.tier === 'immortal';
-    return isSingleSlotTier || s.occupants.length >= 3;
-  });
+  return state.field.every((s) => s.occupants.length > 0);
 }
 
 export function findSlot(state, row, col) {
