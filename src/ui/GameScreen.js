@@ -8,7 +8,6 @@ import {
   craftMythic,
   sellHero,
   feedMythicToChad,
-  sellGigaChad,
   countHeroOnField,
   craftableMythicCount,
 } from '../logic/synthesis.js';
@@ -733,6 +732,47 @@ export function GameScreen({ getState, dispatch, onExit }) {
   const HERO_TOKEN_WIDTH_RATIO = 0.44;
   const IMP_TOKEN_SCALE = 0.5; // 마마 임프는 다른 캐릭터의 절반 크기(사용자 지적 - 너무 컸음)
   const MYTHIC_TOKEN_SCALE = 1.6875;
+  // "신화랑 불멸들 크기좀 똑같이 맞춰주면 좋겠어" - MYTHIC_TOKEN_SCALE은 모든 신화/불멸
+  // 토큰의 박스(가로/세로)를 동일 비율로 키우지만, 그 박스 안에 실제로 어느 만큼
+  // 크게 그려지는지는 `object-fit:contain`이 이미지 자체의 가로세로 비율과 박스
+  // 비율을 비교해서 결정한다 - 알파 bbox 크롭은 이미 다 돼 있어도(93~100% 채움,
+  // 전수 확인함) 이미지 "캔버스"의 가로세로 비율 자체가 캐릭터마다 크게 다르면
+  // (m_ninja 87×128=0.68, i_giga_chad 128×70=1.83 - 박스 비율 약 0.675 기준으로
+  // 2.7배까지 차이) 박스보다 훨씬 납작한 이미지는 위아래로 레터박스(빈 여백)가
+  // 생겨 같은 박스 안에서도 훨씬 작아 보인다(레전더리 등급 크기 보정 때는 이
+  // 원인을 "알파 여백" 탓으로만 짚었었는데, 실제로는 이 종횡비 불일치가 진짜
+  // 원인이었다 - 이번에 60장(신화 31+불멸 29) 전수 실측으로 확인). 캐릭터별로
+  // "이 이미지가 박스 높이를 꽉 채우려면 박스를 얼마나 더 키워야 하는지"
+  // (이미지 종횡비 / 박스 종횡비, 1 미만이면 이미 꽉 차므로 보정 없음)를 계산해서
+  // 표로 만들었다 - 처음엔 필드 칸 1개 너비 근처(1.35배)로 캡을 걸었는데 실제
+  // 스크린샷으로 확인해보니 가장 납작한 이미지들(기가채드/로카 등)은 여전히
+  // 다른 캐릭터 대비 눈에 띄게 작아 보여서, 1.6배까지 캡을 완화했다(그 이상은
+  // 이웃 칸 침범이 심해질 것으로 판단해 지양 - 신화/불멸이 칸 밖으로 살짝
+  // 넘치는 건 기존에도 허용된 디자인이지만 그 이상은 부자연스러워짐). 캡에
+  // 걸리는 다수는 결과적으로 같은 상한값을 공유하게 되지만, 이미
+  // 종횡비가 박스와 비슷해 보정이 거의 필요 없는 소수(닌자/아토/랜슬롯/인디 등,
+  // 세로로 긴 이미지)는 표에 있는 훨씬 작은 고유값을 그대로 쓴다 - 룰렛 휠 버튼에
+  // 이미지별 실제 비율을 개별로 넣었던 것(ROULETTE_TIERS)과 같은 패턴. 2차 변신/
+  // 모드별 이미지(배트맨 모드, 아이언미야옹 단계, 개구리왕자 변신 등)는 별도 계산 없이
+  // 원본 heroId 값을 그대로 쓴다(변형 이미지 비율까지 전부 재는 건 과함, 대체로
+  // 비슷한 비율일 것으로 가정).
+  const MYTHIC_SIZE_COMPENSATION = {
+    i_ace_batman: 1.251, i_ancient_chona: 1.209, i_archmage_gigi: 1.355, i_awakened_hailey: 1.600,
+    i_blob_gang: 1.600, i_boss_gorazo: 1.600, i_captain_roka: 1.600, i_death_frog: 1.600,
+    i_death_frog_evolved: 1.481, i_demon_lord_dragon: 1.481, i_devil_monopoly: 1.442, i_dr_pulse: 1.600,
+    i_ghost_ninja: 1.481, i_giga_chad: 1.600, i_grand_cat_mage: 1.600, i_grand_mama: 1.354,
+    i_hero_ray: 1.600, i_im_meyaong: 1.085, i_knight_lancelot: 1.600, i_noise_king_penguin: 1.430,
+    i_orc_leader: 1.600, i_primal_bamba: 1.600, i_queen_coldi: 1.600, i_sage_kun: 1.600,
+    i_sky_dragon_uchi: 1.597, i_spacetime_ato: 1.600, i_super_gravity_bomb: 1.520, i_swarm_tar: 1.579,
+    i_top_bane: 1.600, m_ato: 1.041, m_bamba: 1.600, m_bane: 1.600,
+    m_batman: 1.226, m_blob: 1.180, m_cat_mage: 1.593, m_chad: 1.288,
+    m_chona: 1.600, m_coldi: 1.554, m_dragon: 1.529, m_frog_prince: 1.600,
+    m_gigi: 1.354, m_gorazo: 1.342, m_gravity_bomb: 1.567, m_hailey: 1.600,
+    m_indy: 1.157, m_iron_meyaong: 1.600, m_lancelot: 1.041, m_mama: 1.365,
+    m_master_kun: 1.319, m_monopoly_man: 1.481, m_ninja: 1.007, m_orc_shaman: 1.192,
+    m_penguin_musician: 1.593, m_pulse_generator: 1.365, m_ray: 1.458, m_rocketchu: 1.600,
+    m_roka: 1.600, m_tar: 1.600, m_uchi: 1.600, m_watt: 1.600,
+  };
   // 전설 등급이 일반~영웅 등급보다 유독 작아 보인다는 지적(사용자 - "다른 캐릭터들에
   // 비해 너무 작아") - 원인은 크기 로직 자체가 아니라(일반~전설은 같은
   // HERO_TOKEN_WIDTH/HEIGHT_RATIO를 공유해서 프로그램상 크기는 동일했다) 전설 등급
@@ -875,7 +915,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
       const isImpCell = slot.occupants[0].heroId === IMP_HERO_ID;
       const isMythicCell = firstHeroTier === 'mythic' || firstHeroTier === 'immortal';
       const isLegendaryCell = firstHeroTier === 'legendary';
-      const sizeScale = isImpCell ? IMP_TOKEN_SCALE : isMythicCell ? MYTHIC_TOKEN_SCALE : isLegendaryCell ? LEGENDARY_TOKEN_SCALE : 1;
+      const sizeScale = isImpCell
+        ? IMP_TOKEN_SCALE
+        : isMythicCell
+          ? MYTHIC_TOKEN_SCALE * (MYTHIC_SIZE_COMPENSATION[slot.occupants[0].heroId] ?? 1)
+          : isLegendaryCell ? LEGENDARY_TOKEN_SCALE : 1;
       const tokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO * sizeScale;
       const n = slot.occupants.length;
       // 발끝(박스 하단) 기준선: 일반~영웅은 칸 정중앙(사용자 지정) - 마리 수와
@@ -1075,19 +1119,23 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 승급 시도는 더 이상 칸 아래 버튼이 아니라, 조건 충족 시 좌측 즉시소환 아이콘 바에
     // "승급 가능!"으로 노출된다(renderFavoriteBar/favoriteBarItems 참고 - 사용자 지정
     // 규칙: 불멸이 먼저, 신화가 밑으로).
-    if (instance.heroId === 'i_giga_chad') {
-      below.push(el('button', {
-        class: 'cell-quick-btn cell-quick-extra', text: '판매(+6💧)',
-        onclick: () => apply(sellGigaChad(state, instance.instanceId)),
-      }));
-    }
     // 채드/기가채드 전용: "판매하기"를 누르면 팝니다 버튼이 아니라 필드의 신화/불멸
-    // (채드/기가채드 본인 제외) 머리 위에 초록 화살표가 뜨는 모드로 들어간다 - 그
-    // 화살표를 눌러야 비로소 판매(먹이기)가 실행된다(사용자 지정 순서: 채드 하단
-    // 버튼 → 화살표 표시 → 화살표 클릭 → 판매). 일반 채드는 신화만, 기가채드는
-    // 신화/불멸 둘 다 먹일 수 있다(사용자 지정 - "일반 채드는 불멸을 못 팔아.
-    // 기가채드만 신화/불멸 다 팔 수 있어") - 대상 등급 필터링은
-    // renderChadArrowLayer가 어느 채드가 눌렀는지(instance.heroId)로 판정한다.
+    // 머리 위에 초록 화살표가 뜨는 모드로 들어간다 - 그 화살표를 눌러야 비로소
+    // 판매(먹이기)가 실행된다(사용자 지정 순서: 채드 하단 버튼 → 화살표 표시 →
+    // 화살표 클릭 → 판매). 일반 채드는 신화만, 기가채드는 신화/불멸 둘 다 먹일 수
+    // 있다(사용자 지정 - "일반 채드는 불멸을 못 팔아. 기가채드만 신화/불멸 다 팔
+    // 수 있어") - 대상 등급 필터링은 renderChadArrowLayer가 어느 채드가 눌렀는지
+    // (instance.heroId)로 판정한다.
+    // 기가채드는 예전에 이 "판매하기"(화살표로 다른 신화/불멸 먹이기) 버튼과
+    // 별도로 "판매(+6💧)"(자기 자신을 파는 전용 버튼)가 동시에 떠 있었다 - 사용자
+    // 지적("판매버튼이랑 판매 6행운석 버튼이 같이 나와... 판매 버튼 하나만 보이고,
+    // 초록색 화살표 똑같이 보이는데... 이게 자기 위에도 뜨는 방식인거야")대로
+    // 별도 버튼을 없애고 하나의 "판매하기"로 통합했다 - 화살표 대상 목록에
+    // 기가채드 자기 자신도 포함되도록 renderChadArrowLayer를 확장했다. 보상은
+    // feedMythicToChad가 대상 등급 기준(신화 5/불멸 6)으로 계산하므로(사용자
+    // 정정 - "불멸은 팔면 행운석 6이라고 했다"), 자기 자신(불멸 등급)을 화살표로
+    // 찍어도 같은 함수 호출만으로 자동으로 6행운석이 나온다 - 별도 함수
+    // (sellGigaChad)는 완전히 제거했다.
     if (instance.heroId === 'm_chad' || instance.heroId === 'i_giga_chad') {
       const active = ui.chadSellMode === instance.instanceId;
       below.push(el('button', {
@@ -1297,9 +1345,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
       for (const occ of slot.occupants) {
         const def = HEROES_BY_ID[occ.heroId];
         if (!def) continue;
-        if (allowedTiers.includes(def.tier) && occ.instanceId !== chad.instanceId) {
-          targets.push({ slot, occ });
-        }
+        // 기가채드는 자기 자신도 유효한 화살표 대상이다(사용자 지정 - 자기 자신을
+        // 파는 전용 버튼을 없애고 이 화살표 하나로 통합) - 그 외(일반 채드 자기
+        // 자신, 지금 판매를 시작한 채드 개체)는 여전히 제외한다.
+        const isSelf = occ.instanceId === chad.instanceId;
+        if (isSelf && chad.heroId !== 'i_giga_chad') continue;
+        if (!isSelf && !allowedTiers.includes(def.tier)) continue;
+        targets.push({ slot, occ, tier: def.tier });
       }
     }
     // 먹일 대상이 하나도 없는 상태(필드에 채드 본인 말고 신화/불멸이 없음)에서
@@ -1312,12 +1364,15 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 뒤 "판매하기"를 한 번 더 눌렀을 때 재현됨). 위 !chad 케이스와 같은
     // 패턴으로 여기서도 명시적으로 꺼줘야 한다.
     if (targets.length === 0) { ui.chadSellMode = null; return null; }
-    return el('div', { class: 'chad-arrow-layer' }, targets.map(({ slot, occ }) => {
+    // 보상 표기는 자기 자신인지가 아니라 대상 등급 기준(feedMythicToChad와 동일한
+    // 규칙 - 신화 +5/불멸 +6)이다 - 기가채드가 "다른" 불멸을 먹여도 자기 자신을
+    // 먹이는 것과 똑같이 +6이므로, 화살표 라벨도 그 등급 그대로 보여준다.
+    return el('div', { class: 'chad-arrow-layer' }, targets.map(({ slot, occ, tier }) => {
       const rect = fieldCellRect(slot.row, slot.col);
       return el('button', {
         class: 'chad-sell-arrow',
         style: `left:${rect.left + rect.width / 2}%; top:${rect.top}%;`,
-        title: '판매(먹이기)',
+        title: tier === 'immortal' ? '판매(+6💧)' : '판매(+5💧)',
         onclick: () => {
           ui.chadSellMode = null;
           apply(feedMythicToChad(state, chad.instanceId, occ.instanceId));

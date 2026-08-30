@@ -279,7 +279,17 @@ export function feedMythicToChad(state, chadInstanceId, mythicInstanceId) {
   }
 
   mythic.slot.occupants = mythic.slot.occupants.filter((o) => o.instanceId !== mythicInstanceId);
-  newState.luckstone += CHAD_FEED_LUCKSTONE;
+  // 보상은 대상 등급 기준(신화 5행운석/불멸 6행운석)이지 "누가 먹이는지"나 "자기
+  // 자신인지"와는 무관하다(사용자 지정 정정 - "불멸은 팔면 행운석 6이라고 했다").
+  // 기가채드가 자기 자신(불멸 등급)을 화살표로 지정하는 경우도 이 함수를 그대로
+  // 타므로(mythicInstanceId===chadInstanceId, fedTier='immortal') 자동으로 6을
+  // 받는다 - 예전엔 "자기 자신 판매"를 별도 함수(sellGigaChad)로 분리해서 항상
+  // 6을 고정 지급했는데, 그러면 기가채드가 "다른" 불멸을 먹이는 경우(자기 자신이
+  // 아닌 다른 인스턴스)에는 이 함수의 고정 5행운석 분기를 타서 6이 아니라 5를
+  // 받는 비대칭 버그가 있었다 - 등급 기준으로 통일하면서 sellGigaChad 자체를
+  // 완전히 제거했다(더 이상 별도로 필요 없음).
+  const reward = fedTier === 'immortal' ? GIGA_CHAD_SELL_LUCKSTONE : CHAD_FEED_LUCKSTONE;
+  newState.luckstone += reward;
   // 기가채드 승급 조건(판매할 때마다 확률적으로 2%p, 총 10% 도달 시 승급)은
   // 아직 승급 전인 m_chad에게만 적용된다 - 이미 기가채드면 더 진행할 조건이
   // 없어서 먹이기 보상(행운석)만 받는다.
@@ -292,21 +302,7 @@ export function feedMythicToChad(state, chadInstanceId, mythicInstanceId) {
     }
   }
 
-  return { success: true, reward: { luckstone: CHAD_FEED_LUCKSTONE }, procced, newState };
-}
-
-/**
- * 불멸 채드(기가채드) 판매 - 행운석 +6
- */
-export function sellGigaChad(state, instanceId) {
-  const newState = structuredClone(state);
-  const ref = findInstanceRef(newState, instanceId);
-  if (!ref || ref.instance.heroId !== 'i_giga_chad') {
-    return { success: false, reason: 'not-giga-chad', newState: state };
-  }
-  ref.slot.occupants = ref.slot.occupants.filter((o) => o.instanceId !== instanceId);
-  newState.luckstone += GIGA_CHAD_SELL_LUCKSTONE;
-  return { success: true, reward: { luckstone: GIGA_CHAD_SELL_LUCKSTONE }, newState };
+  return { success: true, reward: { luckstone: reward }, procced, newState };
 }
 
 function findInstanceRef(state, instanceId) {

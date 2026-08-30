@@ -211,10 +211,13 @@ export const IMMORTAL_CONDITIONS = {
     // 한 16라운드에 변신할 수 있게 랜덤시간 조정좀 해줘"). 로카는 80% 확률로
     // 최대치(5)로 장전하므로(ROKA_MAX_CHARGE_CHANCE, immortal.js) 평균 장전량은
     // 0.8×5+0.2×3(1~5 균등평균) = 4.6/틱 - 목표(160)를 그 평균으로 나눈 틱 수
-    // (≈34.78회)가 570초에 걸리도록 tickIntervalSec을 10 → 16.39초로 늦췄다
-    // (570×4.6/160 = 16.3875, 반올림).
+    // (≈34.78회)가 570초에 걸리도록 tickIntervalSec을 10 → 16.39초로 늦췄었다
+    // (570×4.6/160 = 16.3875, 반올림). 이후 "로카 속도 조금만 빠르게 하자.
+    // 지금에서 30%만 빨리해줘"라는 사용자 지정으로 그 값에서 30% 더 빠르게(간격을
+    // 70%로 단축) 다시 당겼다 - 16.39×0.7 = 11.473(반올림 11.47) - 승급까지 걸리는
+    // 시간도 그만큼 앞당겨져 16라운드보다 조금 이른 시점에 승급 가능해진다.
     id: 'i_captain_roka', name: '캡틴 로카', type: 'time-based', target: 160,
-    tickIntervalSec: 16.39, incrementPerTick: [1, 5],
+    tickIntervalSec: 11.47, incrementPerTick: [1, 5],
   },
   m_batman: {
     id: 'i_ace_batman', name: '에이스 배트맨', type: 'hybrid', target: 1,
