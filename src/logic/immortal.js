@@ -670,11 +670,17 @@ const IMMORTAL_MAMA_STOP_ROUND = 9;
 export function tickMamaImps(state, deltaSec) {
   const newState = structuredClone(state);
   if (newState.wave > IMMORTAL_MAMA_STOP_ROUND) return newState;
-  // 맵에 몬스터가 없을 때도 생성하면 안 된다는 사용자 지정 - 몬스터가 0마리인
-  // 동안은 타이머도 진행시키지 않는다(그냥 건너뛰는 게 아니라 elapsed 자체를
-  // 멈춰서, 몬스터가 다시 나타났을 때 그 순간부터 정상적으로 카운트가 이어지게
-  // 한다).
-  if (newState.monsterCount <= 0) return newState;
+  // 맵에 몬스터가 없을 때도 생성하면 안 된다는 사용자 지정이 원래 있었는데
+  // (즉시 라이브 monsterCount>0 여부로 판정), "몬스터 처치 속도를 매 라운드 5초
+  // 클리어로 재설계" 변경 이후로는 이 조건이 사실상 항상 거짓이 되어버렸다 -
+  // 처치 속도(8/초)가 스폰 속도를 항상 크게 앞질러서 monsterCount가 라운드
+  // 내내 거의 0에 고정되므로, 이 게이트가 마마의 임프 생성 자체를 완전히
+  // 막아버리는 회귀가 있었다(사용자 리포트 - "마마 임프 생성도 안돼", 실제로
+  // 300초 시뮬레이션 결과 mamaImpTick이 한 번도 안 생기고 임프가 0마리로 확인됨).
+  // 라이브 몬스터 수 대신 "라운드가 실제로 진행 중인지"(tickWave가 몬스터
+  // 스폰/처치 자체를 활성화하는 것과 동일한 조건)로 판정하도록 바꿨다 - 라운드
+  // 0(게임 시작 직후, 첫 웨이브 시작 전)에는 여전히 생성되지 않는다.
+  if (newState.wave < 1 || newState.result) return newState;
 
   const mamaInstances = [];
   forEachMythicInstance(newState, (slot, instance, cond) => {
