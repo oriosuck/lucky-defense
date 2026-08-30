@@ -151,9 +151,24 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 원인이 될 수 있다 - 한 판만 해도 즉시 눈에 띄는 정도는 아니지만 재시작을 반복할수록
   // 누적되는 전형적인 메모리/리스너 누수 패턴이다. 함수 참조를 변수로 잡아뒀다가
   // destroy()에서 명시적으로 해제한다(main.js가 onExit 시 호출).
+  // 앱을 백그라운드로 보냈다가 다시 돌아오면(다른 앱 전환, 화면 잠금 해제 등)
+  // 모바일 브라우저가 주소창을 숨겼다 다시 보여주는 애니메이션 중에 resize 이벤트를
+  // 짧은 시간에 여러 번 연달아 쏜다 - 그때마다 매번 즉시 render()를 부르면, 주소창
+  // 애니메이션이 진행 중인 매 순간의 과도기적인(아직 자리를 못 잡은) 뷰포트 크기를
+  // 그대로 읽어서 스테이지 크기가 실제로 프레임마다 커졌다 작아졌다 하며 화면이
+  // 깜빡이는 것처럼 보였다(사용자 리포트 - "세션 잠깐 나갔다가 다시들어오면 엄청
+  // 깜빡거려... 다시 껐다가 들어와야해"). resize 이벤트가 몰아칠 때마다 렌더를
+  // 즉시 실행하지 않고 타이머를 계속 뒤로 미루는 디바운스로 바꿔서, 이벤트가
+  // 잠잠해진 뒤(200ms) 뷰포트가 자리를 잡은 시점의 값 딱 한 번만으로 재측정+렌더
+  // 하도록 했다.
+  let resizeRenderTimer = null;
   const handleResize = () => {
     needsStageRemeasure = true; // 실제 창 크기 변경 시에만 sizeStageToFit()이 다시 측정하도록
-    if (root.isConnected) render(getState());
+    if (resizeRenderTimer) clearTimeout(resizeRenderTimer);
+    resizeRenderTimer = setTimeout(() => {
+      resizeRenderTimer = null;
+      if (root.isConnected) render(getState());
+    }, 200);
   };
   window.addEventListener('resize', handleResize);
 
@@ -1738,6 +1753,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerCancel);
+      if (resizeRenderTimer) clearTimeout(resizeRenderTimer); // 디바운스 대기 중인 렌더 예약도 같이 정리
     },
   };
 }

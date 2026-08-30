@@ -20,7 +20,13 @@ const appEl = document.getElementById('app');
 // 미션 팝업 닫기용)만 제외하고, 그 외 모든 영역(필드 배경, 빈 칸, 보스, 하늘 등)
 // 에서는 같은 지점(터치 좌표, ±24px 오차 허용 - DOM 노드가 0.2초마다 재생성되는
 // 이 프로젝트 구조상 노드 동일성 비교는 무력화된다는 걸 이전 라운드에 확인함)을
-// 짧은 간격(300ms) 안에 두 번 건드리면 더블탭으로 보고 그 확대만 막는다.
+// 짧은 간격(DOUBLE_TAP_WINDOW_MS) 안에 두 번 건드리면 더블탭으로 보고 그 확대만
+// 막는다. **300ms는 너무 짧았다** - 사용자가 "빠르게 클릭할 때는 확대 안되는데
+// 톡 톡 이렇게 좀 천천히 할 때 확장돼"라고 재지적했다 - 우리 판정 기준은 통과(더블탭
+// 아님)했는데 브라우저 자체의 네이티브 더블탭-확대 인식 창은 그보다 더 넓어서, 그
+// 사이 간격의 탭은 우리 코드는 막지 않고 브라우저는 확대로 처리하는 공백이 있었던
+// 것 - 브라우저 쪽 실제 임계값을 확실히 알 수 없으니(기기/엔진마다 다름) 여유
+// 있게 500ms로 늘렸다.
 //
 // **touchend에서 touchstart로 전환**: 좌표 기반으로 고친 뒤에도 "여전히 안 고쳐진다"는
 // 재지적을 받았다 - touchend는 "손을 뗄 때" 발생하는데, 일부 브라우저는 그보다
@@ -33,6 +39,7 @@ const appEl = document.getElementById('app');
 // 탭의 pointerdown 자체는 정상 발생하되(선택/드래그 시작은 그대로 동작) 브라우저의
 // 확대 제스처만 취소된다.
 const DOUBLE_TAP_POS_TOLERANCE_PX = 24;
+const DOUBLE_TAP_WINDOW_MS = 500;
 let lastBgTouchStart = { time: 0, x: 0, y: 0 };
 document.addEventListener('touchstart', (e) => {
   if (e.target.closest('button, .popup-overlay')) {
@@ -41,7 +48,7 @@ document.addEventListener('touchstart', (e) => {
   }
   const touch = e.touches[0];
   const now = Date.now();
-  const withinTime = now - lastBgTouchStart.time <= 300;
+  const withinTime = now - lastBgTouchStart.time <= DOUBLE_TAP_WINDOW_MS;
   const withinPos = touch
     && Math.abs(touch.clientX - lastBgTouchStart.x) <= DOUBLE_TAP_POS_TOLERANCE_PX
     && Math.abs(touch.clientY - lastBgTouchStart.y) <= DOUBLE_TAP_POS_TOLERANCE_PX;
