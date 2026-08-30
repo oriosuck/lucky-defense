@@ -51,6 +51,24 @@ const appEl = document.getElementById('app');
 // 했다(버튼은 자식 아이콘 등을 눌러도 버튼으로 쳐야 하므로 `closest()` 그대로 유지).
 const DOUBLE_TAP_POS_TOLERANCE_PX = 24;
 const DOUBLE_TAP_WINDOW_MS = 500;
+
+// 좌표+시간 기반 더블탭 판정을 touchstart/pointerdown 양쪽에서 공유하는 헬퍼 -
+// `lastState`는 호출부가 각자 독립적으로 들고 있는 { time, x, y } 객체(터치와
+// 펜을 같은 상태로 섞어 추적하면 안 됨 - 아래 pointerdown 블록 참고). 더블탭으로
+// 판정되면 true를 반환할 뿐 preventDefault는 호출부 책임으로 남긴다(이벤트
+// 종류마다 e가 다르므로).
+function isDoubleTap(lastState, x, y) {
+  const now = Date.now();
+  const withinTime = now - lastState.time <= DOUBLE_TAP_WINDOW_MS;
+  const withinPos = Math.abs(x - lastState.x) <= DOUBLE_TAP_POS_TOLERANCE_PX
+    && Math.abs(y - lastState.y) <= DOUBLE_TAP_POS_TOLERANCE_PX;
+  const result = withinTime && withinPos;
+  lastState.time = now;
+  lastState.x = x;
+  lastState.y = y;
+  return result;
+}
+
 let lastBgTouchStart = { time: 0, x: 0, y: 0 };
 document.addEventListener('touchstart', (e) => {
   if (e.target.closest('button') || e.target.classList?.contains('popup-overlay')) {
@@ -58,16 +76,36 @@ document.addEventListener('touchstart', (e) => {
     return;
   }
   const touch = e.touches[0];
-  const now = Date.now();
-  const withinTime = now - lastBgTouchStart.time <= DOUBLE_TAP_WINDOW_MS;
-  const withinPos = touch
-    && Math.abs(touch.clientX - lastBgTouchStart.x) <= DOUBLE_TAP_POS_TOLERANCE_PX
-    && Math.abs(touch.clientY - lastBgTouchStart.y) <= DOUBLE_TAP_POS_TOLERANCE_PX;
-  if (withinTime && withinPos) {
+  if (touch && isDoubleTap(lastBgTouchStart, touch.clientX, touch.clientY)) {
     e.preventDefault();
   }
-  lastBgTouchStart = { time: now, x: touch?.clientX ?? 0, y: touch?.clientY ?? 0 };
 }, { passive: false });
+
+// 애플펜슬로만 재현되고 손가락으로는 재현이 안 된다는 사용자 리포트를 받았다 -
+// 이건 지금까지의 "iOS가 전반적으로 예방을 무시한다"는 가설보다 훨씬 구체적인
+// 단서다. iPadOS Safari에서 애플펜슬 입력은 Touch 객체의 `touchType`이
+// `'stylus'`(손가락은 `'direct'')로 구분되는데, WebKit이 정밀한 드로잉 앱 호환을
+// 위해 펜 입력에는 손가락과 다른 제스처 인식 경로를 타는 경우가 실제로 보고돼
+// 있다 - `touch-action` CSS나 `touchstart`의 `preventDefault()`가 손가락에는
+// 먹히면서 펜에는 그 효과가 약하거나 아예 안 먹힐 수 있다는 뜻이다(이 프로젝트
+// 안에서는 검증할 방법이 없다 - 실기기 애플펜슬이 필요). 순수 Touch Events
+// 경로가 펜에는 안 먹힐 가능성에 대비해, 별도의 이벤트 모델인 Pointer Events로
+// 같은 더블탭 판정을 한 번 더 건다 - `pointerdown`의 `pointerType==='pen'`만
+// 골라서 처리하므로 손가락(터치)이나 마우스는 위 touchstart 경로와 전혀
+// 겹치지 않는다(별도의 lastState로 추적 - 펜과 손가락을 같은 타이머로 섞으면
+// "펜으로 한 번, 손가락으로 한 번"처럼 서로 다른 입력 수단의 탭이 더블탭으로
+// 잘못 묶일 수 있다).
+let lastPenPointerDown = { time: 0, x: 0, y: 0 };
+document.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'pen') return;
+  if (e.target.closest('button') || e.target.classList?.contains('popup-overlay')) {
+    lastPenPointerDown = { time: 0, x: 0, y: 0 };
+    return;
+  }
+  if (isDoubleTap(lastPenPointerDown, e.clientX, e.clientY)) {
+    e.preventDefault();
+  }
+});
 
 // 위 touchstart 기반 "예방"은 헤드리스 Chromium 테스트로는 항상 정상 동작하는
 // 것까지 확인했는데(등록된 리스너가 실제로 두 번째 탭에서 preventDefault를
