@@ -360,3 +360,9 @@ export function nextTierOf(tier) {
   const idx = TIERS.indexOf(tier);
   return idx >= 0 && idx < TIERS.length - 1 ? TIERS[idx + 1] : null;
 }
+
+// 룰렛 실패 시 "하위 단계 영웅 위로 지급"(사용자 지정)에 쓰는 역방향 조회.
+export function prevTierOf(tier) {
+  const idx = TIERS.indexOf(tier);
+  return idx > 0 ? TIERS[idx - 1] : null;
+}

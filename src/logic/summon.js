@@ -4,11 +4,13 @@ import {
   ROULETTE_SUCCESS_RATE,
   ROULETTE_COST,
   heroesByTier,
+  prevTierOf,
 } from '../data/heroes.js';
 import { NORMAL_SUMMON_COST_INCREMENT } from '../data/constants.js';
 import {
   createHeroInstance,
   fieldOccupantCount,
+  isFieldPhysicallyFull,
   findAutoPlaceSlot,
   placeInstanceAtSlot,
 } from '../state/gameState.js';
@@ -62,7 +64,11 @@ export function summonNormal(state) {
   if (newState.gold < newState.normalSummonCost) {
     return { success: false, reason: 'not-enough-gold', newState: state };
   }
-  if (fieldOccupantCount(newState) >= newState.fieldMaxCapacity) {
+  // 인원수 상한(fieldOccupantCount)과는 별개로, 임프가 칸을 다 채워버리면 인원수는
+  // 여유가 있어 보여도 물리적으로 놓을 자리가 없을 수 있다(위 isFieldPhysicallyFull
+  // 주석 참고) - 이 경우까지 막아야 롤 결과가 자리를 못 찾고 조용히 사라지면서
+  // 골드만 날아가는 걸 예방한다.
+  if (fieldOccupantCount(newState) >= newState.fieldMaxCapacity || isFieldPhysicallyFull(newState)) {
     return { success: false, reason: 'field-full', newState: state };
   }
 
@@ -84,6 +90,11 @@ export function summonNormal(state) {
 
 const ROULETTE_TIER_ORDER = ['rare', 'hero', 'legendary'];
 
+// 룰렛 실패 시 위로 보상(사용자 지정) - 서로 독립적인 두 번의 20% 굴림이라 둘 다
+// 터질 수도, 둘 다 안 터질 수도 있다.
+const ROULETTE_FAIL_REFUND_CHANCE = 0.2; // 비용(행운석) 환불
+const ROULETTE_FAIL_CONSOLATION_CHANCE = 0.2; // 시도한 등급보다 한 단계 아래 영웅 지급
+
 /**
  * 룰렛 소환. 실패 가능하며 실패 시 해골 표시만 하고 재화만 소모한다.
  * 성공 시 결과가 필드에 자리가 없으면 대기열에 보관 후 자동 배치.
@@ -100,7 +111,9 @@ export function summonRoulette(state, tier, slotPosition = 'left') {
   // 필드가 꽉 찼으면 소환 자체를 막는다(일반 소환과 동일한 규칙) - 예전엔 자리가
   // 없어도 재화를 깎고 결과를 대기열(pendingPlacementQueue)에 넣기만 해서, 사용자
   // 입장에선 "필드 꽉 찬 채로 룰렛이 돌아가며 재화만 소모되는" 것처럼 보였다.
-  if (fieldOccupantCount(newState) >= newState.fieldMaxCapacity) {
+  // isFieldPhysicallyFull은 임프가 칸을 다 채운 경우까지 잡아낸다(summonNormal과
+  // 동일한 이유).
+  if (fieldOccupantCount(newState) >= newState.fieldMaxCapacity || isFieldPhysicallyFull(newState)) {
     return { success: false, reason: 'field-full', newState: state };
   }
 
@@ -117,7 +130,25 @@ export function summonRoulette(state, tier, slotPosition = 'left') {
     if (tier === 'legendary') {
       newState.counters.legendaryRouletteFailCount += 1;
     }
-    return { success: false, reason: 'roulette-fail', newState };
+    // 실패해도 두 위로 보상을 각각 독립적으로 굴린다(사용자 지정) - "20% 확률로
+    // 비용을 되돌려주고, 20% 확률로 하위 단계 영웅을 지급"이라 두 문장을 별개의
+    // 굴림으로 해석했다(하나가 터졌다고 다른 하나가 막히지 않음).
+    const refunded = Math.random() < ROULETTE_FAIL_REFUND_CHANCE;
+    if (refunded) newState.luckstone += cost;
+
+    let consolationHero = null;
+    const lowerTier = prevTierOf(tier);
+    if (lowerTier && Math.random() < ROULETTE_FAIL_CONSOLATION_CHANCE) {
+      consolationHero = pickRandomHeroOfTier(lowerTier);
+      const slot = findAutoPlaceSlot(newState, consolationHero.id);
+      if (slot) {
+        placeInstanceAtSlot(slot, createHeroInstance(consolationHero.id));
+      } else {
+        newState.pendingPlacementQueue = [...(newState.pendingPlacementQueue ?? []), consolationHero.id];
+      }
+    }
+
+    return { success: false, reason: 'roulette-fail', refunded, consolationHero, newState };
   }
   if (tier === 'legendary') newState.counters.legendaryRouletteSuccessCount += 1; // "전설 룰렛 소환 성공 3번" 미션용
 

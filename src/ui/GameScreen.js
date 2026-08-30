@@ -35,10 +35,10 @@ import {
   craftRaySword,
   resetRaySwords,
 } from '../logic/immortal.js';
-import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT, INDY_TREASURE_INTERVAL_SEC } from '../logic/waveEvents.js';
+import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT, INDY_TREASURE_INTERVAL_SEC, isInstanceStunned } from '../logic/waveEvents.js';
 import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 import { RAY_SWORD_TIER_LABEL, RAY_SWORD_TIER_COLOR, RAY_SWORD_CRAFT_MAX } from '../data/raySwords.js';
-import { fieldOccupantCount, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
+import { fieldOccupantCount, isFieldPhysicallyFull, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
 import { el } from './components/dom.js';
 import { heroImage } from './components/heroVisual.js';
 
@@ -200,15 +200,25 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 요청 - "팝업 뜨는것들은 전부 팝업 외부를 눌렀을 때 자동으로 꺼지게 해줘").
     // 미션 팝업(.popup-overlay)은 이미 자체적으로 어두운 배경 클릭 시 닫히는 로직이
     // 있어서(popup-box 내부는 제외) 여기서는 그 팝업 전체를 "안쪽"으로만 판정해
-    // 건드리지 않는다(이중 처리 방지). 룰렛 팝업이 열려 있을 때는 필드 조작이
-    // 예외적으로 허용되므로(이전 요청 - "룰렛 팝업이 떠있을 때에도 필드에 있는
-    // 캐릭터 조작 가능하게") 필드 칸/액션을 누르는 것도 "안쪽"과 동등하게 취급해
-    // 닫히지 않게 한다.
+    // 건드리지 않는다(이중 처리 방지). 룰렛/강화/신화 팝업은 전체화면을 덮는 모달이
+    // 아니라 하단 시트(.game-popup/.mythic-popup)라 필드 위쪽과 왼쪽 즉시소환 바가
+    // 여전히 보이는데도 조작이 막혀 있었다 - 처음엔 룰렛만 예외를 뒀었는데(사용자가
+    // 그때 룰렛만 콕 집었었음), 이번에 "팝업 떠있을 때 필드 조작 가능하게 해달라
+    // 했잖아"라는 재요청으로 하단 시트 팝업 전부(roulette/enhance/mythic)로
+    // 넓혔다 - 미션 팝업(.popup-overlay)만 전체화면이라 예외 대상이 아니다.
+    // 왼쪽 즉시소환/승급 바(.favorite-bar)도 같은 요청("왼쪽에 신화/불멸 조합
+    // 뜨는거 클릭도 가능하게")으로 이 예외에 추가했다 - 안 그러면 그 버튼을 누르는
+    // 순간 이 pointerdown 핸들러가 먼저 popup을 닫고 render()로 DOM을 통째로
+    // 다시 그려버려서, 뒤이어 오는 click 이벤트가 이미 사라진(고아가 된) 노드를
+    // 대상으로 남아 버튼의 onclick이 실행되지 않는다(CLAUDE.md의 "신화 팝업 클릭이
+    // 잘 안 먹힘" 섹션과 같은 계열의 함정 - pointerdown에서 DOM을 바꾸면 그 제스처의
+    // 나머지 이벤트가 고아 노드를 향하게 된다).
+    const BOTTOM_SHEET_POPUPS = ['roulette', 'enhance', 'mythic'];
     if (ui.popup) {
       const insidePopup = e.target.closest('.game-popup, .mythic-popup, .popup-overlay');
-      const insideFieldWhileRoulette = ui.popup === 'roulette'
-        && e.target.closest('.field-slot, .cell-quick-actions, .chad-arrow-layer');
-      if (!insidePopup && !insideFieldWhileRoulette) {
+      const insideFieldWhilePopupOpen = BOTTOM_SHEET_POPUPS.includes(ui.popup)
+        && e.target.closest('.field-slot, .cell-quick-actions, .chad-arrow-layer, .favorite-bar');
+      if (!insidePopup && !insideFieldWhilePopupOpen) {
         ui.popup = null;
         render(getState());
         return;
@@ -242,8 +252,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
     dragState = {
       fromRow: row, fromCol: col,
       startX: e.clientX, startY: e.clientY, moved: false,
-      // 이동불능(속박) 상태인 칸은 탭 선택은 그대로 되지만 실제 드래그 이동은
-      // endDrag에서 막는다(보스 이동불능 이벤트 지속 시간 동안 캐릭터를 움직일 수
+      // 기절 상태인 칸은 탭 선택은 그대로 되지만 실제 드래그 이동은
+      // endDrag에서 막는다(보스 기절 이벤트 지속 시간 동안 캐릭터를 움직일 수
       // 있던 버그 리포트 반영).
       immobilized: isImmobilized(state, slot),
     };
@@ -274,13 +284,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
     dragState = null;
     if (!moved) {
       // 이동량이 거의 없으면 드래그가 아니라 탭 - 기존 선택 토글 동작을 그대로 수행.
-      // (이동불능이어도 정보 확인용 선택은 막지 않는다 - 실제 이동만 아래에서 막음)
+      // (기절이어도 정보 확인용 선택은 막지 않는다 - 실제 이동만 아래에서 막음)
       const state = getState();
       const slot = state.field.find((s) => s.row === fromRow && s.col === fromCol);
       if (slot) onSlotClick(state, slot);
       return;
     }
-    if (immobilized) return; // 이동불능 상태에선 드래그 이동 자체가 성립하지 않는다
+    if (immobilized) return; // 기절 상태에선 드래그 이동 자체가 성립하지 않는다
     const target = document.elementFromPoint(e.clientX, e.clientY);
     const cellEl = target?.closest('.field-slot');
     if (!cellEl) return;
@@ -536,7 +546,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         // ondragstart를 막아야 하는 이유는 heroVisual.js의 draggable=false 주석 참고.
         ondragstart: (e) => e.preventDefault(),
       });
-      // 이동불능 사슬 아이콘은 칸 구석의 작은 아이콘이 아니라 캐릭터 앞을 덮는 큰
+      // 기절 사슬 아이콘은 칸 구석의 작은 아이콘이 아니라 캐릭터 앞을 덮는 큰
       // 아이콘이어야 한다는 사용자 지적(참고 이미지) - renderHeroTokenLayer가 캐릭터
       // 토큰과 같은 좌표계에서 그린다(여기서는 더 이상 그리지 않음).
       // 보물 위치는 필드 임의의 칸에 랜덤 등장한다(기획서 명시 사항) - 작은 코너 아이콘이
@@ -801,7 +811,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         const heroDef = HEROES_BY_ID[occ.heroId];
         // 디버프는 개체 하나가 아니라 칸 전체에 적용되고(사용자 지적 - 한 칸에 3마리가
         // 있으면 그 중 1마리만이 아니라 칸에 있는 전원이 대상이어야 한다), 칸도 한 번에
-        // 6개까지 동시에 물든다(사용자 지정 - 이동불능 게이지형과 동일).
+        // 6개까지 동시에 물든다(사용자 지정 - 기절 게이지형과 동일).
         // 디버프는 칸이 아니라 개체(instanceId) 기준 - 캐릭터를 다른 칸으로 옮기면
         // 보라색도 같이 따라가야 한다(사용자 지적).
         const debuffEv = state.eventLog.debuffEvent;
@@ -888,7 +898,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         }
       });
 
-      // 이동불능(속박) 사슬 아이콘 - 칸 구석의 작은 아이콘이 아니라 캐릭터 바로
+      // 기절 사슬 아이콘 - 칸 구석의 작은 아이콘이 아니라 캐릭터 바로
       // 앞(위)을 덮는 큰 아이콘으로 표시해달라는 사용자 지적(참고 이미지: 캐릭터
       // 크기만큼 큰 사슬 X가 캐릭터 앞에 겹쳐 보임). 캐릭터 토큰과 같은 좌표계
       // (cellCenterX/baseTop/tokenWidth/tokenHeight)를 그대로 재사용한다. 처음엔
@@ -901,7 +911,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         layer.appendChild(el('div', {
           class: 'stage-immobilize-mark',
           style: `left:${cellCenterX}%; top:${baseTop + tokenHeight / 2}%; width:${chainWidth}%; height:${chainHeight}%; z-index:${20 + slot.row};`,
-        }, [el('img', { src: UI_IMAGES.immobilizeIcon, alt: '이동불능' })]));
+        }, [el('img', { src: UI_IMAGES.immobilizeIcon, alt: '기절' })]));
       }
 
       // 인디 쿨타임 게이지는 칸에 다른 영웅이 같이 쌓여 있어도(보물이 이미 다른
@@ -1226,16 +1236,16 @@ export function GameScreen({ getState, dispatch, onExit }) {
     return heroDef.name;
   }
 
-  // 실제로 속박되는 건 칸 좌표가 아니라 active 전환 시점에 스냅샷 뜬 개체
+  // 실제로 기절되는 건 칸 좌표가 아니라 active 전환 시점에 스냅샷 뜬 개체
   // (targetInstanceIds)다(사용자 지적 - "원을 피했으면 캐릭터가 없는 자리는
-  // 속박이 안되는게 맞아... 피한애를 다시 그 칸에 들여다놓으면 피했는데도
-  // 속박되어버려"). 그 칸에 지금 있는 개체 중 스냅샷에 있는 게 하나라도 있으면
-  // 그 칸을 속박 상태로 표시한다 - 필링 단계에서 도망친 개체나, active 이후에
-  // 새로 들어온 개체는 스냅샷에 없으므로 자연히 제외된다.
+  // 기절이 안되는게 맞아... 피한애를 다시 그 칸에 들여다놓으면 피했는데도
+  // 기절되어버려"). 그 칸에 지금 있는 개체 중 스냅샷에 있는 게 하나라도 있으면
+  // 그 칸을 기절 상태로 표시한다 - 필링 단계에서 도망친 개체나, active 이후에
+  // 새로 들어온 개체는 스냅샷에 없으므로 자연히 제외된다. 개체 단위 판정 자체는
+  // waveEvents.js의 isInstanceStunned()로 통일했다 - immortal.js의 자동 진행 정지
+  // (틱 스킵)도 같은 함수를 공유해서 판정이 두 곳에서 따로 어긋나지 않는다.
   function isImmobilized(state, slot) {
-    const ev = state.eventLog.immobilizeEvent;
-    if (!ev || ev.phase !== 'active' || !ev.targetInstanceIds) return false;
-    return slot.occupants.some((o) => ev.targetInstanceIds.includes(o.instanceId));
+    return slot.occupants.some((o) => isInstanceStunned(state, o.instanceId));
   }
   function isImmobilizeFilling(state, slot) {
     const ev = state.eventLog.immobilizeEvent;
@@ -1338,7 +1348,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
       ]),
       el('button', {
         class: 'summon-btn-wrap', title: '소환',
-        disabled: state.gold < state.normalSummonCost || fieldOccupantCount(state) >= state.fieldMaxCapacity,
+        // 임프가 칸을 다 채운 경우(인원수엔 안 잡히지만 물리적으로 자리가 없는
+        // 상태)도 같이 막는다(사용자 지적 - "임프 포함 필드가 꽉차면 마리수가
+        // 남아도 소환이 안되어야해").
+        disabled: state.gold < state.normalSummonCost || fieldOccupantCount(state) >= state.fieldMaxCapacity
+          || isFieldPhysicallyFull(state),
         onclick: () => apply(summonNormal(state)),
       }, [
         el('img', { src: UI_IMAGES.summonBtn, alt: '소환' }),
@@ -1377,14 +1391,23 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 필드가 꽉 찼으면 재화 소모/결과 처리 이전에 스핀 연출 자체를 시작하지 않는다
     // (summonRoulette도 동일하게 막지만, 그건 결과 처리 시점이라 스핀 애니메이션이
     // 먼저 돌아버리는 게 어색해서 여기서도 미리 막는다).
-    if (fieldOccupantCount(state) >= state.fieldMaxCapacity) return;
+    if (fieldOccupantCount(state) >= state.fieldMaxCapacity || isFieldPhysicallyFull(state)) return;
     ui.spinningTier = r.tier;
     render(getState());
     setTimeout(() => {
       const fresh = getState();
       const result = summonRoulette(fresh, r.tier, r.slot);
       ui.spinningTier = null;
-      if (!result.success && result.reason === 'roulette-fail') {
+      if (!result.success && result.reason === 'roulette-fail' && result.consolationHero) {
+        // 실패 위로 보상(20% 확률)으로 하위 단계 영웅이 실제로 나온 경우 -
+        // 해골 대신 그 영웅 그림을 잠깐 보여준다(성공과 같은 표시 패턴, 등급
+        // 실패는 그대로 유지됐다는 걸 헷갈리지 않게 skull은 띄우지 않음).
+        ui.rouletteSuccessHero = { tier: r.tier, heroId: result.consolationHero.id };
+        setTimeout(() => {
+          ui.rouletteSuccessHero = null;
+          if (root.isConnected) render(getState());
+        }, ROULETTE_FAIL_FLASH_MS);
+      } else if (!result.success && result.reason === 'roulette-fail') {
         ui.rouletteFailTier = r.tier;
         setTimeout(() => {
           ui.rouletteFailTier = null;
@@ -1412,7 +1435,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
         el('span', { class: 'roulette-pct', text: `${Math.round(ROULETTE_SUCCESS_RATE[r.tier] * 100)}%` }),
         el('button', {
           class: `roulette-wheel-btn${spinning ? ' spinning' : ''}`,
-          disabled: state.luckstone < cost || Boolean(ui.spinningTier) || fieldOccupantCount(state) >= state.fieldMaxCapacity,
+          disabled: state.luckstone < cost || Boolean(ui.spinningTier) || fieldOccupantCount(state) >= state.fieldMaxCapacity
+            || isFieldPhysicallyFull(state),
           onclick: () => onRouletteWheelClick(r),
         }, [
           el('div', { class: `roulette-wheel-circle ${r.colorClass}` }, [
