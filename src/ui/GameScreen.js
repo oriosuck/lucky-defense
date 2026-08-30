@@ -327,8 +327,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
   window.addEventListener('pointermove', handlePointerMove);
 
   function endDrag(e) {
-    pointerDown = false;
     if (!dragState) {
+      pointerDown = false;
       root.classList.remove('drag-in-progress');
       return;
     }
@@ -340,10 +340,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (!moved) {
       // 이동량이 거의 없으면 드래그가 아니라 탭 - 기존 선택 토글 동작을 그대로 수행.
       // (기절이어도 정보 확인용 선택은 막지 않는다 - 실제 이동만 아래에서 막음)
+      pointerDown = false;
       root.classList.remove('drag-in-progress');
       const state = getState();
       const slot = state.field.find((s) => s.row === fromRow && s.col === fromCol);
-      if (slot) onSlotClick(state, slot);
+      if (slot) onSlotClick(state, slot); // onSlotClick 내부에서 deferredRender를 씀
       return;
     }
     // elementFromPoint()는 drag-in-progress 클래스가 아직 붙어 있는(퀵액션
@@ -354,16 +355,23 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // Playwright로 재현해서 발견함). 그래서 여기서는 아직 클래스를 유지한 채로
     // 타겟을 먼저 찾고, 그 다음에 뗀다.
     if (immobilized) {
+      pointerDown = false;
       root.classList.remove('drag-in-progress');
       return; // 기절 상태에선 드래그 이동 자체가 성립하지 않는다
     }
     const target = document.elementFromPoint(e.clientX, e.clientY);
     const cellEl = target?.closest('.field-slot');
     root.classList.remove('drag-in-progress');
-    if (!cellEl) return;
+    if (!cellEl) {
+      pointerDown = false;
+      return;
+    }
     const toRow = Number(cellEl.dataset.row);
     const toCol = Number(cellEl.dataset.col);
-    if (toRow === fromRow && toCol === fromCol) return;
+    if (toRow === fromRow && toCol === fromCol) {
+      pointerDown = false;
+      return;
+    }
     // 드래그로 캐릭터를 옮기면 선택 표시(원형 링/칸 버튼)도 캐릭터를 따라가야
     // 한다(사용자 지적 - "내가 처음 선택한 칸에 남은게 아니라 캐릭터가 이동한
     // 곳에 동그라미가 있어야해"). ui.selectedSlot이 여전히 출발 칸(fromRow/fromCol)을
@@ -371,7 +379,21 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 비었으므로) 다른 칸과 맞바꾸는 이동(스왑)인 경우엔 원래 선택했던 칸에
     // 새로 들어온(맞바뀐) 다른 캐릭터를 계속 선택 중인 것처럼 보이는 버그가 있었다.
     ui.selectedSlot = { row: toRow, col: toCol };
+    // apply()는 main.js의 dispatch()를 거치는데, dispatch가 곧바로 screen.update()
+    // (동기 render())를 부른다 - update()는 pointerDown이 true인 동안엔 그 동기
+    // 렌더를 건너뛰도록 이미 가드돼 있지만(클릭 도중 버튼이 통째로 바뀌는 걸 막기
+    // 위한 기존 장치), 지금까지는 이 함수 맨 위에서 pointerDown을 이미 false로
+    // 만들어버린 뒤에 apply()를 불렀기 때문에 그 가드가 전혀 작동하지 않았다 -
+    // 드래그로 캐릭터를 옮길 때마다 그 pointerup 이벤트 자신의 처리 도중(터치
+    // 제스처가 채 끝나기도 전에) DOM이 통째로 다시 그려지고 있었던 것이다(사용자
+    // 리포트 - "캐릭터 클릭하고 드래그 해서 이동할 때 확대될 때가 있어" - Playwright로
+    // 재현: 드래그 이동 직후 .field-slot 노드가 이미 detach돼 있었음, onSlotClick과
+    // 같은 계열의 문제). apply() 호출 시점까지는 pointerDown을 일부러 true로 유지해서
+    // update()의 동기 렌더를 막고, 상태 반영이 끝난 뒤에야 false로 바꾸고 우리
+    // deferredRender로 다음 프레임에 그린다.
     apply(moveHero(getState(), fromRow, fromCol, toRow, toCol));
+    pointerDown = false;
+    deferredRender(getState());
   }
 
   const handlePointerUp = (e) => { endDrag(e); };
