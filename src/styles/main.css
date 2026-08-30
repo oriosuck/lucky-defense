@@ -620,7 +620,22 @@ body {
   display: flex; flex-direction: column; align-items: center; gap: 3px;
   pointer-events: none; /* 컨테이너 자체는 클릭을 막지 않고, 버튼(cell-quick-btn)만 auto */
 }
-.cell-quick-stack-above { transform: translate(-50%, -100%); margin-top: -4px; }
+/* margin-top이 -4px(캐릭터 쪽으로 당김)였는데, 실측해보니 캐릭터를 탭한 지점에서
+   판매 버튼까지의 거리가 22.7px밖에 안 됐다 - 우리 JS 더블탭-확대 방지 로직의
+   허용 오차(24px)보다도 작고, 자연스러운 재탭 오차 범위(~40px) 안에도 든다.
+   버튼은 그 로직에서 의도적으로 제외돼 있어서(버튼 클릭 반응성을 지키기 위해 -
+   main.js 주석 참고) 두 번째 탭이 이 버튼에 떨어지면 우리 JS가 전혀 막아주지
+   못한다 - "캐릭터를 더블탭했는데 확대된다"는 리포트가 재현될 수 있는 실질적인
+   경로다(사용자 리포트 "캐릭터 클릭했을 때 더블클릭 확대되는거같아"). 버튼을
+   좀 더 멀리 띄워서 이 위험을 줄인다. **함정**: `transform:translate(-50%,-100%)`가
+   걸린 요소에서 margin-top을 늘리면(양수로) 반대로 최종 렌더 위치가 아래로(캐릭터
+   쪽으로) 내려간다 - translate는 자기 자신의 높이만큼 위로 이동시킬 뿐이라, 그
+   전에 margin으로 밀어둔 만큼의 오프셋은 그대로 최종 위치에 남기 때문(margin이
+   커질수록 박스 자체가 아래로 밀렸다가 그 상태로 위로 translate되므로 순 이동량은
+   그대로 아래쪽으로 증가). 실제로 처음 +10px로 바꿔서 재보니 오히려 8.7px로
+   더 가까워져서 이 함정에 걸렸다는 걸 알아챘다 - 멀리 띄우려면 margin-top을 더
+   음수로(캐릭터 반대 방향) 줘야 한다. */
+.cell-quick-stack-above { transform: translate(-50%, -100%); margin-top: -18px; }
 .cell-quick-stack-below { transform: translate(-50%, 0); margin-top: 4px; }
 .cell-status-badge {
   pointer-events: none;
