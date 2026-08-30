@@ -69,6 +69,39 @@ document.addEventListener('touchstart', (e) => {
   lastBgTouchStart = { time: now, x: touch?.clientX ?? 0, y: touch?.clientY ?? 0 };
 }, { passive: false });
 
+// 위 touchstart 기반 "예방"은 헤드리스 Chromium 테스트로는 항상 정상 동작하는
+// 것까지 확인했는데(등록된 리스너가 실제로 두 번째 탭에서 preventDefault를
+// 거는 것까지 재현) 사용자가 "언제 어디서나, 기능 자체가 안 된다"고 재차
+// 리포트했다 - 이 정도로 전면적이면 특정 요소/타이밍의 버그가 아니라 iOS
+// 자체의 한계일 가능성이 높다: `user-scalable=no`는 iOS가 접근성 이유로 여러
+// 버전째 무시하는 게 잘 알려진 사실이고, 더블탭-확대 제스처 인식 자체가 WebKit
+// 네이티브 레벨(JS 이벤트 흐름보다 앞/밖)에서 이뤄지는 경우가 있어 touchstart의
+// preventDefault만으로는 근본적으로 막지 못할 수 있다 - 지금까지 이 프로젝트가
+// 시도한 모든 방법(viewport meta, touch-action, touchend→touchstart 전환, 좌표
+// 기반 판정)이 전부 "예방"이었는데, 그 예방 계층 자체가 iOS에서 뚫릴 수 있다면
+// 아무리 다듬어도 한계가 있다. 그래서 예방과는 다른 계층의 안전망을 추가한다 -
+// "확대가 이미 일어났다면 그 즉시 원래 배율로 되돌리는" 사후 교정. `visualViewport.
+// scale`이 1을 넘는 순간(더블탭이든 핀치든 원인 무관하게) viewport meta의
+// user-scalable 값을 yes→no로 한 프레임 안에 토글해서 WebKit이 뷰포트 제약을
+// 강제로 다시 계산하게 만든다(널리 알려진 트릭 - 단순히 같은 문자열로
+// setAttribute만 다시 불러서는 재적용이 안 되는 경우가 있어 실제로 값을
+// 바꿨다가 되돌리는 방식을 쓴다). 이러면 확대 자체를 막지는 못해도 사용자가
+// 체감하기엔 아주 짧게 튀었다가 즉시 원래 크기로 돌아오는 정도로 완화된다 -
+// "확대된 채로 고정돼서 게임을 계속 못 하는" 최악의 경우를 막는 최후의 방어선.
+if (window.visualViewport) {
+  const viewportMeta = document.querySelector('meta[name="viewport"]');
+  let resetting = false;
+  window.visualViewport.addEventListener('resize', () => {
+    if (!viewportMeta || resetting || window.visualViewport.scale <= 1.01) return;
+    resetting = true;
+    viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes');
+    requestAnimationFrame(() => {
+      viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+      resetting = false;
+    });
+  });
+}
+
 function swapRoot(node) {
   appEl.innerHTML = '';
   appEl.appendChild(node);
