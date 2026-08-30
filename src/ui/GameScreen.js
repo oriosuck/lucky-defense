@@ -1328,7 +1328,19 @@ export function GameScreen({ getState, dispatch, onExit }) {
     for (const o of slot.occupants) {
       if (o.heroId === 'm_indy') ui.indyMarkerFlashAt[o.instanceId] = Date.now();
     }
-    render(getState());
+    // 캐릭터 선택은 endDrag()가 pointerup에서 호출하는데(즉 이 함수는 그 탭의
+    // 이벤트 디스패치 도중, touchend가 완전히 끝나기도 전에 실행된다), 여기서
+    // 동기 render()를 부르면 그 탭 자기 자신의 제스처 안에서 .field-slot 노드가
+    // 통째로 교체된다 - "판매 버튼 겹침 오판 정정" 라운드에서 이미 확인한 바로 그
+    // 패턴(터치 도중 DOM 재구성이 브라우저 네이티브 더블탭-확대 인식을 방해)인데,
+    // 그 라운드에서는 "칸 바깥을 눌러 선택 해제"/"팝업 바깥 클릭으로 닫기"/
+    // "채드 화살표 모드 취소" 세 곳만 deferredRender로 고치고 정작 "캐릭터를
+    // 선택하는 탭 그 자체"인 이 경로는 빠뜨렸었다 - 사용자가 "룰렛 팝업이
+    // 떠있을 때 캐릭터 클릭하면 확대된다"고 리포트해서 Playwright로 실측
+    // 재현했더니(탭 직후 바로 .field-slot이 detach돼 있음) 팝업 유무와 무관하게
+    // 캐릭터를 탭할 때마다 항상 발생하는 문제였다. deferredRender로 바꿔서
+    // DOM 재구성을 이 탭의 동기 실행 구간 밖(다음 프레임)으로 미뤘다.
+    deferredRender(getState());
   }
 
   // resource_bar.png("재화 및 맵 카운트 바.png")에는 코인/행운석/인원 아이콘과 "/" 구분자가
