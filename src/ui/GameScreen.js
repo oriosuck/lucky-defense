@@ -15,7 +15,6 @@ import {
 import {
   enhanceHero,
   moveHero,
-  toggleBreakthrough,
   digTreasure,
   upgradeGlobalEnhance,
   chooseBatmanMode,
@@ -1015,15 +1014,12 @@ export function GameScreen({ getState, dispatch, onExit }) {
         onclick: () => apply(synthesize(state, slot.row, slot.col)),
       }));
     }
-    // 승급 가능 상태가 되면(왼쪽 즉시소환 바에 "승급 가능!"으로 이미 노출 중) 칸
-    // 위의 돌파 버튼은 더 이상 필요 없어서 숨긴다(사용자 지정 - 불멸 조건 충족 시
-    // 캐릭터 쪽에는 돌파/승급 버튼이 남아있으면 안 됨).
-    if (instance.heroId === 'm_mama' && !isImmortalPromotionReady(state, instance.instanceId)) {
-      below.push(el('button', {
-        class: `cell-quick-btn cell-quick-extra ${instance.breakthrough ? 'active' : ''}`, text: '돌파',
-        onclick: () => apply(toggleBreakthrough(state, instance.instanceId)),
-      }));
-    }
+    // 돌파는 필드 캐릭터를 클릭했을 때 나오는 버튼으로 조작하는 게 아니다(사용자가
+    // 여러 번 지적 - "캐릭터 눌렀을때 돌파 버튼 나오면 안된다고 했다") - 돌파 여부는
+    // 시작 화면의 "돌파" 체크박스로만 결정되고(체크 시 7마리, 미체크 시 9마리),
+    // `synthesis.js`의 `craftMythic()`이 마마를 조합하는 시점에 그 설정값을
+    // `instance.breakthrough`로 그대로 박아 넣는다 - 게임 중에 필드에서 바꿀 수 있는
+    // 값이 아니므로 여기엔 어떤 토글 버튼도 두지 않는다.
     // 승급 시도는 더 이상 칸 아래 버튼이 아니라, 조건 충족 시 좌측 즉시소환 아이콘 바에
     // "승급 가능!"으로 노출된다(renderFavoriteBar/favoriteBarItems 참고 - 사용자 지정
     // 규칙: 불멸이 먼저, 신화가 밑으로).

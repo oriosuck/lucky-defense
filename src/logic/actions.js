@@ -218,18 +218,6 @@ export function moveHero(state, fromRow, fromCol, toRow, toCol) {
   return { success: true, newState: result };
 }
 
-/** "돌파" 상태 On/Off - 현재는 마마 전용 */
-export function toggleBreakthrough(state, instanceId) {
-  const newState = structuredClone(state);
-  const found = findInstance(newState, instanceId);
-  if (!found) return { success: false, reason: 'not-found', newState: state };
-  if (found.instance.heroId !== 'm_mama') {
-    return { success: false, reason: 'not-supported', newState: state };
-  }
-  found.instance.breakthrough = !found.instance.breakthrough;
-  return { success: true, newState };
-}
-
 /**
  * 인디 전용 "보물 발굴"(5-4): 인디가 현재 보물이 등장한 칸에 있을 때만 발굴 가능.
  * 누르는 즉시 결과가 나오는 게 아니라 INDY_DIG_DURATION_SEC(2초) 동안 발굴 중
