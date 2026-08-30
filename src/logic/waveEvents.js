@@ -70,18 +70,29 @@ export const INDY_DIG_DURATION_SEC = 2; // "발굴" 버튼을 눌렀을 때 실�
 // 0이어야 함), 10라운드(150초 보스 라운드)는 2분24초(144초) 안에 몬스터가 0마리가
 // 될 수 있어야 한다는 조건이 확정됐었다(당시 0.04/초/마리로 확정).
 //
-// 이번에 사용자가 조건을 더 강하게 정정 - "10라운드 시작하고 4초가 지났을 때 모든
+// 이후 사용자가 조건을 더 강하게 정정 - "10라운드 시작하고 4초가 지났을 때 모든
 // 몬스터가 다 사라지는 수준"이어야 한다. 필드가 5~6라운드 만에 꽉 찬다(30마리)는
 // 기존 가정으로 라운드 1~20을 시뮬레이션해보면, 처치가 매 라운드 스폰을 계속
 // 갉아먹는 구조라 k값을 올릴수록 10라운드 시작 시점의 누적 몬스터 수 자체가
 // 훨씬 줄어드는 효과가 있다(예: k=0.06이면 9라운드 종료 시점에 이미 1마리 미만으로
 // 수렴) - "110마리를 4초 안에 처치"가 아니라 "이미 거의 다 줄어든 나머지를 4초
-// 안에 마저 처치"하는 문제라 k를 크게 올리지 않아도 조건을 만족한다. 시뮬레이션
-// 결과 k=0.06이면 10라운드 시작 후 약 0.5~3초 사이(가정한 영웅 증가 속도에 따라
-// 편차 있음)에 0에 도달해 4초 조건을 항상 만족했고, 정상 라운드에서도 몬스터
-// 최대 누적치가 110 근처까지 안 가고 60마리 선에서 머물러(시뮬레이션 확인) 화면에
-// 몬스터가 쌓여 보이는 기존 느낌도 유지된다.
-const MONSTER_KILL_RATE_PER_HERO_PER_SEC = 0.06; // 필드 영웅 1마리당 초당 처치량(영웅 0마리면 처치 0)
+// 안에 마저 처치"하는 문제라 k를 크게 올리지 않아도 조건을 만족한다.
+//
+// **하지만 이 "영웅 마릿수에 비례"하는 모델은 실제 플레이에서 다시 문제가 됐다** -
+// 사용자가 실측 화면으로 "몬스터 카운트가 40까지 가기 전에 줄어들어야 하는데 지금은
+// 100까지 다 차네"라고 지적했다. 원인은 위 튜닝이 전제로 삼은 "필드가 5~6라운드
+// 만에 30마리로 찬다"는 가정이 실제 플레이(영웅 수가 더 적거나 천천히 늚)와 안
+// 맞으면, `heroCount * k`로 계산되는 처치 속도가 스폰 속도를 못 따라잡아 몬스터가
+// 계속 누적되는 근본적인 취약점이 있었기 때문이다(CLAUDE.md의 "몬스터 미표시/
+// 임프 미생성 재조사" 섹션에서 이미 이 가정 자체가 실전과 다를 수 있다고 경고해뒀던
+// 부분이 실제로 터진 것). 사용자가 "모든 라운드에서 시작하고 5초 안에 40마리 다
+// 없어지게 설정"이라고 명확한 기준을 새로 지정해서, 영웅 마릿수에 비례하는 방식을
+// 버리고 **필드에 영웅이 1마리 이상이면(기존 "영웅 없으면 처치 0" 규칙은 유지)
+// 항상 고정 속도로, 라운드당 최대치(40마리)가 5초 안에 전부 처치될 수 있는
+// 속도(40/5=8마리/초)로 처치**하도록 바꿨다 - 더 이상 영웅 수/필드 성장 속도
+// 가정에 의존하지 않아서, 초반에 영웅이 적어도 매 라운드 몬스터가 빠르게 정리된다.
+const MONSTER_CLEAR_WINDOW_SEC = 5; // "5초 안에 40마리 다 없어지게" - 사용자 지정
+const MONSTER_KILL_RATE_PER_SEC = MONSTER_PER_ROUND / MONSTER_CLEAR_WINDOW_SEC; // 8/초, 영웅 1마리 이상이면 항상 이 속도(영웅 0마리면 처치 0)
 
 function randomInt(maxExclusive) {
   return Math.floor(Math.random() * maxExclusive);
@@ -164,8 +175,7 @@ export function tickWave(state, deltaSec) {
     const heroCount = fieldOccupantCount(newState);
     if (heroCount > 0) {
       const beforeKillCount = Math.floor(newState.monsterCount);
-      const killRate = heroCount * MONSTER_KILL_RATE_PER_HERO_PER_SEC;
-      newState.monsterCount = Math.max(0, newState.monsterCount - killRate * deltaSec);
+      newState.monsterCount = Math.max(0, newState.monsterCount - MONSTER_KILL_RATE_PER_SEC * deltaSec);
       const killed = beforeKillCount - Math.floor(newState.monsterCount);
       if (killed > 0) newState.gold += killed * MONSTER_KILL_GOLD; // 몬스터 처치 시 골드 +30(마리당)
     }
@@ -347,8 +357,8 @@ export function handleDeleteEvent(state) {
 // 10라운드는 "라운드 남은 시간이 2:25(=145초)가 되면 소탕 가능"이라는 사용자 지정
 // 고정 시점이 있다(사용자 지정 - "10라운드 2분 25초에 공격 소탕 가능하게 설정해줘",
 // "라운드 남은 시간(카운트다운)이 2:25일 때 열려야 함"으로 확인받음). 몬스터
-// 처치 속도가 이미 "10라운드 시작 후 몇 초 안에 전멸"하도록 튜닝돼 있어서
-// (MONSTER_KILL_RATE_PER_HERO_PER_SEC 참고) 몬스터가 0이 되는 시점 자체는 보통
+// 처치 속도가 이미 "모든 라운드 시작 후 5초 안에 전멸"하도록 튜닝돼 있어서
+// (MONSTER_KILL_RATE_PER_SEC 참고) 몬스터가 0이 되는 시점 자체는 보통
 // 5초보다도 이르지만, 그 뒤에 이어지는 동적 지연(기본 4초+누락 핵심 영웅당 5초)까지
 // 합치면 실제로 창이 열리는 시점은 5초보다 항상 늦다 - 그래서 이 고정 시점을
 // 동적 계산보다 우선 적용해서 최소한 이 시점엔 무조건 열리도록 보장한다(더 일찍

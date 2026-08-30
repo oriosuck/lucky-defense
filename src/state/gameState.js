@@ -61,6 +61,11 @@ export function createGameState(config) {
       nextAttackRound: rollNextBossAttackRound(0),
     },
     bossRaidWindow: null, // 10/20라운드 진입 시에만 세팅
+    // 마마 임프 생성 공유 타이머 - 마마가 몇 마리든 이 타이머 하나만 돈다(사용자
+    // 지정 - "마마 임프 생성 속도는 1마리만 소환하는 걸로 가자 여러마리 소환됐더라도"
+    // - 예전엔 마마 개체마다 독립 타이머라 마마가 늘수록 생성 속도가 배로 빨라졌음).
+    // immortal.js의 tickMamaImps()가 지연 생성한다.
+    mamaImpTick: null,
     // 인디 "보물 발굴"(5-4) - 인디 개체마다 독립된 쿨타임/보물 위치를 가져야 한다
     // (사용자 지적 - "인디 두마리 이상 소환될 때 쿨타임 두마리가 똑같이 적용돼.
     // 개별 적용이 아니라" - 예전엔 이 상태가 게임 전체에 하나뿐인 전역 객체라
