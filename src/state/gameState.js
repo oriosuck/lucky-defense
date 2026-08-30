@@ -61,10 +61,18 @@ export function createGameState(config) {
       nextAttackRound: rollNextBossAttackRound(0),
     },
     bossRaidWindow: null, // 10/20라운드 진입 시에만 세팅
-    indyTreasure: { slot: null, timer: 30, digging: null, completedAt: null }, // 인디 "보물 발굴"(5-4) - 30초마다 새 칸에 등장
+    // 인디 "보물 발굴"(5-4) - 인디 개체마다 독립된 쿨타임/보물 위치를 가져야 한다
+    // (사용자 지적 - "인디 두마리 이상 소환될 때 쿨타임 두마리가 똑같이 적용돼.
+    // 개별 적용이 아니라" - 예전엔 이 상태가 게임 전체에 하나뿐인 전역 객체라
+    // 인디를 몇 마리를 두든 전부 같은 타이머/같은 칸을 공유했다). instanceId를
+    // 키로 하는 맵으로 바꿔서 인디 개체별로 독립된
+    // {slot, timer, digging, completedAt}을 가진다 - 항목은 waveEvents.js의
+    // tickIndyTreasure가 필드에서 처음 발견한 인디 개체마다 지연 생성한다(게임
+    // 시작 시점엔 인디가 아직 없으므로 여기서는 빈 맵으로만 시작).
     // digging: {instanceId, timer} - "발굴" 버튼을 누르면 즉시 결과가 나오는 게 아니라
     // 2초짜리 발굴 시간을 준다(사용자 지정). completedAt: 쿨타임 게이지가 다 차서
     // 새 보물이 등장한 시각(Date.now()) - "완료" 텍스트를 잠깐 보여주는 용도.
+    indyTreasures: {},
     globalEnhance: { common: 0, hero: 0, legendary: 0, rate: 0 }, // 하단 강화 팝업의 전역 4트랙
     eventLog: {
       deleteEvent: null,

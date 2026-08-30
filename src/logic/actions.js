@@ -242,15 +242,23 @@ export function digTreasure(state, instanceId) {
   if (!found || found.instance.heroId !== 'm_indy') {
     return { success: false, reason: 'not-indy', newState: state };
   }
-  if (newState.indyTreasure.digging) {
+  // 인디 개체마다 독립된 쿨타임/보물 위치를 갖는다(state.indyTreasures - 인디
+  // 개체별 맵, gameState.js 참고) - 항목은 waveEvents.js의 tickIndyTreasure가
+  // 필드에 인디가 있는 매 틱마다 만들어두므로 보통 존재하지만, 방금 소환돼
+  // 아직 첫 틱이 안 지난 경우를 대비해 방어적으로 확인한다.
+  const t = newState.indyTreasures[instanceId];
+  if (!t) {
+    return { success: false, reason: 'not-found', newState: state };
+  }
+  if (t.digging) {
     return { success: false, reason: 'already-digging', newState: state };
   }
-  const treasureSlot = newState.indyTreasure.slot;
+  const treasureSlot = t.slot;
   if (!treasureSlot || treasureSlot.row !== found.slot.row || treasureSlot.col !== found.slot.col) {
     return { success: false, reason: 'wrong-position', newState: state };
   }
 
-  newState.indyTreasure.digging = { instanceId, timer: INDY_DIG_DURATION_SEC };
+  t.digging = { instanceId, timer: INDY_DIG_DURATION_SEC };
 
   return { success: true, newState };
 }

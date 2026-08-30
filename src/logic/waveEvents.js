@@ -399,33 +399,40 @@ export function tickDebuffTimer(state, deltaSec) {
 }
 
 /**
- * 인디 "보물 발굴"(5-4): 30초마다 필드 임의의 칸에 새 보물이 등장한다. 인디가 아직
- * 필드에 없으면 등장 자체가 말이 안 되므로(사용자 지적 - "인디도 없는데 돈주머니가
- * 뜨는 건 불가") 인디가 있을 때만 타이머를 돌리고, 없으면 남아있던 보물 표시도 지운다.
+ * 인디 "보물 발굴"(5-4): 인디 개체마다 30초 독립 쿨타임으로 필드 임의의 칸에 새
+ * 보물이 등장한다. 예전엔 state.indyTreasure가 게임 전체에 하나뿐인 전역 객체라
+ * 인디를 몇 마리 두든 전부 같은 타이머/같은 칸을 공유했다(사용자 지적 - "인디
+ * 두마리 이상 소환될 때 쿨타임 두마리가 똑같이 적용돼. 개별 적용이 아니라") -
+ * state.indyTreasures(instanceId를 키로 하는 맵)로 바꿔서 인디 개체마다 독립된
+ * 항목을 갖는다. 필드에서 사라진(판매/합성 소모 등) 인디의 남은 항목은 여기서
+ * 같이 정리한다.
  */
 export function tickIndyTreasure(state, deltaSec) {
   if (state.result) return state;
-  const hasIndy = state.field.some((s) => s.occupants.some((o) => o.heroId === 'm_indy'));
-  if (!hasIndy) {
-    if (!state.indyTreasure.slot) return state;
-    const newState = structuredClone(state);
-    newState.indyTreasure.slot = null;
-    return newState;
-  }
-  // 발굴 중(digging)일 때는 물론이고, 보물이 이미 등장했지만 아직 발굴 전인
-  // 동안(slot이 있음)에도 쿨타임을 멈춘다(사용자 지정 - "인디 보물 찾기 전이면
-  // 쿨타임 멈춰야해") - 안 그러면 플레이어가 30초 안에 못 찾았을 때 발굴도
-  // 안 됐는데 자리가 자동으로 다른 칸으로 옮겨가버린다. 다음 타이머는 실제로
-  // 발굴에 성공(tickIndyDig)했을 때만 다시 시작된다.
-  if (state.indyTreasure.digging || state.indyTreasure.slot) return state;
+  const indyIds = state.field.flatMap((s) => s.occupants.filter((o) => o.heroId === 'm_indy').map((o) => o.instanceId));
+  const staleIds = Object.keys(state.indyTreasures).filter((id) => !indyIds.includes(id));
+  if (indyIds.length === 0 && staleIds.length === 0) return state;
+
   const newState = structuredClone(state);
-  const t = newState.indyTreasure;
-  t.timer -= deltaSec;
-  if (t.timer <= 0) {
-    t.timer += INDY_TREASURE_INTERVAL_SEC;
-    const slot = newState.field[randomInt(newState.field.length)];
-    t.slot = { row: slot.row, col: slot.col };
-    t.completedAt = Date.now(); // 게이지가 다 찬 순간 - UI가 "완료" 텍스트를 잠깐 보여주는 기준
+  for (const id of staleIds) delete newState.indyTreasures[id];
+  for (const instanceId of indyIds) {
+    if (!newState.indyTreasures[instanceId]) {
+      newState.indyTreasures[instanceId] = { slot: null, timer: INDY_TREASURE_INTERVAL_SEC, digging: null, completedAt: null };
+    }
+    const t = newState.indyTreasures[instanceId];
+    // 발굴 중(digging)일 때는 물론이고, 보물이 이미 등장했지만 아직 발굴 전인
+    // 동안(slot이 있음)에도 그 개체의 쿨타임을 멈춘다(사용자 지정 - "인디 보물
+    // 찾기 전이면 쿨타임 멈춰야해") - 안 그러면 플레이어가 30초 안에 못 찾았을 때
+    // 발굴도 안 됐는데 자리가 자동으로 다른 칸으로 옮겨가버린다. 다음 타이머는
+    // 실제로 발굴에 성공(tickIndyDig)했을 때만 다시 시작된다.
+    if (t.digging || t.slot) continue;
+    t.timer -= deltaSec;
+    if (t.timer <= 0) {
+      t.timer += INDY_TREASURE_INTERVAL_SEC;
+      const slot = newState.field[randomInt(newState.field.length)];
+      t.slot = { row: slot.row, col: slot.col };
+      t.completedAt = Date.now(); // 게이지가 다 찬 순간 - UI가 "완료" 텍스트를 잠깐 보여주는 기준
+    }
   }
   return newState;
 }
@@ -436,23 +443,29 @@ export function tickIndyTreasure(state, deltaSec) {
  * 발굴 누르고 발굴하는 시간 2초 부여"). 판정 로직 자체는 예전 즉시 처리 로직과
  * 동일(일반 소환과 같은 확률표, 기존 보유 등급보다 낮으면 교체하지 않음) - 시작을
  * actions.js의 digTreasure()가 맡고, 여기서는 시간이 다 됐을 때의 확정만 담당한다.
+ * indyTreasures가 인디 개체별 맵이 됐으므로, 지금 발굴 중인 모든 인디 개체를
+ * 각각 독립적으로 진행시킨다.
  */
 export function tickIndyDig(state, deltaSec) {
-  if (!state.indyTreasure.digging) return state;
+  const diggingIds = Object.entries(state.indyTreasures).filter(([, t]) => t.digging).map(([id]) => id);
+  if (diggingIds.length === 0) return state;
   const newState = structuredClone(state);
-  const digging = newState.indyTreasure.digging;
-  digging.timer -= deltaSec;
-  if (digging.timer > 0) return newState;
+  for (const instanceId of diggingIds) {
+    const t = newState.indyTreasures[instanceId];
+    if (!t?.digging) continue;
+    t.digging.timer -= deltaSec;
+    if (t.digging.timer > 0) continue;
 
-  const found = findInstance(newState, digging.instanceId);
-  newState.indyTreasure.digging = null;
-  if (found) {
-    const rolledTier = rollNormalTier();
-    const current = found.instance.indyTreasureTier;
-    const upgraded = !current || TIERS.indexOf(rolledTier) > TIERS.indexOf(current);
-    if (upgraded) found.instance.indyTreasureTier = rolledTier;
+    const found = findInstance(newState, t.digging.instanceId);
+    t.digging = null;
+    if (found) {
+      const rolledTier = rollNormalTier();
+      const current = found.instance.indyTreasureTier;
+      const upgraded = !current || TIERS.indexOf(rolledTier) > TIERS.indexOf(current);
+      if (upgraded) found.instance.indyTreasureTier = rolledTier;
+    }
+    t.slot = null;
+    t.timer = INDY_TREASURE_INTERVAL_SEC;
   }
-  newState.indyTreasure.slot = null;
-  newState.indyTreasure.timer = INDY_TREASURE_INTERVAL_SEC;
   return newState;
 }
