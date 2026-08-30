@@ -180,6 +180,25 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 캡처로 잡은 시작 칸 엘리먼트가 드롭 시점까지 그대로 유지된다.
   let pointerDown = false;
 
+  // pointerdown 핸들러 안에서 팝업 닫힘/선택 해제/채드 모드 취소를 곧바로 반영하려고
+  // render()를 그 자리에서 동기 호출하고 있었는데, 이게 바로 그 "터치 중간에 DOM을
+  // 통째로 갈아엎는" 패턴이라 문제가 됐다(사용자 리포트 - "캐릭터를 선택했을 때
+  // 더블탭을 아무데나 하면 화면이 확대된다" - 캐릭터가 선택된 상태에서 바깥을 탭하면
+  // 이 핸들러가 즉시 선택 해제 + render()를 실행해 DOM을 통째로 재생성하는데, 이게
+  // "더블탭"의 첫 번째 탭이 아직 끝나기도 전(touchstart~touchend 사이)에 일어나면서
+  // 브라우저의 네이티브 더블탭-확대 제스처 인식을 (우리 JS의 preventDefault와는
+  // 별개로) 방해했을 가능성이 높다 - 판매 버튼 겹침으로 오판했던 이전 시도와 달리,
+  // 이번엔 버튼이 전혀 없는 빈 공간을 눌러도 재현된다는 사용자의 정정으로 원인을
+  // 좁혔다). requestAnimationFrame으로 한 프레임 미뤄서, 지금 처리 중인 터치
+  // 이벤트의 동기 실행 구간 밖에서 DOM이 바뀌게 한다 - 육안으로는 여전히 즉시
+  // 반영되는 것처럼 보이면서도(한 프레임 이내) 터치 제스처 도중 DOM을 건드리지
+  // 않는다.
+  function deferredRender(state) {
+    requestAnimationFrame(() => {
+      if (root.isConnected) render(state);
+    });
+  }
+
   // 칸 드래그 이동: 버튼 클릭 대신 영웅이 있는 칸을 다른 칸으로 직접 드래그해서
   // 옮긴다(사용자 요청 - "이동은 버튼이 아니라 드래그 방식으로"). 이동량이 거의
   // 없으면(제자리에서 뗌) 기존처럼 탭으로 취급해 선택만 토글한다.
@@ -207,7 +226,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 아래 로직과 동일한 패턴).
     if (ui.chadSellMode && !e.target.closest('.chad-sell-arrow')) {
       ui.chadSellMode = null;
-      render(getState());
+      deferredRender(getState());
       return;
     }
 
@@ -235,7 +254,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         && e.target.closest('.field-slot, .cell-quick-actions, .chad-arrow-layer, .favorite-bar');
       if (!insidePopup && !insideFieldWhilePopupOpen) {
         ui.popup = null;
-        render(getState());
+        deferredRender(getState());
         return;
       }
     }
@@ -246,7 +265,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
       // (사용자 지정 - "칸 선택 후 다른 곳 아무데나 누르면 해제").
       if (!ui.popup && ui.selectedSlot && !e.target.closest('.cell-quick-actions') && !e.target.closest('.chad-arrow-layer')) {
         ui.selectedSlot = null;
-        render(getState());
+        deferredRender(getState());
       }
       return;
     }
@@ -1144,17 +1163,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
       }
     }
 
-    // 위쪽 버튼 스택(판매 등)이 캐릭터 스프라이트와 겹쳐서, 캐릭터를 더블탭했을 때
-    // 두 번째 탭이 이 버튼 위에 떨어져 더블탭 확대 방지 로직(버튼은 항상 예외)을
-    // 우회하는 문제가 실측으로 확인됐다(사용자 리포트 - "캐릭터를 클릭하면 원이
-    // 생기잖아 그때 더블클릭하면은 화면 확대돼"). 캐릭터는 칸 중앙을 기준으로
-    // 위로 `rect.height*(0.8*scale-0.5)`만큼 튀어나오게 그려지는데(renderHeroTokenLayer의
-    // "발끝 기준" 배치 공식과 동일), 판매/합성 버튼이 뜨는 등급(전설까지, scale
-    // 최대 1.5) 기준 가장 많이 튀어나오는 경우(scale=1.5 → 0.7×rect.height)를
-    // 넘어서도록 여유 있게 0.75배 위로 올려서 겹치지 않게 했다.
     const aboveWrap = el('div', {
       class: 'cell-quick-stack cell-quick-stack-above',
-      style: `left:${centerX}%; top:${rect.top - rect.height * 0.75}%;`,
+      style: `left:${centerX}%; top:${rect.top}%;`,
     }, above);
     const belowWrap = below.length
       ? el('div', {
