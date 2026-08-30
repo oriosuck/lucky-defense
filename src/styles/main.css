@@ -889,6 +889,25 @@ button.is-disabled.side-btn, button.is-disabled.summon-btn-wrap { opacity: 0.45;
    취소선을 긋는다(사용자 지정 - "미션은 1번씩만 가능하고... 다된거는 취소선으로
    그어줘... 미션들은 체크박스로 표시해줘. 다된거는 체크 아닌거는 그냥 박스"). */
 .mission-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+
+/* "닫기" 버튼이 스크롤 밖으로 밀려나던 버그 - .popup-box가 통째로 overflow-y:auto라
+   미션이 13개까지 늘어나면서(mission-list 자체 높이만으로도 80vh를 넘김) 목록
+   맨 아래의 "닫기" 버튼이 스크롤해야만 보이는 위치까지 밀려나 있었다(Playwright로
+   실측: 버튼 top이 popup-box의 시각적 하단보다 137px 아래에 있었음, `overflow`로
+   완전히 가려져 탭 자체가 안 먹힘). 사용자가 "탭을 한번 하는데 그거 한번만에
+   인식이 안되서 탭을 두번 하거든? 근데 그때는 매번 확대가 돼"라고 지적한 게 바로
+   이거였다 - 첫 탭은 보이는 목록 위(스크롤 안 된 상태에서 손이 닿는 아무 데나,
+   실제로는 닫기 버튼이 아닌 자리)에 헛되이 떨어지고("인식 안 됨"), 그 뒤 다시
+   탭한 게 우연히 스크롤/레이아웃이 밀리며 진짜 버튼(<button>)에 맞아 닫히는데,
+   버튼은 더블탭-확대 방지 로직에서 항상 제외 대상이라(PR #43 회귀 이후 정책)
+   그 두 번째 탭만 브라우저 네이티브 확대를 그대로 맞는다 - "그때는 매번 확대가
+   돼"와 정확히 들어맞는다. 근본 수정은 팝업 자체를 세로 flex로 바꿔서 스크롤이
+   필요한 목록(.mission-list)만 내부에서 독립적으로 스크롤되게 하고, 제목/닫기
+   버튼은 스크롤 밖(항상 화면에 고정)에 두는 것 - 이러면 목록이 몇 개든 닫기
+   버튼은 첫 탭에 항상 닿는다. */
+.mission-popup-box { display: flex; flex-direction: column; overflow: hidden; }
+.mission-popup-box .mission-list { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.mission-popup-box .mission-close-btn { flex-shrink: 0; margin-top: 12px; }
 .mission-item {
   display: flex; align-items: center; gap: 8px;
   background: var(--panel-2); border-radius: 8px; padding: 8px 10px;
