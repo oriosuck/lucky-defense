@@ -5,47 +5,50 @@ import { GameScreen } from './ui/GameScreen.js';
 
 const appEl = document.getElementById('app');
 
-// 더블탭 확대 방지 - CSS touch-action:manipulation(main.css `*` 규칙)만으로는
-// 배경(보스 위/빈 전장 칸/하늘 부분처럼 클릭 핸들러가 없는 영역)에서 여전히
-// 더블탭 확대가 재현된다는 사용자 리포트를 받았다. 예전에 모든 touchend에
-// preventDefault를 걸었다가 버튼 연타가 통째로 막히는 회귀가 났었는데(PR #43),
-// 그건 preventDefault가 브라우저의 click 합성까지 취소시켜서였다 - 이 프로젝트의
-// 필드 칸 선택/드래그는 click이 아니라 pointerdown/pointerup을 직접 쓰고
-// (pointerup은 touchend보다 먼저 끝나므로 나중에 touchend를 막아도 영향 없음),
-// 버튼만 onclick(click 이벤트)에 의존한다. 그래서 버튼과 팝업 배경
-// 클릭(.popup-overlay, 미션 팝업 닫기용)만 제외하고, 그 외 모든 영역(필드 배경,
-// 빈 칸, 보스, 하늘 등)에서는 같은 지점을 짧은 간격(300ms) 안에 두 번 건드리면
-// 더블탭으로 보고 그 확대만 막는다.
+// 더블탭 확대 방지 - CSS touch-action:manipulation(main.css `*` 규칙, 사실상
+// html/body/#app을 포함한 모든 요소에 이미 걸려 있다 - "html,body에만" 또는
+// "#game 컨테이너에만"처럼 더 좁은 범위로 다시 걸어도 이미 걸려있는 `*` 규칙보다
+// 넓어질 수 없어서 아무 효과가 없다)만으로는 여러 기기/브라우저 조합에서 여전히
+// 재현된다는 사용자 리포트를 반복해서 받았다(CLAUDE.md에 이 문제로만 여러 라운드가
+// 기록돼 있음 - viewport meta, touch-action 확장, touchend 기반 JS 방어선까지
+// 전부 시도했었다). 예전에 모든 touchend에 preventDefault를 걸었다가 버튼 연타가
+// 통째로 막히는 회귀가 났었는데(PR #43), 그건 preventDefault가 브라우저의 click
+// 합성까지 취소시켜서였다 - 이 프로젝트의 필드 칸 선택/드래그는 click이 아니라
+// pointerdown/pointerup을 직접 쓰므로(Pointer Events는 스펙상 touch의
+// preventDefault 여부와 무관하게 항상 발생 - 아래 touchstart 전환의 근거) 버튼만
+// onclick(click 이벤트)에 의존한다. 그래서 버튼과 팝업 배경 클릭(.popup-overlay,
+// 미션 팝업 닫기용)만 제외하고, 그 외 모든 영역(필드 배경, 빈 칸, 보스, 하늘 등)
+// 에서는 같은 지점(터치 좌표, ±24px 오차 허용 - DOM 노드가 0.2초마다 재생성되는
+// 이 프로젝트 구조상 노드 동일성 비교는 무력화된다는 걸 이전 라운드에 확인함)을
+// 짧은 간격(300ms) 안에 두 번 건드리면 더블탭으로 보고 그 확대만 막는다.
 //
-// **재발 원인(사용자가 "진짜 어떻게 못해?"라고 재차 지적)**: "같은 지점"을 처음엔
-// `e.target`(DOM 노드 그 자체) 동일성으로 판정했는데, 이 게임은 0.2초마다
-// `root.innerHTML=''`로 전체 DOM을 다시 그리는 구조라(CLAUDE.md에 반복 등장하는
-// 함정 - 몬스터 이동/공격 모션/궁 게이지 등 전부 같은 원인으로 깨졌었다) 필드 위의
-// 캐릭터/칸/보스 같은 요소는 화면상 같은 위치라도 두 번째 탭 시점엔 이미 완전히
-// 새로운 노드로 교체돼 있는 경우가 흔하다 - 그러면 `lastBgTouchEnd.target ===
-// e.target`이 항상 false가 되어 더블탭 판정 자체가 무력화된다("배경(비클릭 영역)"
-// 항목처럼 클릭 핸들러가 없어 재렌더가 드문 영역에서만 우연히 잘 통과됐을 뿐, 필드
-// 위에서는 사실상 거의 항상 실패하고 있었다). DOM 노드가 아니라 **터치 좌표**로
-// "같은 지점"을 판정하도록 바꿨다 - 좌표는 노드가 재생성돼도 그대로라 이 재렌더
-// 구조와 완전히 무관해진다(래핑 컨테이너를 새로 만드는 것보다 이 편이 더 근본적인
-// 해결책 - 컨테이너를 만들어도 그 안의 노드 정체성 문제 자체는 그대로 남는다).
+// **touchend에서 touchstart로 전환**: 좌표 기반으로 고친 뒤에도 "여전히 안 고쳐진다"는
+// 재지적을 받았다 - touchend는 "손을 뗄 때" 발생하는데, 일부 브라우저는 그보다
+// 이른 시점(두 번째 터치가 시작되는 순간, touchstart)에 이미 더블탭-확대 제스처를
+// 확정 짓고 넘어가버려서 touchend에서 뒤늦게 preventDefault를 불러도 취소가 안 될
+// 수 있다. 최대한 이른 시점에 막기 위해 touchstart로 옮겼다 - Pointer Events는
+// touch의 preventDefault와 무관하게 독립적으로 발생하므로(스펙 - 앞 문단 참고),
+// 이 프로젝트의 드래그/선택 로직(pointerdown/pointerup 기반)은 전혀 영향받지
+// 않는다. 필드 위 요소는 여전히 대상이라 같은 칸을 빠르게 두 번 탭하면 두 번째
+// 탭의 pointerdown 자체는 정상 발생하되(선택/드래그 시작은 그대로 동작) 브라우저의
+// 확대 제스처만 취소된다.
 const DOUBLE_TAP_POS_TOLERANCE_PX = 24;
-let lastBgTouchEnd = { time: 0, x: 0, y: 0 };
-document.addEventListener('touchend', (e) => {
+let lastBgTouchStart = { time: 0, x: 0, y: 0 };
+document.addEventListener('touchstart', (e) => {
   if (e.target.closest('button, .popup-overlay')) {
-    lastBgTouchEnd = { time: 0, x: 0, y: 0 };
+    lastBgTouchStart = { time: 0, x: 0, y: 0 };
     return;
   }
-  const touch = e.changedTouches[0];
+  const touch = e.touches[0];
   const now = Date.now();
-  const withinTime = now - lastBgTouchEnd.time <= 300;
+  const withinTime = now - lastBgTouchStart.time <= 300;
   const withinPos = touch
-    && Math.abs(touch.clientX - lastBgTouchEnd.x) <= DOUBLE_TAP_POS_TOLERANCE_PX
-    && Math.abs(touch.clientY - lastBgTouchEnd.y) <= DOUBLE_TAP_POS_TOLERANCE_PX;
+    && Math.abs(touch.clientX - lastBgTouchStart.x) <= DOUBLE_TAP_POS_TOLERANCE_PX
+    && Math.abs(touch.clientY - lastBgTouchStart.y) <= DOUBLE_TAP_POS_TOLERANCE_PX;
   if (withinTime && withinPos) {
     e.preventDefault();
   }
-  lastBgTouchEnd = { time: now, x: touch?.clientX ?? 0, y: touch?.clientY ?? 0 };
+  lastBgTouchStart = { time: now, x: touch?.clientX ?? 0, y: touch?.clientY ?? 0 };
 }, { passive: false });
 
 function swapRoot(node) {
