@@ -60,6 +60,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 먹이는 쪽인지(m_chad는 신화만, i_giga_chad는 신화+불멸) 구분해야 해서 boolean이
     // 아니라 그 채드의 instanceId를 담는다(null이면 꺼진 상태).
     chadSellMode: null,
+    // 인디 개체별로 "보물 위치를 다시 보여달라"고 클릭한 시각(instanceId -> ms) -
+    // indyTreasures가 인디 개체별 맵이 된 것과 같은 이유로, 이 플래시 트리거도
+    // 개체별로 독립돼야 한다(안 그러면 인디 A를 클릭했는데 인디 B의 보물까지
+    // 같이 반짝이는 등 서로 간섭한다).
+    indyMarkerFlashAt: {},
   };
 
   function apply(result) {
@@ -331,6 +336,13 @@ export function GameScreen({ getState, dispatch, onExit }) {
     const toRow = Number(cellEl.dataset.row);
     const toCol = Number(cellEl.dataset.col);
     if (toRow === fromRow && toCol === fromCol) return;
+    // 드래그로 캐릭터를 옮기면 선택 표시(원형 링/칸 버튼)도 캐릭터를 따라가야
+    // 한다(사용자 지적 - "내가 처음 선택한 칸에 남은게 아니라 캐릭터가 이동한
+    // 곳에 동그라미가 있어야해"). ui.selectedSlot이 여전히 출발 칸(fromRow/fromCol)을
+    // 가리키고 있으면, 빈 칸으로 이동한 경우엔 링이 그냥 사라지고(출발 칸이
+    // 비었으므로) 다른 칸과 맞바꾸는 이동(스왑)인 경우엔 원래 선택했던 칸에
+    // 새로 들어온(맞바뀐) 다른 캐릭터를 계속 선택 중인 것처럼 보이는 버그가 있었다.
+    ui.selectedSlot = { row: toRow, col: toCol };
     apply(moveHero(getState(), fromRow, fromCol, toRow, toCol));
   }
 
@@ -746,9 +758,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 멀어") - 베인 궁 게이지와 같은 이유/같은 방식으로, 칸이 아니라 토큰 자신의
   // 좌표(centerX/footY/tokenWidth)를 기준으로 다시 그려서 실제 발밑 바로 아래에
   // 오도록 고쳤다.
-  function renderIndyTreasureGauge(state, centerX, footY, width) {
-    const fillRatio = Math.max(0, Math.min(1, 1 - state.indyTreasure.timer / INDY_TREASURE_INTERVAL_SEC));
-    const completedElapsedMs = state.indyTreasure.completedAt ? Date.now() - state.indyTreasure.completedAt : Infinity;
+  function renderIndyTreasureGauge(state, instanceId, centerX, footY, width) {
+    const t = state.indyTreasures[instanceId] ?? { timer: INDY_TREASURE_INTERVAL_SEC, completedAt: null };
+    const fillRatio = Math.max(0, Math.min(1, 1 - t.timer / INDY_TREASURE_INTERVAL_SEC));
+    const completedElapsedMs = t.completedAt ? Date.now() - t.completedAt : Infinity;
     const showComplete = completedElapsedMs < INDY_GAUGE_FLASH_MS;
     return el('div', {
       class: 'indy-treasure-gauge',
@@ -950,9 +963,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
       // 인디 쿨타임 게이지는 칸에 다른 영웅이 같이 쌓여 있어도(보물이 이미 다른
       // 캐릭터가 있는 칸에 등장할 수 있다는 것과는 별개로, 인디 본인이 서 있는 칸
-      // 기준) 항상 그린다 - 선택 여부와 무관.
-      if (slot.occupants.some((o) => o.heroId === 'm_indy')) {
-        layer.appendChild(renderIndyTreasureGauge(state, cellCenterX, baseTop + tokenHeight + 1, tokenWidth));
+      // 기준) 항상 그린다 - 선택 여부와 무관. 인디가 여러 마리일 수 있으니(각자
+      // indyTreasures에 독립된 항목을 가짐) 그 칸의 인디 개체마다 각각 그린다.
+      const indyOccupantsHere = slot.occupants.filter((o) => o.heroId === 'm_indy');
+      for (const indyOcc of indyOccupantsHere) {
+        layer.appendChild(renderIndyTreasureGauge(state, indyOcc.instanceId, cellCenterX, baseTop + tokenHeight + 1, tokenWidth));
       }
     }
     return layer;
@@ -1040,8 +1055,9 @@ export function GameScreen({ getState, dispatch, onExit }) {
       }));
     }
     if (instance.heroId === 'm_indy') {
-      const onTreasureSlot = state.indyTreasure.slot && state.indyTreasure.slot.row === slot.row && state.indyTreasure.slot.col === slot.col;
-      const digging = state.indyTreasure.digging;
+      const t = state.indyTreasures[instance.instanceId];
+      const onTreasureSlot = t?.slot && t.slot.row === slot.row && t.slot.col === slot.col;
+      const digging = t?.digging;
       const isDiggingHere = digging?.instanceId === instance.instanceId;
       below.push(el('button', {
         class: 'cell-quick-btn cell-quick-extra',
@@ -1288,28 +1304,33 @@ export function GameScreen({ getState, dispatch, onExit }) {
   // 보물 위치 글로우는 상시 노출이 아니라 "새로 등장한 순간"과 "인디를 다시
   // 클릭한 순간"에만 잠깐(1초) 반짝이고 사라진다(사용자 지정 - "쿨타임 찼을때
   // 한번 1초 보여주고 사라졌다가 인디 다시 클릭하면 한 1초 보여줬다 사라지는거야.
-  // 지금처럼 계속 보이는 게 아니라"). 보물 자체(state.indyTreasure.slot)와
+  // 지금처럼 계속 보이는 게 아니라"). 보물 자체(indyTreasures[id].slot)와
   // "발굴 가능" 여부는 계속 유효하지만(칸 버튼 활성화 등 다른 로직은 그대로),
   // 화면에 노란 글로우로 보여주는 것만 두 트리거의 1초 플래시로 제한한다 -
   // 궁극기 링/공격 모션과 같은 이유로 고정 delay가 아니라 실제 경과 시간을
-  // 매 렌더 다시 계산한다.
+  // 매 렌더 다시 계산한다. indyTreasures가 인디 개체별 맵이 됐으므로, 이 칸이
+  // "어떤 인디"의 보물 위치와 일치하는지를 전부 훑어서 판정한다(인디가 여러
+  // 마리면 각자 다른 칸에 보물이 있을 수 있음).
   const INDY_TREASURE_MARK_FLASH_MS = 1000;
   function isTreasureSlot(state, slot) {
-    const t = state.indyTreasure.slot;
-    if (!t || t.row !== slot.row || t.col !== slot.col) return false;
-    const spawnedElapsedMs = state.indyTreasure.completedAt ? Date.now() - state.indyTreasure.completedAt : Infinity;
-    const clickedElapsedMs = ui.indyMarkerFlashAt ? Date.now() - ui.indyMarkerFlashAt : Infinity;
-    return spawnedElapsedMs < INDY_TREASURE_MARK_FLASH_MS || clickedElapsedMs < INDY_TREASURE_MARK_FLASH_MS;
+    return Object.entries(state.indyTreasures).some(([instanceId, t]) => {
+      if (!t.slot || t.slot.row !== slot.row || t.slot.col !== slot.col) return false;
+      const spawnedElapsedMs = t.completedAt ? Date.now() - t.completedAt : Infinity;
+      const clickedAt = ui.indyMarkerFlashAt[instanceId];
+      const clickedElapsedMs = clickedAt ? Date.now() - clickedAt : Infinity;
+      return spawnedElapsedMs < INDY_TREASURE_MARK_FLASH_MS || clickedElapsedMs < INDY_TREASURE_MARK_FLASH_MS;
+    });
   }
 
   function onSlotClick(state, slot) {
     // 선택 기준은 개체 하나가 아니라 칸 자체다(사용자 지정 규칙) - 판매 등 액션을
     // 눌러도 그 칸에 뭔가 남아있는 한 선택이 계속 유지된다.
     ui.selectedSlot = slot.occupants.length ? { row: slot.row, col: slot.col } : null;
-    // 인디를 클릭하면 보물이 있는 칸(인디가 서 있는 칸과 다를 수 있음)의 글로우를
-    // 1초간 다시 보여준다(isTreasureSlot 참고).
-    if (slot.occupants.some((o) => o.heroId === 'm_indy')) {
-      ui.indyMarkerFlashAt = Date.now();
+    // 그 인디의 보물이 있는 칸(인디가 서 있는 칸과 다를 수 있음)의 글로우를 1초간
+    // 다시 보여준다(isTreasureSlot 참고) - 인디 개체별로 독립된 트리거라 클릭한
+    // 그 인디 자신의 보물만 반짝이고 다른 인디의 보물엔 영향이 없다.
+    for (const o of slot.occupants) {
+      if (o.heroId === 'm_indy') ui.indyMarkerFlashAt[o.instanceId] = Date.now();
     }
     render(getState());
   }
@@ -1366,6 +1387,15 @@ export function GameScreen({ getState, dispatch, onExit }) {
   function extraStatusText(instance, heroDef) {
     if (instance.heroId === 'm_indy') {
       return `보유 보물: ${instance.indyTreasureTier ? TIER_LABEL[instance.indyTreasureTier] : '없음'}`;
+    }
+    // 채드는 판매(먹이기)할 때마다 확률적으로 능력치가 오르는 방식이라 몇 번
+    // 먹였는지가 아니라 "지금 몇 % 찼는지"가 진행 상황이다(사용자 요청 -
+    // "채드 눌렀을 때 몇 % 찼는지 보여줘"). target(10)이 곧 100%에 해당하는
+    // 수치라 progress를 그대로 %로 보여주면 된다.
+    if (instance.heroId === 'm_chad') {
+      const target = heroDef.immortalCondition?.target ?? 10;
+      const pct = Math.min(target, instance.progress ?? 0);
+      return `기가채드 진행도: ${pct}%`;
     }
     return null;
   }
