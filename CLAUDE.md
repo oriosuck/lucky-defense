@@ -4591,6 +4591,43 @@ column; overflow:hidden`), 스크롤이 필요한 건 미션 목록 하나뿐이
 이미 여러 라운드 전에 전수 크롭됐었다는 걸 재확인하는 목적으로 `getbbox()`도
 같이 확인함 - fill_ratio 93~100%로 문제없음을 확인).
 
+## 기가채드 화살표 보상이 대상 등급과 무관하게 항상 5행운석이던 비대칭 버그 수정
+
+"불멸은 팔면 행운석 6이라고 했다"는 지적을 받았다 - 바로 이전 라운드에서 기가채드의
+"판매(+6💧)"(자기 자신 판매, `sellGigaChad`)와 "판매하기"(화살표로 다른 신화/불멸
+먹이기, `feedMythicToChad`) 두 버튼을 하나로 통합하면서, 화살표 대상에 기가채드
+자기 자신을 추가하고 "자기 자신이면 `sellGigaChad`(+6), 아니면 `feedMythicToChad`
+(+5)"로 분기했었다 - 그런데 `feedMythicToChad`는 대상 등급(`fedTier`)과 무관하게
+항상 `CHAD_FEED_LUCKSTONE`(5)만 지급하고 있어서, 기가채드가 **다른** 불멸 개체를
+먹일 때도(자기 자신이 아닌 경우) 5만 나가는 비대칭이 있었다 - "불멸을 팔면[먹이면]
+6"이라는 규칙이 자기 자신 판매에만 적용되고 있었던 것.
+
+**수정**: `synthesis.js`의 `feedMythicToChad()`에서 보상을 `fedTier === 'immortal'
+? GIGA_CHAD_SELL_LUCKSTONE(6) : CHAD_FEED_LUCKSTONE(5)`로 등급 기준으로 통일했다 -
+"누가 먹이는지"나 "자기 자신인지"가 아니라 "먹히는 대상의 등급"만 본다. 이렇게
+바꾸니 기가채드가 자기 자신(불멸 등급)을 화살표로 지정하는 경우도 이 함수를 그대로
+타면서(`mythicInstanceId === chadInstanceId`, `fedTier` = 기가채드 자신의 티어 =
+'immortal') 자동으로 6을 받게 되어, **별도 함수(`sellGigaChad`) 자체가 완전히
+불필요해졌다** - 통째로 삭제했다(백워드 호환 목적으로 안 남겨둠 - 이 프로젝트
+컨벤션). `GameScreen.js`의 `renderChadArrowLayer()`도 `isSelf` 분기를 없애고
+`feedMythicToChad`만 항상 호출하도록 단순화했다 - 화살표 위 라벨(`title`)도
+"자기 자신인지"가 아니라 대상 등급 기준(`판매(+5💧)`/`판매(+6💧)`)으로 바꿔서,
+다른 불멸을 먹일 때도 미리 +6이라는 걸 알 수 있게 했다(예전엔 다른 불멸을
+먹여도 라벨이 "판매(먹이기)"로만 떠서 실제 보상액을 미리 알 수 없었다).
+
+Playwright로 (1) 기가채드+또다른 불멸(i_captain_roka)+신화(m_ninja)를 필드에
+배치해 화살표 라벨이 각각 정확한지(자기 자신=+6, 다른 불멸=+6, 신화=+5) 확인,
+(2) **버그 시나리오를 직접 재현**해서 "다른" 불멸(자기 자신이 아닌 i_captain_roka)을
+실제로 먹였을 때 정확히 +6이 들어오고 기가채드 본인은 필드에 그대로 남는지(먹힌
+건 roka인지) 확인, (3) 회귀 확인으로 신화 먹이기(+5)와 자기 자신 판매(+6, 기가채드
+소멸) 두 기존 경로도 여전히 정상 동작하는지 확인했다.
+
+**검증 방법**: 이전 라운드들과 동일하게 `window.__debug` 훅(`createHeroInstance`,
+`findAutoPlaceSlot`, `placeInstanceAtSlot`, `getState`/`setState`)을 `main.js`에
+임시로 추가해 Playwright `dispatchEvent`(칸 선택은 pointerdown/pointerup, 버튼
+클릭은 click)로 검증하고 끝난 뒤 다시 제거했다(디버그 전용, 커밋에 남기지 않음 -
+제거 후 재빌드한 JS 번들 해시가 훅 추가 전과 정확히 일치하는 것까지 확인).
+
 ## 빌드/확인 방법
 
 ```bash

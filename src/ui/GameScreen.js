@@ -8,7 +8,6 @@ import {
   craftMythic,
   sellHero,
   feedMythicToChad,
-  sellGigaChad,
   countHeroOnField,
   craftableMythicCount,
 } from '../logic/synthesis.js';
@@ -1132,9 +1131,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 지적("판매버튼이랑 판매 6행운석 버튼이 같이 나와... 판매 버튼 하나만 보이고,
     // 초록색 화살표 똑같이 보이는데... 이게 자기 위에도 뜨는 방식인거야")대로
     // 별도 버튼을 없애고 하나의 "판매하기"로 통합했다 - 화살표 대상 목록에
-    // 기가채드 자기 자신도 포함되도록 renderChadArrowLayer를 확장했고, 그 화살표를
-    // 누르면 (자기 자신이 대상일 때만) feedMythicToChad 대신 sellGigaChad를
-    // 호출해서 기존 +6행운석 보상/필드 제거 로직을 그대로 재사용한다.
+    // 기가채드 자기 자신도 포함되도록 renderChadArrowLayer를 확장했다. 보상은
+    // feedMythicToChad가 대상 등급 기준(신화 5/불멸 6)으로 계산하므로(사용자
+    // 정정 - "불멸은 팔면 행운석 6이라고 했다"), 자기 자신(불멸 등급)을 화살표로
+    // 찍어도 같은 함수 호출만으로 자동으로 6행운석이 나온다 - 별도 함수
+    // (sellGigaChad)는 완전히 제거했다.
     if (instance.heroId === 'm_chad' || instance.heroId === 'i_giga_chad') {
       const active = ui.chadSellMode === instance.instanceId;
       below.push(el('button', {
@@ -1350,7 +1351,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
         const isSelf = occ.instanceId === chad.instanceId;
         if (isSelf && chad.heroId !== 'i_giga_chad') continue;
         if (!isSelf && !allowedTiers.includes(def.tier)) continue;
-        targets.push({ slot, occ, isSelf });
+        targets.push({ slot, occ, tier: def.tier });
       }
     }
     // 먹일 대상이 하나도 없는 상태(필드에 채드 본인 말고 신화/불멸이 없음)에서
@@ -1363,15 +1364,18 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 뒤 "판매하기"를 한 번 더 눌렀을 때 재현됨). 위 !chad 케이스와 같은
     // 패턴으로 여기서도 명시적으로 꺼줘야 한다.
     if (targets.length === 0) { ui.chadSellMode = null; return null; }
-    return el('div', { class: 'chad-arrow-layer' }, targets.map(({ slot, occ, isSelf }) => {
+    // 보상 표기는 자기 자신인지가 아니라 대상 등급 기준(feedMythicToChad와 동일한
+    // 규칙 - 신화 +5/불멸 +6)이다 - 기가채드가 "다른" 불멸을 먹여도 자기 자신을
+    // 먹이는 것과 똑같이 +6이므로, 화살표 라벨도 그 등급 그대로 보여준다.
+    return el('div', { class: 'chad-arrow-layer' }, targets.map(({ slot, occ, tier }) => {
       const rect = fieldCellRect(slot.row, slot.col);
       return el('button', {
         class: 'chad-sell-arrow',
         style: `left:${rect.left + rect.width / 2}%; top:${rect.top}%;`,
-        title: isSelf ? '판매(+6💧)' : '판매(먹이기)',
+        title: tier === 'immortal' ? '판매(+6💧)' : '판매(+5💧)',
         onclick: () => {
           ui.chadSellMode = null;
-          apply(isSelf ? sellGigaChad(state, occ.instanceId) : feedMythicToChad(state, chad.instanceId, occ.instanceId));
+          apply(feedMythicToChad(state, chad.instanceId, occ.instanceId));
         },
       }, [el('span', { text: '⬇' })]);
     }));
