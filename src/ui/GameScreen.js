@@ -305,6 +305,20 @@ export function GameScreen({ getState, dispatch, onExit }) {
       const dy = e.clientY - dragState.startY;
       if (Math.hypot(dx, dy) < DRAG_MOVE_THRESHOLD_PX) return;
       dragState.moved = true;
+      // 선택된 칸의 판매/합성/기타 퀵액션 버튼(.cell-quick-btn)은 위/아래로
+      // 튀어나와서 이웃 칸(특히 바로 위 행) 위에 그대로 겹쳐 그려질 수 있다 -
+      // 그 버튼은 클릭 가능해야 하므로 pointer-events:auto가 명시돼 있는데, 이
+      // 때문에 드래그 도중 elementFromPoint()가 그 버튼 밑에 깔린 실제 필드
+      // 칸을 못 찾고 버튼 자신을 반환해버린다(사용자 리포트 - "버튼쪽에 가려진
+      // 칸에 가려 하면 이동이 안돼"). 실제로 Playwright로 재현: 버튼이 정확히
+      // 위 칸 중앙을 덮고 있어서 그 칸으로의 드래그 이동이 항상 조용히
+      // 실패했다. 드래그가 실제로 시작된 순간(threshold를 넘는 순간)부터
+      // root에 클래스를 달아 이 버튼들만 일시적으로 pointer-events:none으로
+      // 만들어서, 드래그 중에는 그 아래 실제 필드 칸이 히트테스트에 잡히게
+      // 한다 - 버튼 자체의 위치/모양은 그대로 두고(더블탭 확대 방지를 위해
+      // 최근에 늘려둔 간격을 다시 좁히지 않아도 됨), 드래그가 끝나면(endDrag)
+      // 바로 원래대로 되돌린다.
+      root.classList.add('drag-in-progress');
     }
     const target = document.elementFromPoint(e.clientX, e.clientY);
     const cellEl = target?.closest('.field-slot');
@@ -314,7 +328,10 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
   function endDrag(e) {
     pointerDown = false;
-    if (!dragState) return;
+    if (!dragState) {
+      root.classList.remove('drag-in-progress');
+      return;
+    }
     const sourceEl = root.querySelector('.dragging-source');
     if (sourceEl) sourceEl.classList.remove('dragging-source');
     setDragHover(null);
@@ -323,14 +340,26 @@ export function GameScreen({ getState, dispatch, onExit }) {
     if (!moved) {
       // 이동량이 거의 없으면 드래그가 아니라 탭 - 기존 선택 토글 동작을 그대로 수행.
       // (기절이어도 정보 확인용 선택은 막지 않는다 - 실제 이동만 아래에서 막음)
+      root.classList.remove('drag-in-progress');
       const state = getState();
       const slot = state.field.find((s) => s.row === fromRow && s.col === fromCol);
       if (slot) onSlotClick(state, slot);
       return;
     }
-    if (immobilized) return; // 기절 상태에선 드래그 이동 자체가 성립하지 않는다
+    // elementFromPoint()는 drag-in-progress 클래스가 아직 붙어 있는(퀵액션
+    // 버튼이 클릭 통과 상태인) 동안에 호출해야 한다 - 클래스를 먼저 떼버리면
+    // 버튼이 다시 밑에 깔린 필드 칸을 가려서 정작 필요한 순간에 히트테스트가
+    // 실패한다(처음 구현했을 때 실제로 이 순서 버그를 냈다 - 클래스를 함수
+    // 맨 위에서 떼고 나중에 elementFromPoint를 불러서 고침 자체가 무효화됐음,
+    // Playwright로 재현해서 발견함). 그래서 여기서는 아직 클래스를 유지한 채로
+    // 타겟을 먼저 찾고, 그 다음에 뗀다.
+    if (immobilized) {
+      root.classList.remove('drag-in-progress');
+      return; // 기절 상태에선 드래그 이동 자체가 성립하지 않는다
+    }
     const target = document.elementFromPoint(e.clientX, e.clientY);
     const cellEl = target?.closest('.field-slot');
+    root.classList.remove('drag-in-progress');
     if (!cellEl) return;
     const toRow = Number(cellEl.dataset.row);
     const toCol = Number(cellEl.dataset.col);
@@ -348,6 +377,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
   const handlePointerUp = (e) => { endDrag(e); };
   const handlePointerCancel = () => {
     pointerDown = false;
+    root.classList.remove('drag-in-progress');
     const sourceEl = root.querySelector('.dragging-source');
     if (sourceEl) sourceEl.classList.remove('dragging-source');
     setDragHover(null);

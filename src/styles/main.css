@@ -388,6 +388,17 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 .cell-quick-btn.is-disabled { opacity: 0.5; cursor: not-allowed; }
+/* 선택된 칸의 퀵액션 버튼(판매/합성 등)이 위/아래로 튀어나와 이웃 칸(특히 바로
+   위 행) 위에 그대로 겹쳐 그려질 수 있다 - 그 버튼은 클릭 가능해야 해서
+   pointer-events:auto가 있는데, 그 때문에 드래그로 그 칸으로 이동하려 하면
+   elementFromPoint()가 버튼을 먼저 잡아서 밑에 깔린 실제 필드 칸을 못 찾고
+   이동이 조용히 실패했다(사용자 리포트 - "버튼쪽에 가려진 칸에 가려 하면
+   이동이 안돼"). GameScreen.js가 드래그가 실제로 시작되는 순간(threshold를
+   넘는 순간) root에 이 클래스를 달아서, 드래그 중에만 버튼을 클릭 통과
+   상태로 만들고 드래그가 끝나면 즉시 되돌린다 - 버튼 자체의 위치는 그대로
+   둔다(더블탭 확대 방지를 위해 늘려둔 간격을 다시 좁히지 않아도 된다). */
+.drag-in-progress .cell-quick-btn,
+.drag-in-progress .batman-mode-btn { pointer-events: none; }
 /* 판매/합성 버튼은 다른 cell-quick-btn보다 크게(사용자 지적 - 너무 작았음) */
 .cell-quick-sell, .cell-quick-synth {
   padding: 6px 16px; font-size: 15px; border-radius: 10px; border-width: 3px;
