@@ -9,6 +9,7 @@ import { NORMAL_SUMMON_COST_INCREMENT } from '../data/constants.js';
 import {
   createHeroInstance,
   fieldOccupantCount,
+  isFieldPhysicallyFull,
   findAutoPlaceSlot,
   placeInstanceAtSlot,
 } from '../state/gameState.js';
@@ -62,7 +63,11 @@ export function summonNormal(state) {
   if (newState.gold < newState.normalSummonCost) {
     return { success: false, reason: 'not-enough-gold', newState: state };
   }
-  if (fieldOccupantCount(newState) >= newState.fieldMaxCapacity) {
+  // 인원수 상한(fieldOccupantCount)과는 별개로, 임프가 칸을 다 채워버리면 인원수는
+  // 여유가 있어 보여도 물리적으로 놓을 자리가 없을 수 있다(위 isFieldPhysicallyFull
+  // 주석 참고) - 이 경우까지 막아야 롤 결과가 자리를 못 찾고 조용히 사라지면서
+  // 골드만 날아가는 걸 예방한다.
+  if (fieldOccupantCount(newState) >= newState.fieldMaxCapacity || isFieldPhysicallyFull(newState)) {
     return { success: false, reason: 'field-full', newState: state };
   }
 
@@ -100,7 +105,9 @@ export function summonRoulette(state, tier, slotPosition = 'left') {
   // 필드가 꽉 찼으면 소환 자체를 막는다(일반 소환과 동일한 규칙) - 예전엔 자리가
   // 없어도 재화를 깎고 결과를 대기열(pendingPlacementQueue)에 넣기만 해서, 사용자
   // 입장에선 "필드 꽉 찬 채로 룰렛이 돌아가며 재화만 소모되는" 것처럼 보였다.
-  if (fieldOccupantCount(newState) >= newState.fieldMaxCapacity) {
+  // isFieldPhysicallyFull은 임프가 칸을 다 채운 경우까지 잡아낸다(summonNormal과
+  // 동일한 이유).
+  if (fieldOccupantCount(newState) >= newState.fieldMaxCapacity || isFieldPhysicallyFull(newState)) {
     return { success: false, reason: 'field-full', newState: state };
   }
 

@@ -102,6 +102,26 @@ export function fieldOccupantCount(state) {
   );
 }
 
+// 마마 임프는 인원수 상한(fieldOccupantCount)엔 안 잡히지만 칸은 실제로 차지한다
+// (위 fieldOccupantCount 주석 참고) - 그래서 임프가 24칸을 전부 3마리씩 채워버리면
+// 인원수 표시는 여유가 있어 보여도(임프 자체가 카운트 안 되므로) 물리적으로는
+// 새 영웅이 들어갈 자리가 단 한 칸도 없는 상태가 될 수 있다. 이 경우 findAutoPlaceSlot이
+// 항상 null을 반환하는데도 소환 버튼은 인원수만 보고 계속 활성 상태였던 게 버그였다
+// (사용자 지적 - "임프 포함 필드가 꽉차면 마리수가 남아도 소환이 안되어야해").
+// 모든 칸이 더 이상 어떤 영웅도(같은 종류든 다른 종류든) 받을 수 없는 상태인지를
+// 확인한다 - 신화/불멸(칸당 1마리 고정)은 점유된 순간 그 칸이 완전히 막히고,
+// 그 외 등급(임프 포함)은 3마리까지 쌓이면 막힌다. 일반 플레이에서는 칸 24개 ×
+// 3마리 = 72자리인데 인원수 상한(30)을 절대 넘을 수 없어 이 조건이 우연히도
+// 먼저 걸릴 일이 없다 - 임프처럼 상한 밖에서 계속 쌓이는 경우에만 실제로 발동한다.
+export function isFieldPhysicallyFull(state) {
+  return state.field.every((s) => {
+    if (s.occupants.length === 0) return false;
+    const heroDef = HEROES_BY_ID[s.occupants[0].heroId];
+    const isSingleSlotTier = heroDef?.tier === 'mythic' || heroDef?.tier === 'immortal';
+    return isSingleSlotTier || s.occupants.length >= 3;
+  });
+}
+
 export function findSlot(state, row, col) {
   return state.field.find((s) => s.row === row && s.col === col) ?? null;
 }

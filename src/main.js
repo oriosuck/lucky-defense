@@ -12,22 +12,40 @@ const appEl = document.getElementById('app');
 // 그건 preventDefault가 브라우저의 click 합성까지 취소시켜서였다 - 이 프로젝트의
 // 필드 칸 선택/드래그는 click이 아니라 pointerdown/pointerup을 직접 쓰고
 // (pointerup은 touchend보다 먼저 끝나므로 나중에 touchend를 막아도 영향 없음),
-// 버튼만 onclick(click 이벤트)에 의존한다. 그래서 이번엔 버튼과 팝업 배경
+// 버튼만 onclick(click 이벤트)에 의존한다. 그래서 버튼과 팝업 배경
 // 클릭(.popup-overlay, 미션 팝업 닫기용)만 제외하고, 그 외 모든 영역(필드 배경,
 // 빈 칸, 보스, 하늘 등)에서는 같은 지점을 짧은 간격(300ms) 안에 두 번 건드리면
-// 더블탭으로 보고 그 확대만 막는다 - 같은 target일 때만 발동시켜서 서로 다른
-// 두 곳을 빠르게 연달아 누르는 정상적인 조작까지 걸리지 않게 한다.
-let lastBgTouchEnd = { time: 0, target: null };
+// 더블탭으로 보고 그 확대만 막는다.
+//
+// **재발 원인(사용자가 "진짜 어떻게 못해?"라고 재차 지적)**: "같은 지점"을 처음엔
+// `e.target`(DOM 노드 그 자체) 동일성으로 판정했는데, 이 게임은 0.2초마다
+// `root.innerHTML=''`로 전체 DOM을 다시 그리는 구조라(CLAUDE.md에 반복 등장하는
+// 함정 - 몬스터 이동/공격 모션/궁 게이지 등 전부 같은 원인으로 깨졌었다) 필드 위의
+// 캐릭터/칸/보스 같은 요소는 화면상 같은 위치라도 두 번째 탭 시점엔 이미 완전히
+// 새로운 노드로 교체돼 있는 경우가 흔하다 - 그러면 `lastBgTouchEnd.target ===
+// e.target`이 항상 false가 되어 더블탭 판정 자체가 무력화된다("배경(비클릭 영역)"
+// 항목처럼 클릭 핸들러가 없어 재렌더가 드문 영역에서만 우연히 잘 통과됐을 뿐, 필드
+// 위에서는 사실상 거의 항상 실패하고 있었다). DOM 노드가 아니라 **터치 좌표**로
+// "같은 지점"을 판정하도록 바꿨다 - 좌표는 노드가 재생성돼도 그대로라 이 재렌더
+// 구조와 완전히 무관해진다(래핑 컨테이너를 새로 만드는 것보다 이 편이 더 근본적인
+// 해결책 - 컨테이너를 만들어도 그 안의 노드 정체성 문제 자체는 그대로 남는다).
+const DOUBLE_TAP_POS_TOLERANCE_PX = 24;
+let lastBgTouchEnd = { time: 0, x: 0, y: 0 };
 document.addEventListener('touchend', (e) => {
   if (e.target.closest('button, .popup-overlay')) {
-    lastBgTouchEnd = { time: 0, target: null };
+    lastBgTouchEnd = { time: 0, x: 0, y: 0 };
     return;
   }
+  const touch = e.changedTouches[0];
   const now = Date.now();
-  if (now - lastBgTouchEnd.time <= 300 && lastBgTouchEnd.target === e.target) {
+  const withinTime = now - lastBgTouchEnd.time <= 300;
+  const withinPos = touch
+    && Math.abs(touch.clientX - lastBgTouchEnd.x) <= DOUBLE_TAP_POS_TOLERANCE_PX
+    && Math.abs(touch.clientY - lastBgTouchEnd.y) <= DOUBLE_TAP_POS_TOLERANCE_PX;
+  if (withinTime && withinPos) {
     e.preventDefault();
   }
-  lastBgTouchEnd = { time: now, target: e.target };
+  lastBgTouchEnd = { time: now, x: touch?.clientX ?? 0, y: touch?.clientY ?? 0 };
 }, { passive: false });
 
 function swapRoot(node) {

@@ -38,7 +38,7 @@ import {
 import { IMMOBILIZE_GAUGE_FILL_SEC, DELETE_START_AT_TIME_LEFT, DELETE_TRIGGER_AT_TIME_LEFT, INDY_TREASURE_INTERVAL_SEC } from '../logic/waveEvents.js';
 import { GLOBAL_ENHANCE_TRACKS, GLOBAL_ENHANCE_LABEL, GLOBAL_ENHANCE_MAX_LEVEL } from '../data/constants.js';
 import { RAY_SWORD_TIER_LABEL, RAY_SWORD_TIER_COLOR, RAY_SWORD_CRAFT_MAX } from '../data/raySwords.js';
-import { fieldOccupantCount, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
+import { fieldOccupantCount, isFieldPhysicallyFull, FIELD_ROWS, FIELD_COLS } from '../state/gameState.js';
 import { el } from './components/dom.js';
 import { heroImage } from './components/heroVisual.js';
 
@@ -200,15 +200,25 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 요청 - "팝업 뜨는것들은 전부 팝업 외부를 눌렀을 때 자동으로 꺼지게 해줘").
     // 미션 팝업(.popup-overlay)은 이미 자체적으로 어두운 배경 클릭 시 닫히는 로직이
     // 있어서(popup-box 내부는 제외) 여기서는 그 팝업 전체를 "안쪽"으로만 판정해
-    // 건드리지 않는다(이중 처리 방지). 룰렛 팝업이 열려 있을 때는 필드 조작이
-    // 예외적으로 허용되므로(이전 요청 - "룰렛 팝업이 떠있을 때에도 필드에 있는
-    // 캐릭터 조작 가능하게") 필드 칸/액션을 누르는 것도 "안쪽"과 동등하게 취급해
-    // 닫히지 않게 한다.
+    // 건드리지 않는다(이중 처리 방지). 룰렛/강화/신화 팝업은 전체화면을 덮는 모달이
+    // 아니라 하단 시트(.game-popup/.mythic-popup)라 필드 위쪽과 왼쪽 즉시소환 바가
+    // 여전히 보이는데도 조작이 막혀 있었다 - 처음엔 룰렛만 예외를 뒀었는데(사용자가
+    // 그때 룰렛만 콕 집었었음), 이번에 "팝업 떠있을 때 필드 조작 가능하게 해달라
+    // 했잖아"라는 재요청으로 하단 시트 팝업 전부(roulette/enhance/mythic)로
+    // 넓혔다 - 미션 팝업(.popup-overlay)만 전체화면이라 예외 대상이 아니다.
+    // 왼쪽 즉시소환/승급 바(.favorite-bar)도 같은 요청("왼쪽에 신화/불멸 조합
+    // 뜨는거 클릭도 가능하게")으로 이 예외에 추가했다 - 안 그러면 그 버튼을 누르는
+    // 순간 이 pointerdown 핸들러가 먼저 popup을 닫고 render()로 DOM을 통째로
+    // 다시 그려버려서, 뒤이어 오는 click 이벤트가 이미 사라진(고아가 된) 노드를
+    // 대상으로 남아 버튼의 onclick이 실행되지 않는다(CLAUDE.md의 "신화 팝업 클릭이
+    // 잘 안 먹힘" 섹션과 같은 계열의 함정 - pointerdown에서 DOM을 바꾸면 그 제스처의
+    // 나머지 이벤트가 고아 노드를 향하게 된다).
+    const BOTTOM_SHEET_POPUPS = ['roulette', 'enhance', 'mythic'];
     if (ui.popup) {
       const insidePopup = e.target.closest('.game-popup, .mythic-popup, .popup-overlay');
-      const insideFieldWhileRoulette = ui.popup === 'roulette'
-        && e.target.closest('.field-slot, .cell-quick-actions, .chad-arrow-layer');
-      if (!insidePopup && !insideFieldWhileRoulette) {
+      const insideFieldWhilePopupOpen = BOTTOM_SHEET_POPUPS.includes(ui.popup)
+        && e.target.closest('.field-slot, .cell-quick-actions, .chad-arrow-layer, .favorite-bar');
+      if (!insidePopup && !insideFieldWhilePopupOpen) {
         ui.popup = null;
         render(getState());
         return;
@@ -1338,7 +1348,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
       ]),
       el('button', {
         class: 'summon-btn-wrap', title: '소환',
-        disabled: state.gold < state.normalSummonCost || fieldOccupantCount(state) >= state.fieldMaxCapacity,
+        // 임프가 칸을 다 채운 경우(인원수엔 안 잡히지만 물리적으로 자리가 없는
+        // 상태)도 같이 막는다(사용자 지적 - "임프 포함 필드가 꽉차면 마리수가
+        // 남아도 소환이 안되어야해").
+        disabled: state.gold < state.normalSummonCost || fieldOccupantCount(state) >= state.fieldMaxCapacity
+          || isFieldPhysicallyFull(state),
         onclick: () => apply(summonNormal(state)),
       }, [
         el('img', { src: UI_IMAGES.summonBtn, alt: '소환' }),
@@ -1377,7 +1391,7 @@ export function GameScreen({ getState, dispatch, onExit }) {
     // 필드가 꽉 찼으면 재화 소모/결과 처리 이전에 스핀 연출 자체를 시작하지 않는다
     // (summonRoulette도 동일하게 막지만, 그건 결과 처리 시점이라 스핀 애니메이션이
     // 먼저 돌아버리는 게 어색해서 여기서도 미리 막는다).
-    if (fieldOccupantCount(state) >= state.fieldMaxCapacity) return;
+    if (fieldOccupantCount(state) >= state.fieldMaxCapacity || isFieldPhysicallyFull(state)) return;
     ui.spinningTier = r.tier;
     render(getState());
     setTimeout(() => {
@@ -1412,7 +1426,8 @@ export function GameScreen({ getState, dispatch, onExit }) {
         el('span', { class: 'roulette-pct', text: `${Math.round(ROULETTE_SUCCESS_RATE[r.tier] * 100)}%` }),
         el('button', {
           class: `roulette-wheel-btn${spinning ? ' spinning' : ''}`,
-          disabled: state.luckstone < cost || Boolean(ui.spinningTier) || fieldOccupantCount(state) >= state.fieldMaxCapacity,
+          disabled: state.luckstone < cost || Boolean(ui.spinningTier) || fieldOccupantCount(state) >= state.fieldMaxCapacity
+            || isFieldPhysicallyFull(state),
           onclick: () => onRouletteWheelClick(r),
         }, [
           el('div', { class: `roulette-wheel-circle ${r.colorClass}` }, [
