@@ -647,7 +647,22 @@ export function GameScreen({ getState, dispatch, onExit }) {
       // 토큰과 같은 좌표계에서 그린다(여기서는 더 이상 그리지 않음).
       // 보물 위치는 필드 임의의 칸에 랜덤 등장한다(기획서 명시 사항) - 작은 코너 아이콘이
       // 아니라 칸 전체가 노란색으로 빛나야 눈에 띈다는 사용자 지적을 반영해 글로우로 표시.
-      if (isTreasureSlot(state, slot)) cell.appendChild(el('div', { class: 'treasure-mark' }, [el('span', { text: '💰' })]));
+      // "신화 인게임에서 깜빡거리는 버그" 리포트의 원인 - `.treasure-mark`의
+      // `animation: treasure-glow 1s infinite`가 고정 delay 없이 걸려 있어서,
+      // 게임 루프가 0.2초마다 전체 DOM을 다시 그리는 이 프로젝트 구조상(main.js)
+      // 매번 새로 생성되는 이 div가 항상 0% 키프레임(opacity 0.65)부터 다시
+      // 재생되다가 0.2초 만에 또 잘려나가길 반복해서 부드럽게 도는 대신 파르르
+      // 떠는 것처럼 보였다(몬스터 이동/공격 모션과 같은 계열의 함정, CLAUDE.md 참고).
+      // 인디(신화)가 보물을 찾는 동안 계속 눈에 띄는 요소라 "신화" 버그로 체감된
+      // 것으로 보인다 - 다른 이펙트들과 같은 방식으로 실제 경과 시간(`Date.now()`를
+      // 1초 주기로 나눈 나머지) 기준 `animation-delay`를 매 렌더 다시 계산해서 넣는다.
+      if (isTreasureSlot(state, slot)) {
+        const glowDelayMs = Date.now() % 1000;
+        cell.appendChild(el('div', {
+          class: 'treasure-mark',
+          style: `animation-delay:-${glowDelayMs}ms;`,
+        }, [el('span', { text: '💰' })]));
+      }
       grid.appendChild(cell);
     }
     return grid;
@@ -734,60 +749,58 @@ export function GameScreen({ getState, dispatch, onExit }) {
   const MYTHIC_TOKEN_SCALE = 1.6875;
   // "신화들 크기가 다 다르고 불멸 크기가 다 다르다 - 일반~전설은 전기로봇 크기,
   // 신화/불멸은 인디 크기로 맞춰달라"는 사용자 지정에 따라 크기 보정 체계를
-  // 다시 짰다. `object-fit:contain`은 이미지 캔버스의 가로세로 비율과 박스 비율을
-  // 비교해서 어느 만큼 크게 그려지는지 결정하는데(알파 bbox 크롭은 이미 다
-  // 돼 있어도(93~100% 채움) 이미지 "캔버스" 자체의 가로세로 비율이 캐릭터마다
-  // 크게 다르면 - 박스보다 훨씬 납작한 이미지일수록 위아래로 레터박스(빈 여백)가
-  // 생겨 같은 박스 안에서도 훨씬 작아 보인다), 보정 없이는 캐릭터마다 실제
-  // 렌더 크기가 들쭉날쭉하다. `RB = HERO_TOKEN_WIDTH_RATIO/HERO_TOKEN_HEIGHT_RATIO`
-  // (토큰 박스 자체의 가로세로 비율)를 기준으로, "이 이미지가 박스 높이를 완전히
-  // 채우려면 박스를 얼마나 더 키워야 하는지"(`max(이미지 비율, RB) / 기준
-  // 캐릭터의 이미지 비율`)를 캐릭터별로 계산해서 표로 만들었다 - 이 공식대로면
-  // 기준 캐릭터 자신의 보정값은 정확히 1(현재 크기 그대로)이 되고, 나머지는
-  // 전부 기준 캐릭터와 정확히 같은 렌더 높이에 맞춰진다(박스 가로세로 비율은
-  // 상쇄돼서 사라지므로, 계산에 쓴 RB 값 자체의 정밀도와 무관하게 등호가
-  // 성립한다). 알파 bbox 실측(Python Pillow `getbbox()`)으로 89장 전체를 다시
-  // 쟀다.
+  // 처음 도입했었는데(높이를 정확히 맞추는 공식), 실제로 배포해보니 "높이를
+  // 맞춘다기보다는 비슷한 크기(비율)면 좋겠다 - 서있는 애들은 인디와 비슷해도
+  // 되지만 그보다 10% 낮추고, 낮은 자세인 애들은 알아서 작게"라는 재지적을
+  // 받았다 - 순수 높이 맞추기는 기가채드처럼 이미지가 납작한 캐릭터를 인디와
+  // 같은 높이로 억지로 맞추려다 보니 폭이 인디의 2배 넘게 부풀어(칸을 넘어 옆칸
+  // 까지 침범) "너무 크다"는 결과를 냈었다.
   //
-  // **주의(트레이드오프)**: 신화/불멸 그룹은 이 공식을 캡 없이 그대로 적용했다 -
-  // 이전 라운드엔 "이웃 칸 침범이 심해질 것"을 우려해 보정값을 1.6배로 캡을
-  // 걸어뒀었는데(그 결과가 바로 이번에 지적받은 "신화들 크기가 다 다르다"는
-  // 문제였다 - 캡에 걸린 쪽이 부자연스럽게 작아 보였다), 이번엔 "인디 정도로
-  // 크게"라는 요청이 명확해서 그 캡을 없앴다. 그 대가로 이미지가 유독 납작한
-  // 일부 캐릭터(기가채드 Ri=1.79, 로카/탑베인 Ri=1.60 등)는 보정값이 2.6~3.2배까지
-  // 커져서, 인디와 같은 세로 높이를 맞추려다 보니 가로 폭이 칸 하나를 넘어 옆칸
-  // 쪽으로 상당히 넓게 걸치게 된다(칸 밖으로 넘치는 것 자체는 신화/불멸에
-  // 기존에도 허용된 디자인이지만, 이번엔 그 정도가 이전보다 훨씬 커졌다) -
-  // 실제로 너무 넓어 보이면 이 캡을 다시 걸어야 할 수 있다.
+  // 그래서 높이가 아니라 **면적(전체 크기)**을 맞추는 방식으로 바꿨다. 이미지
+  // 종횡비 Ri, 박스 종횡비 RB에 대해 `object-fit:contain`이 실제로 그리는
+  // 콘텐츠의 면적은 `S² × Hb² × f(Ri)`(S=배율, Hb=박스 높이 기준값)이고
+  // `f(Ri) = Ri (Ri≤RB일 때, 이미 박스를 꽉 채움) 또는 RB²/Ri (Ri>RB일 때,
+  // 납작해서 위아래 여백이 생김)`이다 - 이 89장 안에서는 전부 Ri>RB(모든
+  // 이미지가 박스보다 납작함)라서 사실상 항상 `f(Ri)=RB²/Ri`가 쓰인다. 면적을
+  // 기준 캐릭터와 맞추려면 `S_h = S_ref × sqrt(f(Ri_ref)/f(Ri_h))`인데,
+  // f(Ri)=RB²/Ri 형태에서는 RB가 완전히 상쇄돼 `S_h = S_ref × sqrt(Ri_h/Ri_ref)`로
+  // 단순화된다 - 순수 이미지 종횡비 비율의 제곱근만으로 배율이 정해지므로,
+  // 높이 맞추기(Ri에 선형 비례)보다 훨씬 완만하게 반응한다(제곱근이 극단값을
+  // 눌러준다). 결과적으로 이미지가 원래 세로로 긴("서 있는") 캐릭터는 높이가
+  // 커지고, 원래 가로로 넓은("누워있는"/웅크린) 캐릭터는 면적은 비슷해도
+  // 높이 자체는 자연히 더 작아진다 - "낮은 자세인 애들은 알아서 작게" 요구사항이
+  // 이 공식의 자연스러운 결과로 충족된다. 알파 bbox 실측(Python Pillow
+  // `getbbox()`)으로 89장 전체 Ri를 다시 쟀다.
+  //
+  // 신화/불멸은 기준(인디) 자신의 배율도 `S_ref=0.9`(사용자 지정 - "서있는 애들은
+  // 인디랑 비슷해도 될 거 같긴 한데 그거보다 10% 높이를 낮추고")로 둬서, 인디
+  // 자신도 예전(높이 100% 맞춤) 대비 10% 작아졌다 - 높이는 S에 선형 비례하므로
+  // 이 10%는 그대로 "인디의 새 높이 = 예전 높이의 90%"로 반영된다. 일반~전설은
+  // 기준(전기로봇) 자신을 `S_ref=1`(그대로) 유지한다.
   const MYTHIC_SIZE_COMPENSATION = {
-    i_ace_batman: 1.521, i_ancient_chona: 1.484, i_archmage_gigi: 1.684, i_awakened_hailey: 2.174,
-    i_blob_gang: 2.174, i_boss_gorazo: 2.222, i_captain_roka: 2.904, i_death_frog: 2.431,
-    i_death_frog_evolved: 1.818, i_demon_lord_dragon: 1.818, i_devil_monopoly: 1.733, i_dr_pulse: 2.000,
-    i_ghost_ninja: 1.818, i_giga_chad: 3.247, i_grand_cat_mage: 2.156, i_grand_mama: 1.641,
-    i_hero_ray: 2.243, i_im_meyaong: 1.306, i_knight_lancelot: 2.003, i_noise_king_penguin: 1.752,
-    i_orc_leader: 2.069, i_primal_bamba: 2.431, i_queen_coldi: 2.144, i_sage_kun: 2.291,
-    i_sky_dragon_uchi: 1.955, i_spacetime_ato: 2.174, i_super_gravity_bomb: 1.869, i_swarm_tar: 1.928,
-    i_top_bane: 2.904, m_ato: 1.232, m_bamba: 2.168, m_bane: 2.622,
-    m_batman: 1.478, m_blob: 1.408, m_cat_mage: 1.995, m_chad: 1.530,
-    m_chona: 2.013, m_coldi: 1.928, m_dragon: 1.911, m_frog_prince: 2.127,
-    m_gigi: 1.641, m_gorazo: 1.626, m_gravity_bomb: 1.945, m_hailey: 2.210,
-    m_indy: 1.390, m_iron_meyaong: 2.451, m_lancelot: 1.232, m_mama: 1.656,
-    m_master_kun: 1.596, m_monopoly_man: 1.833, m_ninja: 1.197, m_orc_shaman: 1.422,
-    m_penguin_musician: 1.979, m_pulse_generator: 1.656, m_ray: 1.749, m_rocketchu: 2.255,
-    m_roka: 2.600, m_tar: 2.088, m_uchi: 2.033, m_watt: 2.684,
+    i_ace_batman: 0.942, i_ancient_chona: 0.930, i_archmage_gigi: 0.991, i_awakened_hailey: 1.126,
+    i_blob_gang: 1.126, i_boss_gorazo: 1.138, i_captain_roka: 1.301, i_death_frog: 1.190,
+    i_death_frog_evolved: 1.030, i_demon_lord_dragon: 1.030, i_devil_monopoly: 1.005, i_dr_pulse: 1.080,
+    i_ghost_ninja: 1.030, i_giga_chad: 1.376, i_grand_cat_mage: 1.121, i_grand_mama: 0.978,
+    i_hero_ray: 1.144, i_im_meyaong: 0.872, i_knight_lancelot: 1.081, i_noise_king_penguin: 1.011,
+    i_orc_leader: 1.098, i_primal_bamba: 1.190, i_queen_coldi: 1.118, i_sage_kun: 1.156,
+    i_sky_dragon_uchi: 1.067, i_spacetime_ato: 1.126, i_super_gravity_bomb: 1.044, i_swarm_tar: 1.060,
+    i_top_bane: 1.301, m_ato: 0.847, m_bamba: 1.124, m_bane: 1.236,
+    m_batman: 0.928, m_blob: 0.906, m_cat_mage: 1.078, m_chad: 0.944,
+    m_chona: 1.083, m_coldi: 1.060, m_dragon: 1.055, m_frog_prince: 1.113,
+    m_gigi: 0.978, m_gorazo: 0.974, m_gravity_bomb: 1.065, m_hailey: 1.135,
+    m_indy: 0.900, m_iron_meyaong: 1.195, m_lancelot: 0.847, m_mama: 0.982,
+    m_master_kun: 0.965, m_monopoly_man: 1.034, m_ninja: 0.835, m_orc_shaman: 0.911,
+    m_penguin_musician: 1.074, m_pulse_generator: 0.982, m_ray: 1.010, m_rocketchu: 1.146,
+    m_roka: 1.231, m_tar: 1.103, m_uchi: 1.089, m_watt: 1.251,
   };
-  // 일반~전설 등급도 같은 이유(이미지 캔버스 비율 불일치)로 캐릭터마다 실제
-  // 렌더 크기가 달랐다 - 예전엔 전설만 별도로 50% 키우는 `LEGENDARY_TOKEN_SCALE`
-  // 하나뿐이었는데(전설 등급 내에서도 여전히 들쭉날쭉했음), 위 신화/불멸과 같은
-  // 공식으로 일반~전설 19종 전부를 "전기로봇(h_electric_robot)과 같은 렌더
-  // 높이"에 맞춰 재계산했다(기준을 전기로봇으로 잡은 건 사용자 지정 - "일반~전설까지는
-  // 지금 전기로봇 크기랑 비슷해보이게 조정"). `LEGENDARY_TOKEN_SCALE`은 이제
-  // 필요 없어져서 삭제했다 - 등급 구분 없이 이 표 하나로 통일.
+  // 일반~전설도 같은 면적 기반 공식으로 재계산했다(기준: 전기로봇). `LEGENDARY_
+  // TOKEN_SCALE`은 더 이상 필요 없어져서 삭제 - 등급 구분 없이 이 표 하나로 통일.
   const TIER_SIZE_COMPENSATION = {
-    n_archer: 1.404, n_thrower: 1.620, n_barbarian: 1.149, n_water_spirit: 1.194, n_bandit: 1.419,
-    r_ranger: 1.147, r_shock_robot: 1.343, r_paladin: 1.164, r_sandman: 1.104, r_demon_soldier: 1.194,
-    h_electric_robot: 1.000, h_tree: 1.504, h_hunter: 1.469, h_eagle_general: 1.164, h_wolf_warrior: 1.735,
-    l_warmachine: 1.785, l_tiger_master: 1.644, l_storm_giant: 1.662, l_sheriff: 1.838,
+    n_archer: 1.185, n_thrower: 1.273, n_barbarian: 1.072, n_water_spirit: 1.093, n_bandit: 1.191,
+    r_ranger: 1.071, r_shock_robot: 1.159, r_paladin: 1.079, r_sandman: 1.051, r_demon_soldier: 1.093,
+    h_electric_robot: 1.000, h_tree: 1.226, h_hunter: 1.212, h_eagle_general: 1.079, h_wolf_warrior: 1.317,
+    l_warmachine: 1.336, l_tiger_master: 1.282, l_storm_giant: 1.289, l_sheriff: 1.356,
   };
   const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
   // 머리 위 숫자 배지(로카 탄약/배트맨 강화 레벨 공용) 위치 - 토큰 박스
@@ -1049,17 +1062,23 @@ export function GameScreen({ getState, dispatch, onExit }) {
 
       // 기절 사슬 아이콘 - 칸 구석의 작은 아이콘이 아니라 캐릭터 바로
       // 앞(위)을 덮는 큰 아이콘으로 표시해달라는 사용자 지적(참고 이미지: 캐릭터
-      // 크기만큼 큰 사슬 X가 캐릭터 앞에 겹쳐 보임). 캐릭터 토큰과 같은 좌표계
-      // (cellCenterX/baseTop/tokenWidth/tokenHeight)를 그대로 재사용한다. 처음엔
-      // 1.6/1.15배로 키웠는데 사용자가 "너무 크다"고 다시 줄여달라고 해서
-      // 캐릭터 크기에 더 가깝게(1.05/0.9배) 낮췄다 - 여전히 캐릭터보다 살짝 크게
-      // 덮으면서도 화면을 압도하지 않는다.
+      // 크기만큼 큰 사슬 X가 캐릭터 앞에 겹쳐 보임). 처음엔 실제 캐릭터 토큰과
+      // 같은 좌표계(tokenWidth/tokenHeight)를 그대로 썼는데, 신화/불멸은
+      // sizeScale이 훨씬 커서(캐릭터 크기 재계산 라운드 이후 특히) 사슬도 같이
+      // 커져 화면을 압도했다(사용자 지적 - "신화 기절시킬 때 사슬도 너무 커.
+      // 사슬 크기는 항상 동일하게 가자. 일반 기준으로 사슬 크기를 신화/불멸에도
+      // 적용하는거야 위치랑") - sizeScale=1(일반 등급 기준) 고정 크기의 참조
+      // 박스를 별도로 계산해서, 실제로 기절한 캐릭터의 등급/크기와 무관하게
+      // 항상 같은 크기·같은 위치(칸 정중앙 기준)로 그린다.
       if (isImmobilized(state, slot)) {
-        const chainWidth = tokenWidth * 1.05;
-        const chainHeight = tokenHeight * 0.9;
+        const refTokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO;
+        const refTokenWidth = rect.width * HERO_TOKEN_WIDTH_RATIO;
+        const refBaseTop = rect.top + rect.height / 2 - refTokenHeight;
+        const chainWidth = refTokenWidth * 1.05;
+        const chainHeight = refTokenHeight * 0.9;
         layer.appendChild(el('div', {
           class: 'stage-immobilize-mark',
-          style: `left:${cellCenterX}%; top:${baseTop + tokenHeight / 2}%; width:${chainWidth}%; height:${chainHeight}%; z-index:${20 + slot.row};`,
+          style: `left:${cellCenterX}%; top:${refBaseTop + refTokenHeight / 2}%; width:${chainWidth}%; height:${chainHeight}%; z-index:${20 + slot.row};`,
         }, [el('img', { src: UI_IMAGES.immobilizeIcon, alt: '기절' })]));
       }
 
