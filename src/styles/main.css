@@ -670,8 +670,16 @@ body {
    커질수록 박스 자체가 아래로 밀렸다가 그 상태로 위로 translate되므로 순 이동량은
    그대로 아래쪽으로 증가). 실제로 처음 +10px로 바꿔서 재보니 오히려 8.7px로
    더 가까워져서 이 함정에 걸렸다는 걸 알아챘다 - 멀리 띄우려면 margin-top을 더
-   음수로(캐릭터 반대 방향) 줘야 한다. */
-.cell-quick-stack-above { transform: translate(-50%, -100%); margin-top: -18px; }
+   음수로(캐릭터 반대 방향) 줘야 한다.
+   **추가 발견(재조정)**: 위 -18px는 1마리 캐릭터 기준으로만 실측한 값이었다 -
+   3마리가 쌓인 칸(`stackOffsets(3)`)은 앞쪽 캐릭터가 `dy:0.2`만큼 아래(칸 중앙
+   쪽)로 더 내려와 있어서 판매 버튼과의 실제 거리가 21.9px까지 좁혀져 다시
+   24px 허용 오차 밑으로 떨어졌다 - "캐릭터 클릭하고 한번 더 클릭하면 확대된다"는
+   재리포트의 실질적 원인. -32px로 한 번 더 멀리 띄워서 3마리 스택 기준으로도
+   35.9px 확보(1마리 기준은 이 값이면 더 여유로움). 버튼 위치를 조정할 때는
+   항상 스택 캐릭터 수(1/2/3마리)별로 각각 실측할 것 - 1마리만 확인하고 넘어가면
+   이번처럼 다마리 스택에서 재발한다. */
+.cell-quick-stack-above { transform: translate(-50%, -100%); margin-top: -32px; }
 .cell-quick-stack-below { transform: translate(-50%, 0); margin-top: 4px; }
 .cell-status-badge {
   pointer-events: none;
