@@ -192,6 +192,38 @@ if (window.visualViewport) {
   });
 }
 
+// "게임 시작 후(필드 화면)에서 크롬 창 자체에 세로 스크롤바가 생긴다"는 리포트를
+// 받고 스크린샷을 확인했다 - 화면 위쪽(WAVE 배지/몬스터 카운트 바)이 통째로 잘려서
+// 안 보이고 라운드 종료 카운트다운 배지가 화면 맨 위 가장자리에 살짝 걸쳐 잘린
+// 채로만 보였다. `html,body`에 이미 `overflow:hidden + position:fixed`를 걸어뒀는데도
+// (위 "모바일 페이지 스크롤/바운스 고정" 섹션 참고 - 그동안 잘 막아왔다) 이번엔
+// 페이지 자체가 스크롤된 것처럼 보인다 - 브라우저 주소창이 늘어나 있는(스크린샷
+// 상단에 URL 입력창이 전체 펼쳐진 상태) 순간의 스크린샷이라, 모바일 브라우저의
+// 주소창 펼침/접힘이 `position:fixed + inset:0`인 body를 "레이아웃 뷰포트"(주소창이
+// 접혔을 때 기준의 더 큰 뷰포트) 기준으로 고정시키는 유명한 함정과 맞아떨어진다 -
+// 주소창이 펼쳐져 실제 보이는 영역(비주얼 뷰포트)이 줄어들면 `position:fixed`
+// 요소가 그 차이만큼 아래로 밀려나 위쪽이 화면 밖으로 나가고, 그 상태에서
+// 브라우저가 페이지를 실제로 살짝 스크롤시켜버리는 조합이 이 문제를 만드는
+// 것으로 보인다. `overflow:hidden`만으로는(이 프로젝트에서 계속 그래왔듯) 특정
+// 모바일 브라우저에서 완전히 막히지 않을 수 있으니, 예방과 별개로 "혹시 스크롤이
+// 됐다면 즉시 (0,0)으로 되돌리는" 사후 교정을 하나 더 건다(위 visualViewport
+// 확대 되돌림과 같은 계열의 안전망) - 주소창 펼침/접힘으로 뷰포트가 바뀔 때마다
+// 발생하는 `visualViewport.resize`, 그리고 만에 하나 실제로 스크롤이 발생하면
+// 곧바로 잡아내는 `window.scroll` 이벤트 둘 다에 건다. 이 페이지엔 의도된 window/
+// document 스크롤이 전혀 없으므로(있는 스크롤은 전부 `.hero-select-screen`/
+// `.mission-list`처럼 특정 자식 요소 내부 스크롤) 조건 없이 무조건 (0,0)으로
+// 되돌려도 정상 조작을 방해하지 않는다.
+function resetPageScroll() {
+  if (window.scrollX !== 0 || window.scrollY !== 0) {
+    window.scrollTo(0, 0);
+  }
+}
+window.addEventListener('load', resetPageScroll);
+window.addEventListener('scroll', resetPageScroll, { passive: true });
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', resetPageScroll);
+}
+
 function swapRoot(node) {
   appEl.innerHTML = '';
   appEl.appendChild(node);
