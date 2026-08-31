@@ -69,14 +69,27 @@ function isDoubleTap(lastState, x, y) {
   return result;
 }
 
+// **버그: "판매버튼 연속으로 누르다 배경같은 다른곳 눌리면 확대돼"** - 예전엔 버튼을
+// 탭하면 추적 상태(lastBgTouchStart)를 {time:0,x:0,y:0}으로 완전히 초기화했다.
+// 그런데 브라우저의 네이티브 더블탭-확대 인식은 "이전 탭이 버튼이었는지 배경이었는지"를
+// 전혀 구분하지 않고 순수하게 화면 좌표/시간만 본다 - 버튼을 눌렀다가 바로 다음
+// 탭이 그 근처 배경(칸이 재배치되거나 손가락이 살짝 빗나간 경우 등)에 떨어지면,
+// 브라우저 입장에선 명백한 더블탭인데도 우리 추적 상태는 직전 버튼 탭 때 이미
+// 리셋돼 있어서(시간이 0이라 항상 "허용 창을 벗어남"으로 판정) 이 배경 탭에
+// preventDefault를 걸지 못했다 - 지금까지 리포트받은 "더블탭 확대"의 상당수가
+// 사실 이 경로였을 가능성이 높다. 수정: 탭이 버튼/팝업배경 위였든 아니든 추적
+// 상태는 항상 갱신한다(isDoubleTap을 무조건 호출) - "이 탭에서 preventDefault를
+// 실제로 부를지"만 대상 요소로 갈라서, 지금 이 탭이 버튼/팝업배경이면 여전히
+// 건너뛴다(버튼 클릭 반응성 보존, PR #43과 동일한 이유). 이러면 버튼→배경/
+// 배경→버튼/버튼→버튼/배경→배경 네 조합 전부 정확한 이전 탭 위치와 비교되고,
+// 실제로 막아야 하는 건 "지금 탭이 버튼이 아닌 경우"뿐이라 회귀 없이 해결된다.
 let lastBgTouchStart = { time: 0, x: 0, y: 0 };
 document.addEventListener('touchstart', (e) => {
-  if (e.target.closest('button') || e.target.classList?.contains('popup-overlay')) {
-    lastBgTouchStart = { time: 0, x: 0, y: 0 };
-    return;
-  }
   const touch = e.touches[0];
-  if (touch && isDoubleTap(lastBgTouchStart, touch.clientX, touch.clientY)) {
+  if (!touch) return;
+  const wasDoubleTap = isDoubleTap(lastBgTouchStart, touch.clientX, touch.clientY);
+  const isExcluded = e.target.closest('button') || e.target.classList?.contains('popup-overlay');
+  if (wasDoubleTap && !isExcluded) {
     e.preventDefault();
   }
 }, { passive: false });
@@ -121,14 +134,14 @@ document.addEventListener('touchstart', (e) => {
 // 겹치지 않는다(별도의 lastState로 추적 - 펜과 손가락을 같은 타이머로 섞으면
 // "펜으로 한 번, 손가락으로 한 번"처럼 서로 다른 입력 수단의 탭이 더블탭으로
 // 잘못 묶일 수 있다).
+// 위 touchstart 블록과 같은 이유로(버튼 탭이 추적 상태를 지우면 그 다음 배경 탭을
+// 놓친다) 여기도 추적은 항상 하고 preventDefault만 대상으로 가른다.
 let lastPenPointerDown = { time: 0, x: 0, y: 0 };
 document.addEventListener('pointerdown', (e) => {
   if (e.pointerType !== 'pen') return;
-  if (e.target.closest('button') || e.target.classList?.contains('popup-overlay')) {
-    lastPenPointerDown = { time: 0, x: 0, y: 0 };
-    return;
-  }
-  if (isDoubleTap(lastPenPointerDown, e.clientX, e.clientY)) {
+  const wasDoubleTap = isDoubleTap(lastPenPointerDown, e.clientX, e.clientY);
+  const isExcluded = e.target.closest('button') || e.target.classList?.contains('popup-overlay');
+  if (wasDoubleTap && !isExcluded) {
     e.preventDefault();
   }
 });
