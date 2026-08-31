@@ -81,6 +81,32 @@ document.addEventListener('touchstart', (e) => {
   }
 }, { passive: false });
 
+// 사용자가 찾아준 예시 코드 중 "손가락 2개 이상이 닿으면 무조건 preventDefault"
+// (touchstart의 `event.touches.length > 1`) 부분 - 핀치줌은 지금까지 이 프로젝트가
+// 한 번도 막은 적이 없던 별개의 제스처다(위 로직은 한 손가락 더블탭만 본다).
+// 이 게임은 한 손가락 탭/드래그만으로 조작하도록 설계돼 있어서(두 손가락 이상이
+// 동시에 닿는 정상적인 조작 자체가 없음) 무조건 막아도 부작용이 없다 - 같은
+// 예시 코드의 나머지 절반(touchend 기반 300ms 더블탭 판정)은 넣지 않았다,
+// 아래 참고.
+document.addEventListener('touchstart', (e) => {
+  if (e.touches.length > 1) {
+    e.preventDefault();
+  }
+}, { passive: false });
+
+// 같은 예시 코드에 같이 있던 touchend 기반 더블탭 판정("이전 touchend로부터
+// 300ms 이내면 preventDefault")은 **의도적으로 넣지 않았다** - 이 프로젝트가
+// 예전에 정확히 이 방식(touchend + 고정 시간창 + 무조건 preventDefault)을 썼다가
+// 실제로 겪은 회귀였다(PR #43 - 이 파일 아래 다른 주석 참고): touchend에서
+// preventDefault를 부르면 그 터치가 합성하는 click 이벤트 자체가 취소되는데,
+// 이 게임은 소환 버튼처럼 빠르게 연속으로 두 번 이상 누르는 게 정상 조작인
+// 곳이 많아서 "300ms 안의 두 번째 탭"이 전부 걸려 두 번째 클릭이 씹혔다 -
+// 사용자가 "빠르게 연타하는게 안돼"라고 리포트해서 되돌렸다. touchend는 손을
+// 뗄 때 발생해서 일부 브라우저가 그보다 이른 touchstart 시점에 이미 확대
+// 여부를 결정해버리는 문제도 있어 지금은 touchstart 기반으로 이미 옮겨져
+// 있다(위 lastBgTouchStart 블록). 같은 실패를 반복하지 않기 위해 이 절반은
+// 빼고 손가락 2개 이상 감지 부분만 반영했다.
+
 // 애플펜슬로만 재현되고 손가락으로는 재현이 안 된다는 사용자 리포트를 받았다 -
 // 이건 지금까지의 "iOS가 전반적으로 예방을 무시한다"는 가설보다 훨씬 구체적인
 // 단서다. iPadOS Safari에서 애플펜슬 입력은 Touch 객체의 `touchType`이
