@@ -107,6 +107,19 @@ document.addEventListener('pointerdown', (e) => {
   }
 });
 
+// 사용자가 `gesturestart`에 `preventDefault()`를 걸어보라고 제안해서 추가했다.
+// **주의**: `gesturestart`/`gesturechange`/`gestureend`는 Safari 전용 이벤트로,
+// 두 손가락으로 하는 핀치 확대/축소·회전 제스처가 시작될 때만 발생한다 - 한
+// 손가락으로 같은 자리를 빠르게 두 번 두드리는 더블탭-확대 제스처에는 애초에
+// 발생하지 않는 별개의 이벤트다(MDN/WebKit 문서 기준). 즉 이걸 막아도 지금
+// 리포트받고 있는 더블탭 확대 자체는 못 잡을 가능성이 높다 - 그래도 핀치
+// 확대까지 막아두면 사용자가 "더블탭"이라고 부르는 것 중 일부가 실은 두 손가락
+// 제스처였을 가능성까지 커버할 수 있고, 부작용 없이 추가할 수 있는 안전한
+// 방어선이라 요청대로 넣었다.
+document.addEventListener('gesturestart', (e) => {
+  e.preventDefault();
+});
+
 // 위 touchstart 기반 "예방"은 헤드리스 Chromium 테스트로는 항상 정상 동작하는
 // 것까지 확인했는데(등록된 리스너가 실제로 두 번째 탭에서 preventDefault를
 // 거는 것까지 재현) 사용자가 "언제 어디서나, 기능 자체가 안 된다"고 재차
