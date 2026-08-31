@@ -732,55 +732,63 @@ export function GameScreen({ getState, dispatch, onExit }) {
   const HERO_TOKEN_WIDTH_RATIO = 0.44;
   const IMP_TOKEN_SCALE = 0.5; // 마마 임프는 다른 캐릭터의 절반 크기(사용자 지적 - 너무 컸음)
   const MYTHIC_TOKEN_SCALE = 1.6875;
-  // "신화랑 불멸들 크기좀 똑같이 맞춰주면 좋겠어" - MYTHIC_TOKEN_SCALE은 모든 신화/불멸
-  // 토큰의 박스(가로/세로)를 동일 비율로 키우지만, 그 박스 안에 실제로 어느 만큼
-  // 크게 그려지는지는 `object-fit:contain`이 이미지 자체의 가로세로 비율과 박스
-  // 비율을 비교해서 결정한다 - 알파 bbox 크롭은 이미 다 돼 있어도(93~100% 채움,
-  // 전수 확인함) 이미지 "캔버스"의 가로세로 비율 자체가 캐릭터마다 크게 다르면
-  // (m_ninja 87×128=0.68, i_giga_chad 128×70=1.83 - 박스 비율 약 0.675 기준으로
-  // 2.7배까지 차이) 박스보다 훨씬 납작한 이미지는 위아래로 레터박스(빈 여백)가
-  // 생겨 같은 박스 안에서도 훨씬 작아 보인다(레전더리 등급 크기 보정 때는 이
-  // 원인을 "알파 여백" 탓으로만 짚었었는데, 실제로는 이 종횡비 불일치가 진짜
-  // 원인이었다 - 이번에 60장(신화 31+불멸 29) 전수 실측으로 확인). 캐릭터별로
-  // "이 이미지가 박스 높이를 꽉 채우려면 박스를 얼마나 더 키워야 하는지"
-  // (이미지 종횡비 / 박스 종횡비, 1 미만이면 이미 꽉 차므로 보정 없음)를 계산해서
-  // 표로 만들었다 - 처음엔 필드 칸 1개 너비 근처(1.35배)로 캡을 걸었는데 실제
-  // 스크린샷으로 확인해보니 가장 납작한 이미지들(기가채드/로카 등)은 여전히
-  // 다른 캐릭터 대비 눈에 띄게 작아 보여서, 1.6배까지 캡을 완화했다(그 이상은
-  // 이웃 칸 침범이 심해질 것으로 판단해 지양 - 신화/불멸이 칸 밖으로 살짝
-  // 넘치는 건 기존에도 허용된 디자인이지만 그 이상은 부자연스러워짐). 캡에
-  // 걸리는 다수는 결과적으로 같은 상한값을 공유하게 되지만, 이미
-  // 종횡비가 박스와 비슷해 보정이 거의 필요 없는 소수(닌자/아토/랜슬롯/인디 등,
-  // 세로로 긴 이미지)는 표에 있는 훨씬 작은 고유값을 그대로 쓴다 - 룰렛 휠 버튼에
-  // 이미지별 실제 비율을 개별로 넣었던 것(ROULETTE_TIERS)과 같은 패턴. 2차 변신/
-  // 모드별 이미지(배트맨 모드, 아이언미야옹 단계, 개구리왕자 변신 등)는 별도 계산 없이
-  // 원본 heroId 값을 그대로 쓴다(변형 이미지 비율까지 전부 재는 건 과함, 대체로
-  // 비슷한 비율일 것으로 가정).
+  // "신화들 크기가 다 다르고 불멸 크기가 다 다르다 - 일반~전설은 전기로봇 크기,
+  // 신화/불멸은 인디 크기로 맞춰달라"는 사용자 지정에 따라 크기 보정 체계를
+  // 다시 짰다. `object-fit:contain`은 이미지 캔버스의 가로세로 비율과 박스 비율을
+  // 비교해서 어느 만큼 크게 그려지는지 결정하는데(알파 bbox 크롭은 이미 다
+  // 돼 있어도(93~100% 채움) 이미지 "캔버스" 자체의 가로세로 비율이 캐릭터마다
+  // 크게 다르면 - 박스보다 훨씬 납작한 이미지일수록 위아래로 레터박스(빈 여백)가
+  // 생겨 같은 박스 안에서도 훨씬 작아 보인다), 보정 없이는 캐릭터마다 실제
+  // 렌더 크기가 들쭉날쭉하다. `RB = HERO_TOKEN_WIDTH_RATIO/HERO_TOKEN_HEIGHT_RATIO`
+  // (토큰 박스 자체의 가로세로 비율)를 기준으로, "이 이미지가 박스 높이를 완전히
+  // 채우려면 박스를 얼마나 더 키워야 하는지"(`max(이미지 비율, RB) / 기준
+  // 캐릭터의 이미지 비율`)를 캐릭터별로 계산해서 표로 만들었다 - 이 공식대로면
+  // 기준 캐릭터 자신의 보정값은 정확히 1(현재 크기 그대로)이 되고, 나머지는
+  // 전부 기준 캐릭터와 정확히 같은 렌더 높이에 맞춰진다(박스 가로세로 비율은
+  // 상쇄돼서 사라지므로, 계산에 쓴 RB 값 자체의 정밀도와 무관하게 등호가
+  // 성립한다). 알파 bbox 실측(Python Pillow `getbbox()`)으로 89장 전체를 다시
+  // 쟀다.
+  //
+  // **주의(트레이드오프)**: 신화/불멸 그룹은 이 공식을 캡 없이 그대로 적용했다 -
+  // 이전 라운드엔 "이웃 칸 침범이 심해질 것"을 우려해 보정값을 1.6배로 캡을
+  // 걸어뒀었는데(그 결과가 바로 이번에 지적받은 "신화들 크기가 다 다르다"는
+  // 문제였다 - 캡에 걸린 쪽이 부자연스럽게 작아 보였다), 이번엔 "인디 정도로
+  // 크게"라는 요청이 명확해서 그 캡을 없앴다. 그 대가로 이미지가 유독 납작한
+  // 일부 캐릭터(기가채드 Ri=1.79, 로카/탑베인 Ri=1.60 등)는 보정값이 2.6~3.2배까지
+  // 커져서, 인디와 같은 세로 높이를 맞추려다 보니 가로 폭이 칸 하나를 넘어 옆칸
+  // 쪽으로 상당히 넓게 걸치게 된다(칸 밖으로 넘치는 것 자체는 신화/불멸에
+  // 기존에도 허용된 디자인이지만, 이번엔 그 정도가 이전보다 훨씬 커졌다) -
+  // 실제로 너무 넓어 보이면 이 캡을 다시 걸어야 할 수 있다.
   const MYTHIC_SIZE_COMPENSATION = {
-    i_ace_batman: 1.251, i_ancient_chona: 1.209, i_archmage_gigi: 1.355, i_awakened_hailey: 1.600,
-    i_blob_gang: 1.600, i_boss_gorazo: 1.600, i_captain_roka: 1.600, i_death_frog: 1.600,
-    i_death_frog_evolved: 1.481, i_demon_lord_dragon: 1.481, i_devil_monopoly: 1.442, i_dr_pulse: 1.600,
-    i_ghost_ninja: 1.481, i_giga_chad: 1.600, i_grand_cat_mage: 1.600, i_grand_mama: 1.354,
-    i_hero_ray: 1.600, i_im_meyaong: 1.085, i_knight_lancelot: 1.600, i_noise_king_penguin: 1.430,
-    i_orc_leader: 1.600, i_primal_bamba: 1.600, i_queen_coldi: 1.600, i_sage_kun: 1.600,
-    i_sky_dragon_uchi: 1.597, i_spacetime_ato: 1.600, i_super_gravity_bomb: 1.520, i_swarm_tar: 1.579,
-    i_top_bane: 1.600, m_ato: 1.041, m_bamba: 1.600, m_bane: 1.600,
-    m_batman: 1.226, m_blob: 1.180, m_cat_mage: 1.593, m_chad: 1.288,
-    m_chona: 1.600, m_coldi: 1.554, m_dragon: 1.529, m_frog_prince: 1.600,
-    m_gigi: 1.354, m_gorazo: 1.342, m_gravity_bomb: 1.567, m_hailey: 1.600,
-    m_indy: 1.157, m_iron_meyaong: 1.600, m_lancelot: 1.041, m_mama: 1.365,
-    m_master_kun: 1.319, m_monopoly_man: 1.481, m_ninja: 1.007, m_orc_shaman: 1.192,
-    m_penguin_musician: 1.593, m_pulse_generator: 1.365, m_ray: 1.458, m_rocketchu: 1.600,
-    m_roka: 1.600, m_tar: 1.600, m_uchi: 1.600, m_watt: 1.600,
+    i_ace_batman: 1.521, i_ancient_chona: 1.484, i_archmage_gigi: 1.684, i_awakened_hailey: 2.174,
+    i_blob_gang: 2.174, i_boss_gorazo: 2.222, i_captain_roka: 2.904, i_death_frog: 2.431,
+    i_death_frog_evolved: 1.818, i_demon_lord_dragon: 1.818, i_devil_monopoly: 1.733, i_dr_pulse: 2.000,
+    i_ghost_ninja: 1.818, i_giga_chad: 3.247, i_grand_cat_mage: 2.156, i_grand_mama: 1.641,
+    i_hero_ray: 2.243, i_im_meyaong: 1.306, i_knight_lancelot: 2.003, i_noise_king_penguin: 1.752,
+    i_orc_leader: 2.069, i_primal_bamba: 2.431, i_queen_coldi: 2.144, i_sage_kun: 2.291,
+    i_sky_dragon_uchi: 1.955, i_spacetime_ato: 2.174, i_super_gravity_bomb: 1.869, i_swarm_tar: 1.928,
+    i_top_bane: 2.904, m_ato: 1.232, m_bamba: 2.168, m_bane: 2.622,
+    m_batman: 1.478, m_blob: 1.408, m_cat_mage: 1.995, m_chad: 1.530,
+    m_chona: 2.013, m_coldi: 1.928, m_dragon: 1.911, m_frog_prince: 2.127,
+    m_gigi: 1.641, m_gorazo: 1.626, m_gravity_bomb: 1.945, m_hailey: 2.210,
+    m_indy: 1.390, m_iron_meyaong: 2.451, m_lancelot: 1.232, m_mama: 1.656,
+    m_master_kun: 1.596, m_monopoly_man: 1.833, m_ninja: 1.197, m_orc_shaman: 1.422,
+    m_penguin_musician: 1.979, m_pulse_generator: 1.656, m_ray: 1.749, m_rocketchu: 2.255,
+    m_roka: 2.600, m_tar: 2.088, m_uchi: 2.033, m_watt: 2.684,
   };
-  // 전설 등급이 일반~영웅 등급보다 유독 작아 보인다는 지적(사용자 - "다른 캐릭터들에
-  // 비해 너무 작아") - 원인은 크기 로직 자체가 아니라(일반~전설은 같은
-  // HERO_TOKEN_WIDTH/HEIGHT_RATIO를 공유해서 프로그램상 크기는 동일했다) 전설 등급
-  // 원화 89장 중 실제 인물이 캔버스에서 차지하는 비중이 이미지마다 달라서 생기는
-  // 시각적 차이로 보인다 - object-fit:contain은 알파 bbox 기준으로만 맞추므로
-  // 여백이 상대적으로 많은 이미지는 같은 박스 안에서도 작게 보인다. 전설 등급
-  // 전용 배율을 별도로 둬서 다른 등급과 비슷한 존재감이 나도록 50% 키웠다.
-  const LEGENDARY_TOKEN_SCALE = 1.5;
+  // 일반~전설 등급도 같은 이유(이미지 캔버스 비율 불일치)로 캐릭터마다 실제
+  // 렌더 크기가 달랐다 - 예전엔 전설만 별도로 50% 키우는 `LEGENDARY_TOKEN_SCALE`
+  // 하나뿐이었는데(전설 등급 내에서도 여전히 들쭉날쭉했음), 위 신화/불멸과 같은
+  // 공식으로 일반~전설 19종 전부를 "전기로봇(h_electric_robot)과 같은 렌더
+  // 높이"에 맞춰 재계산했다(기준을 전기로봇으로 잡은 건 사용자 지정 - "일반~전설까지는
+  // 지금 전기로봇 크기랑 비슷해보이게 조정"). `LEGENDARY_TOKEN_SCALE`은 이제
+  // 필요 없어져서 삭제했다 - 등급 구분 없이 이 표 하나로 통일.
+  const TIER_SIZE_COMPENSATION = {
+    n_archer: 1.404, n_thrower: 1.620, n_barbarian: 1.149, n_water_spirit: 1.194, n_bandit: 1.419,
+    r_ranger: 1.147, r_shock_robot: 1.343, r_paladin: 1.164, r_sandman: 1.104, r_demon_soldier: 1.194,
+    h_electric_robot: 1.000, h_tree: 1.504, h_hunter: 1.469, h_eagle_general: 1.164, h_wolf_warrior: 1.735,
+    l_warmachine: 1.785, l_tiger_master: 1.644, l_storm_giant: 1.662, l_sheriff: 1.838,
+  };
   const ULTIMATE_FLASH_MS = 3000; // 베인 궁 이펙트 지속 시간(사용자 요청으로 3초로 연장)
   // 머리 위 숫자 배지(로카 탄약/배트맨 강화 레벨 공용) 위치 - 토큰 박스
   // top(box top)을 그대로 쓰면 신화 박스가 실제 그림보다 훨씬 커서(object-fit:
@@ -914,12 +922,11 @@ export function GameScreen({ getState, dispatch, onExit }) {
       const firstHeroTier = HEROES_BY_ID[slot.occupants[0].heroId]?.tier;
       const isImpCell = slot.occupants[0].heroId === IMP_HERO_ID;
       const isMythicCell = firstHeroTier === 'mythic' || firstHeroTier === 'immortal';
-      const isLegendaryCell = firstHeroTier === 'legendary';
       const sizeScale = isImpCell
         ? IMP_TOKEN_SCALE
         : isMythicCell
           ? MYTHIC_TOKEN_SCALE * (MYTHIC_SIZE_COMPENSATION[slot.occupants[0].heroId] ?? 1)
-          : isLegendaryCell ? LEGENDARY_TOKEN_SCALE : 1;
+          : TIER_SIZE_COMPENSATION[slot.occupants[0].heroId] ?? 1;
       const tokenHeight = rect.height * HERO_TOKEN_HEIGHT_RATIO * sizeScale;
       const n = slot.occupants.length;
       // 발끝(박스 하단) 기준선: 일반~영웅은 칸 정중앙(사용자 지정) - 마리 수와
