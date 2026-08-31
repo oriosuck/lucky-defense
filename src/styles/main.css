@@ -282,6 +282,29 @@ body {
   grid-template-rows: repeat(4, 1fr);
   gap: 2px;
 }
+/* 인게임 화면(.game-stage) 자체는 스크롤이 필요한 부분이 전혀 없다 - 칸 선택/드래그도
+   전부 pointerdown/pointerup으로 직접 처리하지 브라우저 기본 제스처에 의존하지
+   않는다(field-slot의 touch-action:none이 이미 증명해온 패턴). 그런데도 지금까지는
+   전역 `manipulation`(위 `*` 규칙 - "팬/스크롤은 허용하되 더블탭 확대만 막는다"는
+   스펙)에 기대고 있었는데, 이 더블탭 예외가 iOS/애플펜슬 등 여러 조합에서 계속
+   지켜지지 않는다는 리포트를 받았다. 사용자 제안("게임 화면을 동영상 박스 같은
+   컨테이너에 넣을 수 없냐")을 실제 메커니즘으로 옮기면 - `<video>`가 더블탭해도
+   안 커지는 이유는 브라우저에게 "이 안의 제스처는 전부 내가 처리하니 기본 동작을
+   아예 시도하지 마"(`touch-action:none`)라고 못박아뒀기 때문이다. 인게임 화면도
+   스크롤이 필요 없으니 같은 값을 줄 수 있다 - `none`은 `manipulation`과 달리
+   더블탭/핀치 확대를 브라우저가 "인식은 하되 막는" 게 아니라 애초에 시도조차
+   안 하게 만드는 훨씬 강한 보장이다.
+   **주의**: `.game-stage`(모든 팝업의 공통 조상) 자체에 걸면 안 된다 - touch-action은
+   조상~자손 사이에서 "허용되는 제스처의 교집합"으로 계산되므로, 조상에 `none`을
+   걸면 그 자손인 미션 팝업의 스크롤 목록(`.mission-list`)도 함께 막혀버릴 위험이
+   있다(신화 팝업의 등급 그리드도 마찬가지). 그래서 `.game-stage`의 "팝업이 아닌"
+   직계 자식들에만 개별적으로 건다 - 팝업 4종(`.game-popup`/`.mythic-popup`/
+   `.popup-overlay`/`.result-overlay`)은 이 선택자에서 제외되어 전역 `manipulation`을
+   그대로 유지하고, 그 안의 스크롤 영역도 영향받지 않는다. */
+.game-stage > *:not(.game-popup):not(.mythic-popup):not(.popup-overlay):not(.result-overlay) {
+  touch-action: none;
+}
+
 .field-slot {
   position: relative;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -293,7 +316,9 @@ body {
   gap: 1px;
   cursor: pointer;
   overflow: hidden;
-  touch-action: none; /* 드래그 이동 제스처 중 브라우저 스크롤/줌이 끼어들지 않게 */
+  touch-action: none; /* 위 .game-stage 규칙으로 이미 none이지만(field-grid의 자식이라
+    간접 적용) 명시적으로 남겨둔다 - 드래그 이동 제스처 중 브라우저 스크롤/줌이
+    끼어들지 않게 하려던 원래 의도를 문서화하는 목적. */
   -webkit-user-drag: none; user-select: none; /* 네이티브 이미지 드래그/텍스트 선택 방지 */
 }
 .field-slot.empty { opacity: 0.85; }
