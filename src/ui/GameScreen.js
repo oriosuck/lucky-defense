@@ -1584,20 +1584,30 @@ export function GameScreen({ getState, dispatch, onExit }) {
         ui.rouletteSuccessHero = { tier: r.tier, heroId: result.consolationHero.id };
         setTimeout(() => {
           ui.rouletteSuccessHero = null;
-          if (root.isConnected) render(getState());
+          // 이 타이머는 룰렛을 돌린 시점에 예약되는 완전히 독립적인 백그라운드
+          // 콜백이라, 발화 시점에 필드에서 캐릭터를 드래그하는 중이어도 상관없이
+          // 무조건 실행된다 - pointerDown 가드(update()가 이미 쓰는 것과 동일한
+          // 신호)가 없으면 이게 그 드래그 도중에 DOM을 통째로 갈아엎어버린다
+          // (사용자 리포트 - "캐릭터를 잡고 슥 드래그할 때 간헐적으로 확대되는
+          // 문제가 있어" - 룰렛 결과 연출 타이머와 드래그 타이밍이 우연히
+          // 겹칠 때만 재현되니 "간헐적"이라는 설명과 정확히 들어맞는다). 드래그
+          // 중이면 렌더만 건너뛰고 상태 변경(ui.rouletteSuccessHero=null)은 그대로
+          // 반영해둔다 - 드래그가 끝나면 endDrag()가 자기 몫의 deferredRender를
+          // 부르면서 이 변경사항도 같이 화면에 반영된다.
+          if (root.isConnected && !pointerDown) render(getState());
         }, ROULETTE_FAIL_FLASH_MS);
       } else if (!result.success && result.reason === 'roulette-fail') {
         ui.rouletteFailTier = r.tier;
         setTimeout(() => {
           ui.rouletteFailTier = null;
-          if (root.isConnected) render(getState());
+          if (root.isConnected && !pointerDown) render(getState());
         }, ROULETTE_FAIL_FLASH_MS);
       } else if (result.success) {
         // 실패하면 해골이 뜨듯이, 성공하면 뽑힌 영웅 그림을 잠깐 보여준다(사용자 요청).
         ui.rouletteSuccessHero = { tier: r.tier, heroId: result.hero.id };
         setTimeout(() => {
           ui.rouletteSuccessHero = null;
-          if (root.isConnected) render(getState());
+          if (root.isConnected && !pointerDown) render(getState());
         }, ROULETTE_FAIL_FLASH_MS);
       }
       apply(result);
